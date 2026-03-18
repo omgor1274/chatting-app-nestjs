@@ -10,11 +10,21 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { MessageType } from '@prisma/client';
 import { Server, Socket } from 'socket.io';
+import { PrismaService } from '../prisma/prisma.service';
 import { ChatService } from './chat.service';
+
+const socketAllowedOrigins = (
+  process.env.ALLOWED_ORIGINS ||
+  process.env.APP_ORIGIN ||
+  `http://localhost:${process.env.PORT ?? 3000}`
+)
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 @WebSocketGateway({
   cors: {
-    origin: '*',
+    origin: socketAllowedOrigins,
   },
 })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -24,7 +34,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private jwt: JwtService,
     private chatService: ChatService,
-  ) { }
+    private prisma: PrismaService,
+  ) {}
 
   private onlineUsers = new Map<string, Set<string>>();
 
@@ -41,12 +52,90 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to(message.senderId).emit('messageSent', message);
   }
 
+  emitRequestUpdate(request: {
+    id: string;
+    senderId: string;
+    receiverId: string;
+    status: string;
+  }) {
+    this.server.to(request.senderId).emit('request:update', request);
+    this.server.to(request.receiverId).emit('request:update', request);
+  }
+
+  private async authenticateSocketUser(client: Socket, disconnect = false) {
+    try {
+      const token = client.handshake.auth?.token;
+      if (!token) {
+        throw new Error('Missing token');
+      }
+
+      const payload = this.jwt.verify(token);
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.userId },
+        select: {
+          id: true,
+          email: true,
+          tokenVersion: true,
+        },
+      });
+
+      if (!user || user.tokenVersion !== payload.tokenVersion) {
+        throw new Error('Session expired');
+      }
+
+      client.data.user = {
+        userId: user.id,
+        email: user.email,
+        tokenVersion: user.tokenVersion,
+      };
+
+      return client.data.user;
+    } catch {
+      client.emit('auth:logout');
+      if (disconnect) {
+        client.disconnect();
+      }
+      return null;
+    }
+  }
+
+  private async getAuthorizedUser(client: Socket) {
+    const currentUser = client.data.user;
+
+    if (!currentUser?.userId) {
+      return this.authenticateSocketUser(client, true);
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: currentUser.userId },
+      select: {
+        id: true,
+        email: true,
+        tokenVersion: true,
+      },
+    });
+
+    if (!user || user.tokenVersion !== currentUser.tokenVersion) {
+      client.emit('auth:logout');
+      client.disconnect();
+      return null;
+    }
+
+    client.data.user = {
+      userId: user.id,
+      email: user.email,
+      tokenVersion: user.tokenVersion,
+    };
+
+    return client.data.user;
+  }
+
   @SubscribeMessage('typing')
-  handleTyping(
+  async handleTyping(
     @MessageBody() data: { toUserId: string; isTyping: boolean },
     @ConnectedSocket() client: Socket,
   ) {
-    const sender = client.data.user;
+    const sender = await this.getAuthorizedUser(client);
 
     if (!sender?.userId || !data?.toUserId) {
       return;
@@ -58,22 +147,139 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
   }
 
-  handleConnection(client: Socket) {
-    try {
-      const token = client.handshake.auth.token;
-      const user = this.jwt.verify(token);
+  @SubscribeMessage('call:offer')
+  async handleCallOffer(
+    @MessageBody()
+    data: {
+      toUserId: string;
+      offer: Record<string, unknown>;
+      callType: 'audio' | 'video';
+    },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const sender = await this.getAuthorizedUser(client);
 
-      client.data.user = user;
-      client.join(user.userId);
-
-      const sockets = this.onlineUsers.get(user.userId) ?? new Set<string>();
-      sockets.add(client.id);
-      this.onlineUsers.set(user.userId, sockets);
-
-      this.broadcastOnlineUsers();
-    } catch {
-      client.disconnect();
+    if (!sender?.userId || !data?.toUserId || !data?.offer) {
+      return { error: 'Invalid call request' };
     }
+
+    await this.chatService.assertUsersCanChat(sender.userId, data.toUserId);
+
+    this.server.to(data.toUserId).emit('call:offer', {
+      fromUserId: sender.userId,
+      offer: data.offer,
+      callType: data.callType === 'video' ? 'video' : 'audio',
+    });
+
+    return { success: true };
+  }
+
+  @SubscribeMessage('call:answer')
+  async handleCallAnswer(
+    @MessageBody()
+    data: {
+      toUserId: string;
+      answer: Record<string, unknown>;
+      callType: 'audio' | 'video';
+    },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const sender = await this.getAuthorizedUser(client);
+
+    if (!sender?.userId || !data?.toUserId || !data?.answer) {
+      return { error: 'Invalid call answer' };
+    }
+
+    await this.chatService.assertUsersCanChat(sender.userId, data.toUserId);
+
+    this.server.to(data.toUserId).emit('call:answer', {
+      fromUserId: sender.userId,
+      answer: data.answer,
+      callType: data.callType === 'video' ? 'video' : 'audio',
+    });
+
+    return { success: true };
+  }
+
+  @SubscribeMessage('call:ice')
+  async handleCallIce(
+    @MessageBody()
+    data: {
+      toUserId: string;
+      candidate: Record<string, unknown>;
+    },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const sender = await this.getAuthorizedUser(client);
+
+    if (!sender?.userId || !data?.toUserId || !data?.candidate) {
+      return { error: 'Invalid ICE candidate' };
+    }
+
+    await this.chatService.assertUsersCanChat(sender.userId, data.toUserId);
+
+    this.server.to(data.toUserId).emit('call:ice', {
+      fromUserId: sender.userId,
+      candidate: data.candidate,
+    });
+
+    return { success: true };
+  }
+
+  @SubscribeMessage('call:decline')
+  async handleCallDecline(
+    @MessageBody() data: { toUserId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const sender = await this.getAuthorizedUser(client);
+
+    if (!sender?.userId || !data?.toUserId) {
+      return { error: 'Invalid call decline' };
+    }
+
+    await this.chatService.assertUsersCanChat(sender.userId, data.toUserId);
+
+    this.server.to(data.toUserId).emit('call:decline', {
+      fromUserId: sender.userId,
+    });
+
+    return { success: true };
+  }
+
+  @SubscribeMessage('call:end')
+  async handleCallEnd(
+    @MessageBody() data: { toUserId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const sender = await this.getAuthorizedUser(client);
+
+    if (!sender?.userId || !data?.toUserId) {
+      return { error: 'Invalid call end' };
+    }
+
+    await this.chatService.assertUsersCanChat(sender.userId, data.toUserId);
+
+    this.server.to(data.toUserId).emit('call:end', {
+      fromUserId: sender.userId,
+    });
+
+    return { success: true };
+  }
+
+  async handleConnection(client: Socket) {
+    const user = await this.authenticateSocketUser(client, true);
+
+    if (!user?.userId) {
+      return;
+    }
+
+    client.join(user.userId);
+
+    const sockets = this.onlineUsers.get(user.userId) ?? new Set<string>();
+    sockets.add(client.id);
+    this.onlineUsers.set(user.userId, sockets);
+
+    this.broadcastOnlineUsers();
   }
 
   handleDisconnect(client: Socket) {
@@ -114,7 +320,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     },
     @ConnectedSocket() client: Socket,
   ) {
-    const sender = client.data.user;
+    const sender = await this.getAuthorizedUser(client);
 
     if (!sender?.userId) {
       return { error: 'Unauthorized' };

@@ -16,4 +16,9 @@ export class AppController {
   getHello(): string {
     return this.appService.getHello();
   }
+
+  @Get('config')
+  getConfig() {
+    return this.appService.getPublicConfig();
+  }
 }

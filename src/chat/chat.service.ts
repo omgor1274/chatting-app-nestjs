@@ -128,6 +128,16 @@ export class ChatService {
         };
     }
 
+    async assertUsersCanChat(currentUserId: string, otherUserId: string) {
+        const permission = await this.getChatPermission(currentUserId, otherUserId);
+
+        if (!permission.canChat) {
+            throw new ForbiddenException('Accept a chat request before using this feature');
+        }
+
+        return permission;
+    }
+
     async getRecentChats(userId: string) {
         let entries: string[] = [];
         try {
@@ -175,12 +185,21 @@ export class ChatService {
                 select: {
                     contactUserId: true,
                     nickname: true,
+                    chatTheme: true,
                 },
             }),
         ]);
 
         const userById = new Map(users.map((user) => [user.id, user]));
-        const nicknameByUserId = new Map(preferences.map((item) => [item.contactUserId, item.nickname]));
+        const preferenceByUserId = new Map(
+            preferences.map((item) => [
+                item.contactUserId,
+                {
+                    nickname: item.nickname,
+                    chatTheme: item.chatTheme,
+                },
+            ]),
+        );
 
         return recentChats
             .map((item) => {
@@ -189,11 +208,13 @@ export class ChatService {
                     return null;
                 }
 
-                const nickname = nicknameByUserId.get(user.id) ?? null;
+                const preference = preferenceByUserId.get(user.id);
+                const nickname = preference?.nickname ?? null;
                 return {
                     ...user,
                     nickname,
                     displayName: nickname ?? user.name,
+                    chatTheme: preference?.chatTheme ?? null,
                     lastMessagePreview: item.lastMessagePreview,
                     lastMessageAt: item.lastMessageAt,
                     lastMessageType: item.lastMessageType,
@@ -371,11 +392,7 @@ export class ChatService {
             throw new BadRequestException('Cannot send a message to yourself');
         }
 
-        const permission = await this.getChatPermission(input.senderId, receiver.id);
-
-        if (!permission.canChat) {
-            throw new ForbiddenException('Accept a chat request before messaging');
-        }
+        await this.assertUsersCanChat(input.senderId, receiver.id);
 
         const messageType = input.messageType ?? MessageType.TEXT;
         const hasEncryptedText = Boolean(input.ciphertext?.trim());
@@ -410,6 +427,8 @@ export class ChatService {
 
         const preview = createdMessage.messageType === MessageType.IMAGE
             ? 'Sent you an image'
+            : createdMessage.messageType === MessageType.AUDIO
+                ? 'Sent you a voice message'
             : createdMessage.messageType === MessageType.DOCUMENT
                 ? `Sent you ${createdMessage.fileName ?? 'a file'}`
                 : (createdMessage.content ?? createdMessage.ciphertext ?? 'New message');

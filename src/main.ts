@@ -10,10 +10,19 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   mkdirSync(join(process.cwd(), 'uploads', 'avatars'), { recursive: true });
   mkdirSync(join(process.cwd(), 'uploads', 'chat'), { recursive: true });
+  mkdirSync(join(process.cwd(), 'uploads', 'chat-themes'), { recursive: true });
   mkdirSync(join(process.cwd(), 'backups'), { recursive: true });
   mkdirSync(join(process.cwd(), 'public'), { recursive: true });
 
   const app = await NestFactory.create(AppModule);
+  const allowedOrigins = (
+    process.env.ALLOWED_ORIGINS ||
+    process.env.APP_ORIGIN ||
+    `http://localhost:${process.env.PORT ?? 3000}`
+  )
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 
   app.enableCors({
     origin: (origin, callback) => {
@@ -22,7 +31,12 @@ async function bootstrap() {
         return;
       }
 
-      callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error('Origin not allowed by CORS'), false);
     },
     credentials: true,
   });

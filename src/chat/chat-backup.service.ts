@@ -63,11 +63,26 @@ export class ChatBackupService implements OnModuleInit, OnModuleDestroy {
   }
 
   async backupChats() {
+    const backupEnabledUsers = await this.prisma.user.findMany({
+      where: { backupEnabled: true },
+      select: { id: true },
+    });
+
+    const enabledUserIds = backupEnabledUsers.map((user) => user.id);
+
     const [messages, requests] = await Promise.all([
       this.prisma.message.findMany({
+        where: {
+          senderId: { in: enabledUserIds },
+          receiverId: { in: enabledUserIds },
+        },
         orderBy: { createdAt: 'asc' },
       }),
       this.prisma.chatRequest.findMany({
+        where: {
+          senderId: { in: enabledUserIds },
+          receiverId: { in: enabledUserIds },
+        },
         orderBy: { createdAt: 'asc' },
       }),
     ]);
