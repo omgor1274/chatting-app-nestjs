@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NestJS Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 999px;
+        }
+
+        .chat-bg {
+            background:
+                radial-gradient(circle at top left, rgba(96, 165, 250, 0.12), transparent 30%),
+                radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.12), transparent 28%),
+                #f8fafc;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.96);
+            backdrop-filter: blur(12px);
+        }
+    </style>
+</head>
+
+<body class="bg-slate-100 h-screen flex items-center justify-center font-sans p-4">
+    <div class="w-full max-w-6xl h-[92vh] glass shadow-2xl rounded-3xl overflow-hidden flex border border-white relative">
+        <div id="auth-screen" class="absolute inset-0 z-50 bg-white flex flex-col items-center justify-center p-8">
+            <div class="w-full max-w-sm space-y-6">
+                <div class="text-center">
+                    <h2 id="auth-title" class="text-3xl font-bold text-slate-800">Welcome Back</h2>
+                    <p class="text-slate-500 mt-2">Sign in to your chat workspace</p>
+                </div>
+                <div class="space-y-4">
+                    <input type="text" id="name-input" placeholder="Your Name"
+                        class="hidden w-full p-4 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500">
+                    <input type="email" id="email-input" placeholder="Email Address"
+                        class="w-full p-4 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500">
+                    <input type="password" id="password-input" placeholder="Password"
+                        class="w-full p-4 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500">
+                    <button onclick="handleAuth()" id="auth-btn"
+                        class="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg transition-transform active:scale-95">Login</button>
+                    <p onclick="toggleAuthMode()" id="auth-switch"
+                        class="text-center text-blue-600 cursor-pointer hover:underline text-sm font-medium">New here? Create an account</p>
+                </div>
+            </div>
+        </div>
+
+        <aside class="w-96 border-r border-slate-200 bg-slate-50 flex flex-col">
+            <div class="p-6 border-b border-slate-200 bg-white flex items-center justify-between">
+                <div class="flex items-center gap-3 min-w-0">
+                    <label class="relative cursor-pointer">
+                        <img id="my-avatar" onclick="openImagePreview(userAvatar(currentUser))" class="w-12 h-12 rounded-full object-cover border-2 border-blue-500">
+                        <input id="avatar-input" type="file" accept="image/*" class="hidden" onchange="uploadMyAvatar()">
+                        <span class="absolute -bottom-1 -right-1 bg-blue-600 text-white text-[10px] px-1.5 py-0.5 rounded-full">Edit</span>
+                    </label>
+                    <div class="min-w-0">
+                        <p id="my-name" class="font-bold text-slate-800 truncate">Me</p>
+                        <p id="my-email" class="text-xs text-slate-500 truncate"></p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button onclick="editProfile()" class="text-slate-500 hover:text-slate-800 transition-colors text-sm">Edit Profile</button>
+                    <button onclick="logout()" class="text-slate-400 hover:text-red-500 transition-colors">Logout</button>
+                </div>
+            </div>
+
+            <div class="p-4 border-b border-slate-200 bg-white space-y-3">
+                <input id="user-search" type="text" placeholder="Search users"
+                    oninput="renderUsers()"
+                    class="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500">
+                <button onclick="enableNotifications()" id="notify-btn"
+                    class="w-full px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition-colors">
+                    Enable Notifications
+                </button>
+            </div>
+
+            <div class="px-4 pt-4 text-xs uppercase font-bold text-slate-400 tracking-widest">Chats</div>
+            <ul id="users-list" class="flex-1 overflow-y-auto px-2 py-3 space-y-1"></ul>
+        </aside>
+
+        <main class="flex-1 flex flex-col bg-white">
+            <div id="chat-header" class="hidden p-4 border-b border-slate-200 flex items-center gap-4 bg-white">
+                <img id="target-avatar" onclick="selectedUser && openImagePreview(userAvatar(selectedUser))" class="w-12 h-12 rounded-full object-cover cursor-zoom-in">
+                <div class="min-w-0">
+                    <h3 id="target-name" class="font-bold text-slate-800 truncate">Select a contact</h3>
+                    <span id="target-status" class="text-xs text-slate-500 font-medium">Offline</span>
+                </div>
+                <button id="request-action-btn" onclick="handleRequestAction()" class="hidden px-3 py-1.5 rounded-xl bg-blue-600 text-white text-sm hover:bg-blue-700">
+                    Send Request
+                </button>
+                <button id="request-reject-btn" onclick="rejectIncomingRequest()" class="hidden px-3 py-1.5 rounded-xl border border-slate-200 text-sm text-slate-700 hover:bg-slate-50">
+                    Reject
+                </button>
+                <button onclick="renameSelectedUser()" class="ml-auto px-3 py-1.5 rounded-xl border border-slate-200 text-sm text-slate-700 hover:bg-slate-50">
+                    Rename
+                </button>
+            </div>
+
+            <div id="empty-state" class="flex-1 flex flex-col items-center justify-center text-slate-400 space-y-4">
+                <div class="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center text-3xl">C</div>
+                <p>Select someone to start chatting</p>
+            </div>
+
+            <div id="message-container" class="hidden flex-1 overflow-y-auto p-6 chat-bg">
+                <div id="messages-list" class="flex flex-col space-y-3"></div>
+            </div>
+
+            <div id="input-area" class="hidden p-4 border-t border-slate-200 bg-white space-y-3">
+                <div class="flex items-center gap-3">
+                    <label
+                        class="cursor-pointer px-4 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-sm font-medium text-slate-700">
+                        Share File
+                        <input id="file-input" type="file" class="hidden" onchange="handleAttachmentSelected()">
+                    </label>
+                    <span id="file-name" class="text-sm text-slate-500 truncate"></span>
+                </div>
+                <div class="flex items-center gap-2 bg-slate-100 rounded-2xl p-2 px-4 border border-slate-200">
+                    <input type="text" id="msg-input" placeholder="Type a message..."
+                        class="flex-1 bg-transparent py-2 outline-none text-slate-700"
+                        onkeypress="if(event.key === 'Enter') sendMessage()">
+                    <button onclick="sendMessage()"
+                        class="bg-blue-600 text-white px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors shadow-md">
+                        Send
+                    </button>
+                </div>
+                <p id="chat-access-note" class="hidden text-xs text-slate-500"></p>
+            </div>
+        </main>
+    </div>
+
+    <div id="image-preview-modal" class="hidden fixed inset-0 z-[60] bg-black/80 p-6 items-center justify-center" onclick="closeImagePreview()">
+        <img id="image-preview-src" class="max-w-full max-h-full rounded-2xl shadow-2xl border border-white/10">
+    </div>
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script>
+        const API_URL = 'http://localhost:3000';
+        let socket = null;
+        let token = null;
+        let isLogin = true;
+        let currentUser = null;
+        let users = [];
+        let selectedUser = null;
+        let onlineUserIds = new Set();
+        let renderedMessageIds = new Set();
+        let recentActivity = new Map();
+        let swRegistration = null;
+        const isFileOrigin = window.location.protocol === 'file:';
+        let typingTimeout = null;
+        let typingUsers = new Set();
+        let chatPermission = {
+            canChat: false,
+            acceptedRequestId: null,
+            incomingRequestId: null,
+            outgoingRequestId: null,
+        };
+
+        function api(path, options = {}) {
+            return fetch(`${API_URL}${path}`, {
+                ...options,
+                headers: {
+                    ...(options.headers || {}),
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+            });
+        }
+
+        function userAvatar(user) {
+            if (user?.avatar) {
+                if (String(user.avatar).startsWith('http://') || String(user.avatar).startsWith('https://')) {
+                    return user.avatar;
+                }
+                return `${API_URL}${user.avatar}`;
+            }
+            const label = encodeURIComponent(user?.name || user?.email || 'User');
+            return `https://ui-avatars.com/api/?name=${label}&background=0D8ABC&color=fff`;
+        }
+
+        function displayName(user) {
+            return user?.nickname || user?.displayName || user?.name || user?.email || 'User';
+        }
+
+        function openImagePreview(src) {
+            if (!src) return;
+            document.getElementById('image-preview-src').src = src;
+            document.getElementById('image-preview-modal').classList.remove('hidden');
+            document.getElementById('image-preview-modal').classList.add('flex');
+        }
+
+        function closeImagePreview() {
+            document.getElementById('image-preview-modal').classList.add('hidden');
+            document.getElementById('image-preview-modal').classList.remove('flex');
+            document.getElementById('image-preview-src').src = '';
+        }
+
+        function toggleAuthMode() {
+            isLogin = !isLogin;
+            document.getElementById('auth-title').innerText = isLogin ? 'Welcome Back' : 'Create Account';
+            document.getElementById('auth-switch').innerText = isLogin
+                ? 'New here? Create an account'
+                : 'Already have an account? Login';
+            document.getElementById('auth-btn').innerText = isLogin ? 'Login' : 'Register';
+            document.getElementById('name-input').classList.toggle('hidden', isLogin);
+        }
+
+        async function handleAuth() {
+            const email = document.getElementById('email-input').value.trim();
+            const password = document.getElementById('password-input').value.trim();
+            const name = document.getElementById('name-input').value.trim();
+            const endpoint = isLogin ? '/auth/login' : '/auth/register';
+            const payload = isLogin ? { email, password } : { email, password, name };
+
+            try {
+                const res = await fetch(`${API_URL}${endpoint}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    throw new Error(Array.isArray(data.message) ? data.message.join(', ') : (data.message || 'Auth failed'));
+                }
+
+                token = data.token || data.access_token;
+                if (!token) {
+                    throw new Error('Authentication failed: No token received');
+                }
+
+                localStorage.setItem('chat_token', token);
+                await startApp();
+            } catch (error) {
+                alert(error.message);
+            }
+        }
+
+        async function startApp() {
+            await loadProfile();
+            await loadUsers();
+            connectSocket();
+            await setupNotifications();
+            document.getElementById('auth-screen').classList.add('hidden');
+
+            const chatId = new URLSearchParams(window.location.search).get('chat');
+            if (chatId) {
+                await selectUser(chatId);
+            }
+        }
+
+        async function loadProfile() {
+            const res = await api('/users/me');
+            if (!res.ok) {
+                throw new Error('Failed to load profile');
+            }
+
+            currentUser = await res.json();
+            document.getElementById('my-name').innerText = currentUser.name;
+            document.getElementById('my-email').innerText = currentUser.email;
+            document.getElementById('my-avatar').src = userAvatar(currentUser);
+        }
+
+        async function editProfile() {
+            if (!currentUser) return;
+
+            const name = prompt('Update your display name', currentUser.name || '');
+            if (name === null) return;
+            const email = prompt('Update your email', currentUser.email || '');
+            if (email === null) return;
+
+            const res = await api('/users/me', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, email }),
+            });
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert(Array.isArray(data.message) ? data.message.join(', ') : (data.message || 'Failed to update profile'));
+                return;
+            }
+
+            currentUser = data;
+            document.getElementById('my-name').innerText = currentUser.name;
+            document.getElementById('my-email').innerText = currentUser.email;
+            document.getElementById('my-avatar').src = userAvatar(currentUser);
+            users = users.map((user) => user.id === currentUser.id ? { ...user, ...currentUser } : user);
+            renderUsers();
+        }
+
+        async function loadUsers() {
+            const [recentRes, allUsersRes] = await Promise.all([
+                api('/chat/recent'),
+                api('/users'),
+            ]);
+
+            if (!recentRes.ok || !allUsersRes.ok) {
+                throw new Error('Failed to load users');
+            }
+
+            const recentUsers = await recentRes.json();
+            const allUsers = await allUsersRes.json();
+            const recentById = new Map(recentUsers.map((user) => [user.id, user]));
+
+            users = allUsers.map((user) => {
+                const recent = recentById.get(user.id);
+                return {
+                    ...user,
+                    lastMessagePreview: recent?.lastMessagePreview ?? null,
+                    lastMessageAt: recent?.lastMessageAt ?? null,
+                    lastMessageType: recent?.lastMessageType ?? null,
+                };
+            });
+
+            for (const user of users) {
+                if (!recentActivity.has(user.id)) {
+                    recentActivity.set(user.id, {
+                        lastAt: user.lastMessageAt ? new Date(user.lastMessageAt).getTime() : 0,
+                        preview: user.lastMessagePreview || '',
+                        unread: 0,
+                    });
+                }
+            }
+            renderUsers();
+        }
+
+        function getSortedUsers() {
+            const query = document.getElementById('user-search').value.trim().toLowerCase();
+            return [...users]
+                .filter(user => {
+                    if (!query) return true;
+                    return user.name.toLowerCase().includes(query) || user.email.toLowerCase().includes(query);
+                })
+                .sort((a, b) => {
+                    const recentA = recentActivity.get(a.id)?.lastAt || 0;
+                    const recentB = recentActivity.get(b.id)?.lastAt || 0;
+                    if (recentA !== recentB) {
+                        return recentB - recentA;
+                    }
+                    const onlineA = onlineUserIds.has(a.id) ? 1 : 0;
+                    const onlineB = onlineUserIds.has(b.id) ? 1 : 0;
+                    if (onlineA !== onlineB) {
+                        return onlineB - onlineA;
+                    }
+                    return displayName(a).localeCompare(displayName(b));
+                });
+        }
+
+        function renderUsers() {
+            const list = document.getElementById('users-list');
+            list.innerHTML = getSortedUsers().map(user => {
+                const isSelected = selectedUser?.id === user.id;
+                const isOnline = onlineUserIds.has(user.id);
+                const state = recentActivity.get(user.id) || { preview: '', unread: 0 };
+                return `
+                    <li onclick="selectUser('${user.id}')" class="flex items-center gap-3 p-3 rounded-2xl cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border border-blue-100' : 'hover:bg-slate-100 border border-transparent'}">
+                        <img src="${userAvatar(user)}" class="w-11 h-11 rounded-full object-cover">
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <p class="text-sm font-semibold text-slate-800 truncate">${escapeHtml(displayName(user))}</p>
+                                <span class="w-2 h-2 rounded-full ${isOnline ? 'bg-green-500' : 'bg-slate-300'}"></span>
+                            </div>
+                            <p class="text-xs ${state.unread ? 'text-slate-700 font-semibold' : 'text-slate-500'} truncate">
+                                ${escapeHtml(state.preview || user.email)}
+                            </p>
+                        </div>
+                        ${state.unread ? `<span class="min-w-6 h-6 px-2 flex items-center justify-center rounded-full bg-blue-600 text-white text-xs font-bold">${state.unread}</span>` : ''}
+                    </li>
+                `;
+            }).join('');
+        }
+
+        function connectSocket() {
+            if (socket) {
+                socket.disconnect();
+            }
+
+            socket = io(API_URL, { auth: { token } });
+
+            socket.on('onlineUsers', (ids) => {
+                onlineUserIds = new Set(ids);
+                renderUsers();
+                updateSelectedUserHeader();
+            });
+
+            socket.on('receiveMessage', async (message) => {
+                handleIncomingMessage(message, false);
+            });
+
+            socket.on('messageSent', (message) => {
+                handleIncomingMessage(message, true);
+            });
+
+            socket.on('typing', (payload) => {
+                if (!payload?.fromUserId) return;
+
+                if (payload.isTyping) {
+                    typingUsers.add(payload.fromUserId);
+                } else {
+                    typingUsers.delete(payload.fromUserId);
+                }
+
+                updateSelectedUserHeader();
+            });
+        }
+
+        async function handleIncomingMessage(message, isOwnMessage) {
+            const chatUserId = isOwnMessage ? message.receiverId : message.senderId;
+            updateRecentActivity(chatUserId, message, !isOwnMessage && selectedUser?.id !== chatUserId);
+
+            if (!isOwnMessage && (!selectedUser || selectedUser.id !== chatUserId)) {
+                maybeShowForegroundNotification(message);
+            }
+
+            if (selectedUser && (message.senderId === selectedUser.id || message.receiverId === selectedUser.id)) {
+                appendMessage(message);
+            }
+        }
+
+        async function selectUser(userId) {
+            selectedUser = users.find(user => user.id === userId) || null;
+            renderedMessageIds = new Set();
+
+            if (!selectedUser) return;
+
+            const state = recentActivity.get(userId) || { lastAt: 0, preview: '', unread: 0 };
+            recentActivity.set(userId, { ...state, unread: 0 });
+
+            document.getElementById('empty-state').classList.add('hidden');
+            document.getElementById('chat-header').classList.remove('hidden');
+            document.getElementById('message-container').classList.remove('hidden');
+            document.getElementById('input-area').classList.remove('hidden');
+            document.getElementById('messages-list').innerHTML = '';
+
+            updateSelectedUserHeader();
+            renderUsers();
+
+            await loadChatPermission();
+
+            const res = await api(`/chat/messages?email=${encodeURIComponent(selectedUser.email)}`);
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert(data.message || 'Failed to load messages');
+                return;
+            }
+
+            for (const message of data.messages || []) {
+                updateRecentActivity(
+                    message.senderId === currentUser.id ? message.receiverId : message.senderId,
+                    message,
+                    false,
+                );
+                appendMessage(message);
+            }
+
+            history.replaceState(null, '', `/?chat=${selectedUser.id}`);
+        }
+
+        async function loadChatPermission() {
+            if (!selectedUser) return;
+
+            const res = await api(`/chat/permission?userId=${encodeURIComponent(selectedUser.id)}`);
+            const data = await res.json();
+
+            if (!res.ok) {
+                chatPermission = {
+                    canChat: false,
+                    acceptedRequestId: null,
+                    incomingRequestId: null,
+                    outgoingRequestId: null,
+                };
+            } else {
+                chatPermission = data;
+            }
+
+            updateChatAccessUI();
+        }
+
+        function updateChatAccessUI() {
+            const input = document.getElementById('msg-input');
+            const fileInput = document.getElementById('file-input');
+            const note = document.getElementById('chat-access-note');
+            const actionBtn = document.getElementById('request-action-btn');
+            const rejectBtn = document.getElementById('request-reject-btn');
+
+            actionBtn.classList.add('hidden');
+            rejectBtn.classList.add('hidden');
+            note.classList.add('hidden');
+
+            if (!selectedUser) {
+                input.disabled = true;
+                fileInput.disabled = true;
+                return;
+            }
+
+            if (chatPermission.canChat) {
+                input.disabled = false;
+                fileInput.disabled = false;
+                note.classList.add('hidden');
+                return;
+            }
+
+            input.disabled = true;
+            fileInput.disabled = true;
+            note.classList.remove('hidden');
+
+            if (chatPermission.incomingRequestId) {
+                actionBtn.textContent = 'Accept Request';
+                actionBtn.classList.remove('hidden');
+                rejectBtn.classList.remove('hidden');
+                note.textContent = `${displayName(selectedUser)} sent you a chat request.`;
+                return;
+            }
+
+            if (chatPermission.outgoingRequestId) {
+                actionBtn.textContent = 'Request Pending';
+                actionBtn.classList.remove('hidden');
+                actionBtn.disabled = true;
+                note.textContent = `Waiting for ${displayName(selectedUser)} to accept your request.`;
+                return;
+            }
+
+            actionBtn.textContent = 'Send Request';
+            actionBtn.classList.remove('hidden');
+            actionBtn.disabled = false;
+            note.textContent = 'Send a request before starting this chat.';
+        }
+
+        function updateSelectedUserHeader() {
+            if (!selectedUser) return;
+            document.getElementById('target-name').innerText = displayName(selectedUser);
+            document.getElementById('target-avatar').src = userAvatar(selectedUser);
+            const isOnline = onlineUserIds.has(selectedUser.id);
+            const isTyping = typingUsers.has(selectedUser.id);
+            document.getElementById('target-status').innerText = isTyping ? 'Typing...' : (isOnline ? 'Online' : 'Offline');
+            document.getElementById('target-status').className = `text-xs font-medium ${isTyping ? 'text-blue-500' : (isOnline ? 'text-green-500' : 'text-slate-500')}`;
+        }
+
+        function getMessagePreview(message) {
+            if (message.messageType === 'IMAGE') {
+                return 'Photo';
+            }
+            if (message.messageType === 'DOCUMENT') {
+                return message.fileName ? `File: ${message.fileName}` : 'Document';
+            }
+            return message.content || message.ciphertext || 'New message';
+        }
+
+        function updateRecentActivity(userId, message, incrementUnread) {
+            const current = recentActivity.get(userId) || { lastAt: 0, preview: '', unread: 0 };
+            recentActivity.set(userId, {
+                lastAt: new Date(message.createdAt || Date.now()).getTime(),
+                preview: getMessagePreview(message),
+                unread: incrementUnread ? current.unread + 1 : current.unread,
+            });
+            renderUsers();
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('msg-input');
+            const text = input.value.trim();
+            if (!selectedUser || !socket) return;
+            if (!chatPermission.canChat) {
+                await loadChatPermission();
+                return;
+            }
+
+            if (text) {
+                socket.emit('sendMessage', {
+                    plainText: text,
+                    toUserId: selectedUser.id,
+                });
+                socket.emit('typing', {
+                    toUserId: selectedUser.id,
+                    isTyping: false,
+                });
+                input.value = '';
+            }
+
+            const fileInput = document.getElementById('file-input');
+            if (fileInput.files && fileInput.files[0]) {
+                await uploadAttachment(fileInput.files[0]);
+                fileInput.value = '';
+                document.getElementById('file-name').innerText = '';
+            }
+        }
+
+        async function uploadAttachment(file) {
+            if (!chatPermission.canChat) {
+                await loadChatPermission();
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('receiverId', selectedUser.id);
+
+            const res = await api('/chat/attachments', {
+                method: 'POST',
+                body: formData,
+            });
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.message || 'Failed to upload attachment');
+            }
+        }
+
+        async function handleRequestAction() {
+            if (!selectedUser) return;
+
+            if (chatPermission.incomingRequestId) {
+                const res = await api('/chat/accept', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ requestId: chatPermission.incomingRequestId }),
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    alert(data.message || 'Failed to accept request');
+                    return;
+                }
+                await loadChatPermission();
+                return;
+            }
+
+            if (chatPermission.outgoingRequestId) {
+                return;
+            }
+
+            const res = await api('/chat/request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ receiverEmail: selectedUser.email }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert(data.message || 'Failed to send request');
+                return;
+            }
+            await loadChatPermission();
+        }
+
+        async function rejectIncomingRequest() {
+            if (!chatPermission.incomingRequestId) return;
+
+            const res = await api('/chat/reject', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ requestId: chatPermission.incomingRequestId }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert(data.message || 'Failed to reject request');
+                return;
+            }
+            await loadChatPermission();
+        }
+
+        function handleAttachmentSelected() {
+            const input = document.getElementById('file-input');
+            const fileName = input.files && input.files[0] ? input.files[0].name : '';
+            document.getElementById('file-name').innerText = fileName;
+        }
+
+        async function uploadMyAvatar() {
+            const input = document.getElementById('avatar-input');
+            if (!input.files || !input.files[0]) return;
+
+            const formData = new FormData();
+            formData.append('avatar', input.files[0]);
+
+            const res = await api('/users/profile/avatar', {
+                method: 'POST',
+                body: formData,
+            });
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert(data.message || 'Failed to upload avatar');
+                return;
+            }
+
+            currentUser = { ...currentUser, ...data };
+            document.getElementById('my-avatar').src = userAvatar(currentUser);
+            input.value = '';
+        }
+
+        async function renameSelectedUser() {
+            if (!selectedUser) return;
+
+            const nickname = prompt(
+                'Set a custom name for this contact. Leave blank to reset.',
+                selectedUser.nickname || '',
+            );
+
+            if (nickname === null) {
+                return;
+            }
+
+            const res = await api('/users/contacts/nickname', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contactUserId: selectedUser.id,
+                    nickname,
+                }),
+            });
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert(data.message || 'Failed to rename contact');
+                return;
+            }
+
+            users = users.map((user) => user.id === selectedUser.id
+                ? {
+                    ...user,
+                    nickname: data.nickname,
+                    displayName: data.nickname || user.name,
+                }
+                : user);
+
+            selectedUser = users.find((user) => user.id === selectedUser.id) || selectedUser;
+            renderUsers();
+            updateSelectedUserHeader();
+        }
+
+        async function downloadFile(url, fileName) {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error('Failed to download file');
+            }
+
+            const blob = await response.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = fileName || 'download';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(blobUrl);
+        }
+
+        function appendMessage(message) {
+            if (!message || renderedMessageIds.has(message.id) || !selectedUser) {
+                return;
+            }
+
+            const belongsToCurrentChat =
+                (message.senderId === currentUser.id && message.receiverId === selectedUser.id) ||
+                (message.senderId === selectedUser.id && message.receiverId === currentUser.id);
+
+            if (!belongsToCurrentChat) {
+                return;
+            }
+
+            renderedMessageIds.add(message.id);
+
+            const list = document.getElementById('messages-list');
+            const div = document.createElement('div');
+            const isSent = message.senderId === currentUser.id;
+            div.className = `max-w-[78%] p-3 px-4 rounded-2xl shadow-sm text-sm ${isSent
+                ? 'self-end bg-blue-600 text-white rounded-br-md'
+                : 'self-start bg-white text-slate-800 border border-slate-200 rounded-bl-md'
+                }`;
+
+            if (message.messageType === 'IMAGE' && message.fileUrl) {
+                div.innerHTML = `
+                    <a href="${API_URL}${message.fileUrl}" target="_blank" rel="noopener noreferrer">
+                        <img src="${API_URL}${message.fileUrl}" class="rounded-xl max-h-72 w-auto mb-2 border border-black/5">
+                    </a>
+                    <div class="flex items-center gap-3 text-xs opacity-90">
+                        <a href="${API_URL}${message.fileUrl}" target="_blank" rel="noopener noreferrer" class="underline">Open image</a>
+                        <button class="underline" onclick="downloadFile('${API_URL}${message.fileUrl}', '${escapeHtml(message.fileName || 'image')}')">Download</button>
+                    </div>
+                `;
+            } else if (message.messageType === 'DOCUMENT' && message.fileUrl) {
+                div.innerHTML = `
+                    <div class="space-y-2">
+                        <p class="font-semibold">${escapeHtml(message.fileName || 'Document')}</p>
+                        <p class="text-xs opacity-80">${formatBytes(message.fileSize)}</p>
+                        <div class="flex items-center gap-3 text-xs">
+                            <a href="${API_URL}${message.fileUrl}" target="_blank" rel="noopener noreferrer" class="underline">Open file</a>
+                            <button class="underline" onclick="downloadFile('${API_URL}${message.fileUrl}', '${escapeHtml(message.fileName || 'file')}')">Download</button>
+                        </div>
+                    </div>
+                `;
+            } else {
+                div.innerText = message.content || message.ciphertext || '[Encrypted message]';
+            }
+
+            list.appendChild(div);
+            const container = document.getElementById('message-container');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function setupNotifications() {
+            if (isFileOrigin) {
+                document.getElementById('notify-btn').innerText = 'Use localhost for push notifications';
+                document.getElementById('notify-btn').disabled = true;
+                return;
+            }
+
+            if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+                document.getElementById('notify-btn').innerText = 'Notifications not supported';
+                document.getElementById('notify-btn').disabled = true;
+                return;
+            }
+
+            swRegistration = await navigator.serviceWorker.register('/sw.js');
+
+            navigator.serviceWorker.addEventListener('message', (event) => {
+                if (event.data?.type === 'notification-click' && event.data.url) {
+                    const url = new URL(event.data.url, window.location.origin);
+                    const chatId = url.searchParams.get('chat');
+                    if (chatId) {
+                        selectUser(chatId);
+                    }
+                }
+            });
+
+            if (Notification.permission === 'granted') {
+                document.getElementById('notify-btn').innerText = 'Notifications Enabled';
+                await subscribeForPush();
+            } else if (Notification.permission === 'denied') {
+                document.getElementById('notify-btn').innerText = 'Notifications Blocked';
+            }
+        }
+
+        async function enableNotifications() {
+            if (!swRegistration) {
+                await setupNotifications();
+            }
+
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                document.getElementById('notify-btn').innerText = 'Notifications Blocked';
+                return;
+            }
+
+            document.getElementById('notify-btn').innerText = 'Notifications Enabled';
+            await subscribeForPush();
+        }
+
+        async function subscribeForPush() {
+            const keyResponse = await fetch(`${API_URL}/users/notifications/public-key`);
+            const keyData = await keyResponse.json();
+
+            if (!keyData.publicKey) {
+                return;
+            }
+
+            let subscription = await swRegistration.pushManager.getSubscription();
+            if (!subscription) {
+                subscription = await swRegistration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(keyData.publicKey),
+                });
+            }
+
+            await api('/users/notifications/subscribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(subscription),
+            });
+        }
+
+        function maybeShowForegroundNotification(message) {
+            if (Notification.permission !== 'granted') {
+                return;
+            }
+
+            if (!document.hidden && document.hasFocus()) {
+                return;
+            }
+
+            const sender = users.find(user => user.id === message.senderId);
+            const notification = new Notification(sender?.name || 'New message', {
+                body: getMessagePreview(message),
+                icon: sender ? userAvatar(sender) : undefined,
+                tag: `chat-${message.senderId}`,
+            });
+
+            notification.onclick = () => {
+                window.focus();
+                if (sender) {
+                    selectUser(sender.id);
+                }
+                notification.close();
+            };
+        }
+
+        function formatBytes(bytes) {
+            if (!bytes && bytes !== 0) return '';
+            const units = ['B', 'KB', 'MB', 'GB'];
+            let value = bytes;
+            let unitIndex = 0;
+            while (value >= 1024 && unitIndex < units.length - 1) {
+                value /= 1024;
+                unitIndex += 1;
+            }
+            return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+        }
+
+        function escapeHtml(text) {
+            return String(text)
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
+        }
+
+        function urlBase64ToUint8Array(base64String) {
+            const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+            const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+            const rawData = window.atob(base64);
+            return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
+        }
+
+        async function logout() {
+            try {
+                if (swRegistration) {
+                    const subscription = await swRegistration.pushManager.getSubscription();
+                    if (subscription) {
+                        await api('/users/notifications/unsubscribe', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ endpoint: subscription.endpoint }),
+                        });
+                        await subscription.unsubscribe();
+                    }
+                }
+            } catch (error) {
+                console.error(error);
+            }
+
+            localStorage.removeItem('chat_token');
+            if (isFileOrigin) {
+                location.reload();
+                return;
+            }
+
+            location.href = '/';
+        }
+
+        async function restoreSession() {
+            const savedToken = localStorage.getItem('chat_token');
+            if (!savedToken) return;
+            token = savedToken;
+            try {
+                await startApp();
+            } catch (error) {
+                console.error(error);
+                localStorage.removeItem('chat_token');
+            }
+        }
+
+        document.addEventListener('input', (event) => {
+            if (event.target?.id !== 'msg-input' || !selectedUser || !socket) {
+                return;
+            }
+
+            socket.emit('typing', {
+                toUserId: selectedUser.id,
+                isTyping: true,
+            });
+
+            if (typingTimeout) {
+                clearTimeout(typingTimeout);
+            }
+
+            typingTimeout = setTimeout(() => {
+                socket.emit('typing', {
+                    toUserId: selectedUser.id,
+                    isTyping: false,
+                });
+            }, 1200);
+        });
+
+        restoreSession();
+    </script>
+</body>
+
+</html>

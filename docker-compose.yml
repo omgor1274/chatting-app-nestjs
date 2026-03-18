@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: chat_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1234
+      POSTGRES_DB: chat_app
+    ports:
+      - "5433:5432"
+
+  redis:
+    image: redis:7
+    container_name: chat_redis
+    ports:
+      - "6379:6379"

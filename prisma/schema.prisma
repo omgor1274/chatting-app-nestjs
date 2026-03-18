@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String    @id @default(uuid())
+  email              String    @unique
+  password           String
+  name               String
+  avatar             String?
+  publicKey          String?
+  publicKeyUpdatedAt DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @default(now()) @updatedAt
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  DOCUMENT
+}
+
+model Message {
+  id            String      @id @default(uuid())
+  content       String?
+  ciphertext    String?
+  senderId      String
+  receiverId    String
+  messageType   MessageType @default(TEXT)
+  fileUrl       String?
+  fileName      String?
+  fileMimeType  String?
+  fileSize      Int?
+  encryptedKey  String?
+  iv            String?
+  algorithm     String?
+  isEncrypted   Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+}
+
+enum RequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model ChatRequest {
+  id          String   @id @default(uuid())
+  senderId    String
+  receiverId  String
+  status      RequestStatus @default(PENDING)
+  createdAt   DateTime @default(now())
+}
+
+model PushSubscription {
+  id             String   @id @default(uuid())
+  userId         String
+  endpoint       String   @unique
+  expirationTime String?
+  p256dh         String
+  auth           String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
+}
+
+model ContactPreference {
+  id            String   @id @default(uuid())
+  ownerId       String
+  contactUserId String
+  nickname      String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
+
+  @@unique([ownerId, contactUserId])
+}
