@@ -32,7 +32,126 @@ export class ChatService {
         private redisService: RedisService,
     ) { }
 
-    async getMessages(currentUserId: string, otherUserEmail: string) {
+    private getConversationKey(userA: string, userB: string) {
+        return [userA, userB].sort().join(':');
+    }
+
+    private getDayStart(date: Date) {
+        return new Date(
+            Date.UTC(
+                date.getUTCFullYear(),
+                date.getUTCMonth(),
+                date.getUTCDate(),
+                0,
+                0,
+                0,
+                0,
+            ),
+        );
+    }
+
+    private getDayEnd(date: Date) {
+        return new Date(this.getDayStart(date).getTime() + 24 * 60 * 60 * 1000);
+    }
+
+    private async readCachedConversationDay(
+        currentUserId: string,
+        otherUserId: string,
+        dayStart: Date,
+    ) {
+        try {
+            const redis = await this.redisService.getClient();
+            const cacheKey = `chat-day:${this.getConversationKey(currentUserId, otherUserId)}:${dayStart.toISOString()}`;
+            const cached = await redis.get(cacheKey);
+
+            if (!cached) {
+                return null;
+            }
+
+            return JSON.parse(cached) as {
+                messages: Array<Record<string, unknown>>;
+            };
+        } catch {
+            return null;
+        }
+    }
+
+    private async cacheConversationDay(
+        currentUserId: string,
+        otherUserId: string,
+        dayStart: Date,
+        messages: unknown[],
+    ) {
+        try {
+            const redis = await this.redisService.getClient();
+            const cacheKey = `chat-day:${this.getConversationKey(currentUserId, otherUserId)}:${dayStart.toISOString()}`;
+            await redis.set(
+                cacheKey,
+                JSON.stringify({ messages }),
+                'EX',
+                60 * 60 * 24 * 14,
+            );
+        } catch {
+            return;
+        }
+    }
+
+    private async invalidateConversationDay(
+        currentUserId: string,
+        otherUserId: string,
+        createdAt: Date,
+    ) {
+        try {
+            const redis = await this.redisService.getClient();
+            const cacheKey = `chat-day:${this.getConversationKey(currentUserId, otherUserId)}:${this.getDayStart(createdAt).toISOString()}`;
+            await redis.del(cacheKey);
+        } catch {
+            return;
+        }
+    }
+
+    private async resolveAnchorMessageDate(
+        currentUserId: string,
+        otherUserId: string,
+        before?: string,
+    ) {
+        let beforeDate: Date | undefined;
+
+        if (before) {
+            beforeDate = new Date(before);
+            if (Number.isNaN(beforeDate.getTime())) {
+                throw new BadRequestException('Invalid before cursor');
+            }
+        }
+
+        const latestMessage = await this.prisma.message.findFirst({
+            where: {
+                OR: [
+                    {
+                        senderId: currentUserId,
+                        receiverId: otherUserId,
+                    },
+                    {
+                        senderId: otherUserId,
+                        receiverId: currentUserId,
+                    },
+                ],
+                ...(beforeDate ? { createdAt: { lt: beforeDate } } : {}),
+            },
+            orderBy: { createdAt: 'desc' },
+            select: {
+                createdAt: true,
+            },
+        });
+
+        return latestMessage?.createdAt ?? null;
+    }
+
+    async getMessages(
+        currentUserId: string,
+        otherUserEmail: string,
+        before?: string,
+    ) {
         if (!otherUserEmail) {
             throw new BadRequestException('Email query parameter is required');
         }
@@ -52,7 +171,63 @@ export class ChatService {
             throw new NotFoundException('User not found');
         }
 
-        const messages = await this.prisma.message.findMany({
+        const anchorDate = await this.resolveAnchorMessageDate(
+            currentUserId,
+            otherUser.id,
+            before,
+        );
+
+        if (!anchorDate) {
+            return {
+                otherUser,
+                messages: [],
+                hasMore: false,
+                nextBefore: null,
+                loadedDayStart: null,
+                loadedDayEnd: null,
+            };
+        }
+
+        const dayStart = this.getDayStart(anchorDate);
+        const dayEnd = this.getDayEnd(anchorDate);
+        const cached = await this.readCachedConversationDay(
+            currentUserId,
+            otherUser.id,
+            dayStart,
+        );
+
+        const messages = cached?.messages
+            ? cached.messages
+            : await this.prisma.message.findMany({
+                where: {
+                    OR: [
+                        {
+                            senderId: currentUserId,
+                            receiverId: otherUser.id,
+                        },
+                        {
+                            senderId: otherUser.id,
+                            receiverId: currentUserId,
+                        },
+                    ],
+                    createdAt: {
+                        gte: dayStart,
+                        lt: dayEnd,
+                    },
+                },
+                orderBy: { createdAt: 'asc' },
+            });
+
+        if (!cached) {
+            await this.cacheConversationDay(
+                currentUserId,
+                otherUser.id,
+                dayStart,
+                messages,
+            );
+        }
+
+        const olderMessage = await this.prisma.message.findFirst({
             where: {
                 OR: [
                     {
@@ -64,13 +239,25 @@ export class ChatService {
                         receiverId: currentUserId,
                     },
                 ],
+                createdAt: {
+                    lt: dayStart,
+                },
             },
-            orderBy: { createdAt: 'asc' },
+            orderBy: { createdAt: 'desc' },
+            select: {
+                createdAt: true,
+            },
         });
 
         return {
             otherUser,
             messages,
+            hasMore: Boolean(olderMessage),
+            nextBefore: olderMessage
+                ? new Date(olderMessage.createdAt.getTime() + 1).toISOString()
+                : null,
+            loadedDayStart: dayStart.toISOString(),
+            loadedDayEnd: dayEnd.toISOString(),
         };
     }
 
@@ -434,6 +621,7 @@ export class ChatService {
                 : (createdMessage.content ?? createdMessage.ciphertext ?? 'New message');
 
         await Promise.all([
+            this.invalidateConversationDay(sender.id, receiver.id, createdMessage.createdAt),
             this.cacheRecentChat(sender.id, receiver.id, {
                 lastMessagePreview: preview,
                 lastMessageAt: createdMessage.createdAt.toISOString(),

@@ -78,6 +78,28 @@
         -webkit-backdrop-filter: blur(10px);
       }
 
+      .floating-menu {
+        box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
+      }
+
+      @media (max-width: 1023px) {
+        body {
+          padding: 0 !important;
+        }
+
+        #app-shell {
+          height: var(--app-shell-height, 100dvh) !important;
+          max-width: none !important;
+          border-radius: 0 !important;
+          border-left: 0 !important;
+          border-right: 0 !important;
+        }
+      }
+
+      body.keyboard-open #app-shell {
+        height: var(--app-shell-height, 100dvh) !important;
+      }
+
       body.dark-mode {
         color-scheme: dark;
         background:
@@ -272,6 +294,7 @@
 
   <body class="min-h-screen p-3 sm:p-4 lg:p-6">
     <div
+      id="app-shell"
       class="glass relative mx-auto flex h-[calc(100vh-1.5rem)] max-w-[1500px] overflow-hidden rounded-[32px] border border-white/70 shadow-[0_30px_120px_rgba(15,23,42,0.18)] xl:h-[calc(100vh-3rem)]"
     >
       <div
@@ -323,6 +346,12 @@
                     id="password-input"
                     placeholder="Password"
                     class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  />
+                  <input
+                    type="password"
+                    id="confirm-password-input"
+                    placeholder="Confirm Password"
+                    class="hidden w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                   />
                   <div
                     id="auth-feedback"
@@ -527,35 +556,16 @@
         <div
           class="border-b border-slate-200 bg-white/90 px-5 pb-4 pt-5 sm:px-6"
         >
-          <div class="flex items-start justify-between gap-4">
-            <div class="flex min-w-0 items-center gap-3">
-              <label class="relative cursor-pointer">
-                <img
-                  id="my-avatar"
-                  onclick="openImagePreview(userAvatar(currentUser))"
-                  class="h-14 w-14 rounded-2xl object-cover ring-2 ring-blue-500/70"
-                />
-                <input
-                  id="avatar-input"
-                  type="file"
-                  accept="image/*"
-                  class="hidden"
-                  onchange="uploadMyAvatar()"
-                />
-                <span
-                  class="absolute -bottom-1 -right-1 rounded-full bg-slate-950 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white"
-                  >Edit</span
-                >
-              </label>
-              <div class="min-w-0">
-                <p
-                  id="my-name"
-                  class="display-font truncate text-lg font-bold text-slate-900"
-                >
-                  Me
-                </p>
-                <p id="my-email" class="truncate text-sm text-slate-500"></p>
-              </div>
+          <div class="flex items-center justify-between gap-4">
+            <div class="min-w-0">
+              <p
+                class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400"
+              >
+                O-chat
+              </p>
+              <p class="mt-2 text-sm text-slate-500">
+                Search and jump back into recent conversations.
+              </p>
             </div>
             <div class="flex items-center gap-2">
               <button
@@ -589,7 +599,7 @@
               id="user-search"
               type="text"
               placeholder="Search by name, nickname, or email"
-              oninput="renderUsers()"
+              oninput="handleUserSearchInput()"
               class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
             />
           </div>
@@ -662,17 +672,12 @@
               >
                 Select a contact
               </h3>
-              <span
-                id="target-badge"
-                class="hidden rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700"
-                >Nickname</span
-              >
             </div>
             <span id="target-status" class="text-sm font-medium text-slate-500"
               >Offline</span
             >
           </div>
-          <div class="ml-auto flex flex-wrap items-center justify-end gap-2">
+          <div class="relative ml-auto flex flex-wrap items-center justify-end gap-2">
             <button
               id="request-action-btn"
               onclick="handleRequestAction()"
@@ -688,40 +693,52 @@
               Reject
             </button>
             <button
-              id="chat-theme-btn"
-              onclick="chooseChatTheme()"
-              class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              id="chat-actions-btn"
+              onclick="toggleChatActionsMenu()"
+              class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-lg font-semibold leading-none text-slate-700 hover:bg-slate-50"
             >
-              Theme
+              ⋯
             </button>
-            <button
-              id="chat-theme-clear-btn"
-              onclick="clearChatTheme()"
-              class="hidden rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            <div
+              id="chat-actions-menu"
+              class="floating-menu hidden absolute right-0 top-full z-20 mt-2 w-52 rounded-[22px] border border-slate-200 bg-white p-2"
             >
-              Clear Theme
-            </button>
-            <button
-              id="voice-call-btn"
-              onclick="startCall('audio')"
-              class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              Voice Call
-            </button>
-            <button
-              id="video-call-btn"
-              onclick="startCall('video')"
-              class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              Video Call
-            </button>
-            <button
-              id="rename-contact-btn"
-              onclick="openRenameModal()"
-              class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              Rename
-            </button>
+              <button
+                id="chat-theme-btn"
+                onclick="closeChatActionsMenu(); chooseChatTheme();"
+                class="chat-action-item flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                <span>Change Theme</span>
+              </button>
+              <button
+                id="chat-theme-clear-btn"
+                onclick="closeChatActionsMenu(); clearChatTheme();"
+                class="chat-action-item hidden flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                <span>Clear Theme</span>
+              </button>
+              <button
+                id="voice-call-btn"
+                onclick="closeChatActionsMenu(); startCall('audio');"
+                class="chat-action-item flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                <span>Voice Call</span>
+              </button>
+              <button
+                id="video-call-btn"
+                onclick="closeChatActionsMenu(); startCall('video');"
+                class="chat-action-item flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                <span>Video Call</span>
+              </button>
+              <button
+                id="rename-contact-btn"
+                onclick="closeChatActionsMenu(); openRenameModal();"
+                class="chat-action-item flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                <span>Rename</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -760,6 +777,7 @@
         <div
           id="message-container"
           class="hidden flex-1 overflow-y-auto chat-bg px-3 py-4 sm:px-5 lg:px-6"
+          onscroll="handleMessageContainerScroll()"
         >
           <div
             id="messages-list"
@@ -772,41 +790,6 @@
           class="hidden border-t border-slate-200 bg-white/88 px-3 py-3 backdrop-blur sm:px-5 sm:py-4 lg:px-6"
         >
           <div class="mx-auto flex w-full max-w-5xl flex-col gap-3">
-            <div
-              class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div class="flex flex-wrap items-center gap-2">
-                <label
-                  id="share-file-label"
-                  class="inline-flex cursor-pointer items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-                >
-                  Share File
-                  <input
-                    id="file-input"
-                    type="file"
-                    class="hidden"
-                    onchange="handleAttachmentSelected()"
-                  />
-                </label>
-                <button
-                  id="voice-record-btn"
-                  onclick="toggleVoiceRecording()"
-                  class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                >
-                  Record Voice
-                </button>
-              </div>
-              <div class="min-w-0 text-right">
-                <span
-                  id="file-name"
-                  class="block truncate text-sm text-slate-500"
-                ></span>
-                <span
-                  id="voice-status"
-                  class="hidden text-xs font-semibold uppercase tracking-wide text-rose-500"
-                ></span>
-              </div>
-            </div>
             <div
               id="attachment-preview"
               class="hidden rounded-[24px] border border-slate-200 bg-slate-50 p-3"
@@ -843,9 +826,46 @@
               </div>
             </div>
             <div
+              id="voice-status"
+              class="hidden rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-rose-600"
+            ></div>
+            <div
               class="rounded-[28px] border border-slate-200 bg-white p-2 shadow-sm"
             >
-              <div class="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div class="relative flex items-end gap-2">
+                <div class="relative shrink-0">
+                  <button
+                    id="composer-actions-btn"
+                    onclick="toggleComposerActionsMenu()"
+                    class="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-2xl font-semibold text-slate-700 transition hover:bg-slate-100"
+                  >
+                    +
+                  </button>
+                  <div
+                    id="composer-actions-menu"
+                    class="floating-menu hidden absolute bottom-full left-0 z-20 mb-2 w-52 rounded-[22px] border border-slate-200 bg-white p-2"
+                  >
+                    <label
+                      id="share-file-label"
+                      class="flex cursor-pointer items-center justify-between rounded-2xl px-3 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      <span>Share File</span>
+                      <input
+                        id="file-input"
+                        type="file"
+                        class="hidden"
+                        onchange="handleAttachmentSelected()"
+                      />
+                    </label>
+                    <button
+                      id="voice-record-btn"
+                      onclick="closeComposerActionsMenu(); toggleVoiceRecording()"
+                      class="flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      <span>Record Voice</span>
+                    </button>
+                  </div>
+                </div>
                 <input
                   type="text"
                   id="msg-input"
@@ -874,7 +894,7 @@
       onclick="closeProfileModal(event)"
     >
       <div
-        class="w-full max-w-3xl rounded-[28px] border border-white/25 bg-white p-6 shadow-2xl sm:p-7"
+        class="flex max-h-[min(92vh,860px)] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border border-white/25 bg-white p-6 shadow-2xl sm:p-7"
         onclick="event.stopPropagation()"
       >
         <div class="flex items-start justify-between gap-4">
@@ -899,7 +919,7 @@
             Close
           </button>
         </div>
-        <div class="mt-6 grid gap-4 lg:grid-cols-2">
+        <div class="mt-6 grid gap-4 overflow-y-auto pr-1 lg:grid-cols-2">
           <section
             class="rounded-[24px] border border-slate-200 bg-slate-50 p-5"
           >
@@ -947,6 +967,44 @@
                 id="settings-email-note"
                 class="hidden rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
               ></p>
+              <div
+                id="settings-email-confirm-wrap"
+                class="hidden space-y-3 rounded-[24px] border border-blue-200 bg-blue-50 px-4 py-4"
+              >
+                <p class="text-sm font-semibold text-slate-900">
+                  Confirm your new email with OTP
+                </p>
+                <p
+                  id="settings-email-confirm-copy"
+                  class="text-sm leading-6 text-slate-600"
+                >
+                  Enter the 6-digit OTP sent to your new email address.
+                </p>
+                <input
+                  id="settings-email-confirm-otp-input"
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="one-time-code"
+                  maxlength="6"
+                  placeholder="Enter 6-digit OTP"
+                  oninput="sanitizeOtpInput(this)"
+                  class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center text-base font-semibold tracking-[0.3em] text-slate-800 outline-none transition placeholder:tracking-normal placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-500/20"
+                />
+                <div class="grid gap-3 sm:grid-cols-2">
+                  <button
+                    onclick="verifyPendingEmailOtp()"
+                    class="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700"
+                  >
+                    Confirm Email Change
+                  </button>
+                  <button
+                    onclick="resendVerificationForCurrentUser()"
+                    class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Resend OTP
+                  </button>
+                </div>
+              </div>
               <button
                 onclick="saveProfile()"
                 class="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700"
@@ -1037,6 +1095,18 @@
                   class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-800 outline-none transition focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
                 />
               </div>
+              <div>
+                <label
+                  for="confirm-new-password-input"
+                  class="mb-2 block text-sm font-semibold text-slate-700"
+                  >Confirm new password</label
+                >
+                <input
+                  id="confirm-new-password-input"
+                  type="password"
+                  class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-800 outline-none transition focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
               <button
                 onclick="changePassword()"
                 class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
@@ -1063,7 +1133,8 @@
                 class="hidden space-y-3 rounded-2xl border border-slate-200 bg-white px-4 py-4"
               >
                 <p class="text-sm leading-6 text-slate-600">
-                  Enter the 6-digit OTP sent to your new email address.
+                  Enter the 6-digit OTP sent to your new email address. You can
+                  also confirm it from the Profile section above.
                 </p>
                 <input
                   id="settings-pending-email-otp-input"
@@ -1120,7 +1191,7 @@
               Rename this contact
             </h3>
             <p class="mt-2 text-sm leading-6 text-slate-500">
-              Only you see this nickname. Leave it blank to use their real
+              Only you see this custom name. Leave it blank to use their real
               profile name again.
             </p>
           </div>
@@ -1135,7 +1206,7 @@
           <label
             for="rename-input"
             class="mb-2 block text-sm font-semibold text-slate-700"
-            >Nickname</label
+            >Custom name</label
           >
           <input
             id="rename-input"
@@ -1156,7 +1227,7 @@
             onclick="saveRename()"
             class="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700"
           >
-            Save nickname
+            Save name
           </button>
         </div>
       </div>
@@ -1313,6 +1384,13 @@
       />
     </div>
     <input
+      id="avatar-input"
+      type="file"
+      accept="image/*"
+      class="hidden"
+      onchange="uploadMyAvatar()"
+    />
+    <input
       id="chat-theme-input"
       type="file"
       accept="image/*"
@@ -1345,6 +1423,16 @@
       let typingUsers = new Set();
       let sidebarOpen = false;
       let attachmentPreviewUrl = null;
+      let usersRenderFrame = 0;
+      let headerRenderFrame = 0;
+      let historyScrollFrame = 0;
+      let viewportHeightFrame = 0;
+      let messagePagination = {
+        nextBefore: null,
+        hasMore: false,
+        loadingOlder: false,
+        loadedForUserId: null,
+      };
       let chatPermission = {
         canChat: false,
         acceptedRequestId: null,
@@ -1370,6 +1458,10 @@
       let rtcConfig = {
         iceServers: appConfig.stunServers.map((urls) => ({ urls })),
       };
+
+      function getById(id) {
+        return document.getElementById(id);
+      }
 
       async function loadPublicConfig() {
         const candidates = Array.from(
@@ -1505,14 +1597,40 @@
       }
 
       function updateChatCount() {
-        const badge = document.getElementById('chat-count');
+        const badge = getById('chat-count');
         if (badge) {
           badge.innerText = String(users.length);
         }
       }
 
+      function scheduleRenderUsers() {
+        if (usersRenderFrame) {
+          return;
+        }
+
+        usersRenderFrame = window.requestAnimationFrame(() => {
+          usersRenderFrame = 0;
+          renderUsers();
+        });
+      }
+
+      function scheduleHeaderUpdate() {
+        if (headerRenderFrame) {
+          return;
+        }
+
+        headerRenderFrame = window.requestAnimationFrame(() => {
+          headerRenderFrame = 0;
+          updateSelectedUserHeader();
+        });
+      }
+
+      function handleUserSearchInput() {
+        scheduleRenderUsers();
+      }
+
       function setFeedbackMessage(elementId, message, type = 'info') {
-        const box = document.getElementById(elementId);
+        const box = getById(elementId);
         box.innerText = message || '';
         box.classList.remove(
           'hidden',
@@ -1746,6 +1864,9 @@
       function setAuthMode(nextIsLogin) {
         isLogin = nextIsLogin;
         updateAuthModeCopy();
+        document
+          .getElementById('confirm-password-input')
+          .classList.toggle('hidden', isLogin);
       }
 
       function applyDarkMode(enabled) {
@@ -1766,6 +1887,12 @@
         }
 
         const note = document.getElementById('settings-email-note');
+        const confirmWrap = document.getElementById(
+          'settings-email-confirm-wrap',
+        );
+        const confirmCopy = document.getElementById(
+          'settings-email-confirm-copy',
+        );
         const verificationStatus = document.getElementById(
           'settings-verification-status',
         );
@@ -1774,6 +1901,9 @@
         );
         const pendingOtpInput = document.getElementById(
           'settings-pending-email-otp-input',
+        );
+        const confirmOtpInput = document.getElementById(
+          'settings-email-confirm-otp-input',
         );
         document.getElementById('profile-name-input').value =
           currentUser.name || '';
@@ -1788,12 +1918,18 @@
         if (currentUser.pendingEmail) {
           note.innerText = `Email change pending verification: ${currentUser.pendingEmail}`;
           note.classList.remove('hidden');
+          confirmWrap.classList.remove('hidden');
+          confirmCopy.innerText = `Enter the 6-digit OTP sent to ${currentUser.pendingEmail} to finish changing your email.`;
           pendingOtpWrap.classList.remove('hidden');
         } else {
           note.classList.add('hidden');
           note.innerText = '';
+          confirmWrap.classList.add('hidden');
+          confirmCopy.innerText =
+            'Enter the 6-digit OTP sent to your new email address.';
           pendingOtpWrap.classList.add('hidden');
           pendingOtpInput.value = '';
+          confirmOtpInput.value = '';
         }
 
         verificationStatus.innerText = currentUser.pendingEmail
@@ -1846,9 +1982,6 @@
 
       function applyCurrentUser(user) {
         currentUser = user;
-        document.getElementById('my-name').innerText = baseName(currentUser);
-        document.getElementById('my-email').innerText = currentUser.email || '';
-        document.getElementById('my-avatar').src = userAvatar(currentUser);
         updateSettingsUI();
         applyDarkMode(Boolean(currentUser.darkMode));
       }
@@ -1910,6 +2043,58 @@
         document.getElementById('image-preview-src').src = '';
       }
 
+      function toggleComposerActionsMenu() {
+        document
+          .getElementById('composer-actions-menu')
+          .classList.toggle('hidden');
+        closeChatActionsMenu();
+      }
+
+      function closeComposerActionsMenu() {
+        document.getElementById('composer-actions-menu').classList.add('hidden');
+      }
+
+      function toggleChatActionsMenu() {
+        document.getElementById('chat-actions-menu').classList.toggle('hidden');
+        closeComposerActionsMenu();
+      }
+
+      function closeChatActionsMenu() {
+        document.getElementById('chat-actions-menu').classList.add('hidden');
+      }
+
+      function applyViewportHeight() {
+        const viewportHeight =
+          window.innerWidth < 1024 && window.visualViewport
+            ? window.visualViewport.height
+            : window.innerHeight;
+
+        document.documentElement.style.setProperty(
+          '--app-shell-height',
+          `${Math.round(viewportHeight)}px`,
+        );
+      }
+
+      function scheduleViewportHeight() {
+        if (viewportHeightFrame) {
+          return;
+        }
+
+        viewportHeightFrame = window.requestAnimationFrame(() => {
+          viewportHeightFrame = 0;
+          applyViewportHeight();
+        });
+      }
+
+      function handleKeyboardState(open) {
+        if (window.innerWidth >= 1024) {
+          document.body.classList.remove('keyboard-open');
+          return;
+        }
+
+        document.body.classList.toggle('keyboard-open', Boolean(open));
+      }
+
       function clearAttachmentSelection() {
         const input = document.getElementById('file-input');
         const preview = document.getElementById('attachment-preview');
@@ -1926,13 +2111,13 @@
           input.value = '';
         }
 
-        document.getElementById('file-name').innerText = '';
         document.getElementById('attachment-preview-title').innerText = '';
         document.getElementById('attachment-preview-meta').innerText = '';
         preview.classList.add('hidden');
         previewImage.classList.add('hidden');
         previewImage.src = '';
         previewImage.onclick = null;
+        closeComposerActionsMenu();
       }
 
       function openProfileModal() {
@@ -2186,12 +2371,18 @@
           return;
         }
 
-        const otp = document
-          .getElementById('settings-pending-email-otp-input')
-          .value.trim();
+        const primaryOtpInput = document.getElementById(
+          'settings-email-confirm-otp-input',
+        );
+        const secondaryOtpInput = document.getElementById(
+          'settings-pending-email-otp-input',
+        );
+        const otp =
+          primaryOtpInput.value.trim() || secondaryOtpInput.value.trim();
 
         if (!/^\d{6}$/.test(otp)) {
           alert('Enter the 6-digit OTP sent to your new email.');
+          primaryOtpInput.focus();
           return;
         }
 
@@ -2218,7 +2409,8 @@
         await loadProfile();
         renderUsers();
         updateSelectedUserHeader();
-        document.getElementById('settings-pending-email-otp-input').value = '';
+        primaryOtpInput.value = '';
+        secondaryOtpInput.value = '';
         alert(data.message || 'Email updated and verified.');
         closeProfileModal();
       }
@@ -2277,11 +2469,19 @@
 
         const email = document.getElementById('email-input').value.trim();
         const password = document.getElementById('password-input').value.trim();
+        const confirmPassword = document
+          .getElementById('confirm-password-input')
+          .value.trim();
         const name = document.getElementById('name-input').value.trim();
         const endpoint = isLogin ? '/auth/login' : '/auth/register';
         const payload = isLogin
           ? { email, password }
           : { email, password, name };
+
+        if (!isLogin && password !== confirmPassword) {
+          showAuthFeedback('Password and confirm password must match.', 'error');
+          return;
+        }
 
         try {
           const res = await fetch(`${API_URL}${endpoint}`, {
@@ -2423,9 +2623,12 @@
         alert(data.message || 'Profile updated');
 
         if (data.pendingEmail) {
+          document.getElementById('settings-email-confirm-otp-input').value =
+            '';
           document.getElementById('settings-pending-email-otp-input').value =
             '';
           updateSettingsUI();
+          document.getElementById('settings-email-confirm-otp-input').focus();
           return;
         }
 
@@ -2471,6 +2674,14 @@
         const newPassword = document
           .getElementById('new-password-input')
           .value.trim();
+        const confirmNewPassword = document
+          .getElementById('confirm-new-password-input')
+          .value.trim();
+
+        if (newPassword !== confirmNewPassword) {
+          alert('New password and confirm password must match.');
+          return;
+        }
 
         const res = await api('/users/password', {
           method: 'POST',
@@ -2490,6 +2701,7 @@
 
         document.getElementById('current-password-input').value = '';
         document.getElementById('new-password-input').value = '';
+        document.getElementById('confirm-new-password-input').value = '';
         forceSessionLogout(
           data.message ||
             'Password updated successfully. Please log in again on this device.',
@@ -2532,11 +2744,14 @@
           );
         });
 
+        const loadedUserIds = new Set(users.map((user) => user.id));
+
         for (const recentUser of recentUsers) {
-          if (!users.find((user) => user.id === recentUser.id)) {
+          if (!loadedUserIds.has(recentUser.id)) {
             users.push(
               normalizeUser(recentUser, existingById.get(recentUser.id)),
             );
+            loadedUserIds.add(recentUser.id);
           }
         }
 
@@ -2585,7 +2800,7 @@
       }
 
       function renderUsers() {
-        const list = document.getElementById('users-list');
+        const list = getById('users-list');
         list.innerHTML = getSortedUsers()
           .map((user) => {
             const isSelected = selectedUser?.id === user.id;
@@ -2594,20 +2809,15 @@
               preview: '',
               unread: 0,
             };
-            const hasNickname = Boolean(user.nickname);
             return `
                     <li onclick="selectUser('${user.id}')" class="cursor-pointer rounded-[26px] border p-2.5 transition-all ${isSelected ? 'border-blue-200 bg-blue-50 shadow-sm' : 'border-transparent bg-white/70 hover:border-slate-200 hover:bg-white'}">
                         <div class="flex items-center gap-3 rounded-[22px] p-2">
                             <div class="relative shrink-0">
-                                <img src="${userAvatar(user)}" class="h-12 w-12 rounded-2xl object-cover shadow-sm">
+                                <img src="${userAvatar(user)}" loading="lazy" decoding="async" class="h-12 w-12 rounded-2xl object-cover shadow-sm">
                                 <span class="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-white ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}"></span>
                             </div>
                             <div class="min-w-0 flex-1">
-                                <div class="flex items-center gap-2">
-                                    <p class="truncate text-sm font-bold text-slate-900">${escapeHtml(displayName(user))}</p>
-                                    ${hasNickname ? '<span class="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700">Private</span>' : ''}
-                                </div>
-                                <p class="mt-1 truncate text-xs text-slate-500">${escapeHtml(user.email || '')}</p>
+                                <p class="truncate text-sm font-bold text-slate-900">${escapeHtml(displayName(user))}</p>
                                 <p class="mt-1 truncate text-xs ${state.unread ? 'font-semibold text-slate-700' : 'text-slate-400'}">
                                     ${escapeHtml(state.preview || 'No recent messages yet')}
                                 </p>
@@ -2655,8 +2865,8 @@
 
         socket.on('onlineUsers', (ids) => {
           onlineUserIds = new Set(ids);
-          renderUsers();
-          updateSelectedUserHeader();
+          scheduleRenderUsers();
+          scheduleHeaderUpdate();
         });
 
         socket.on('request:update', async (payload) => {
@@ -2698,8 +2908,8 @@
           );
 
           syncSelectedUser();
-          renderUsers();
-          updateSelectedUserHeader();
+          scheduleRenderUsers();
+          scheduleHeaderUpdate();
         });
 
         socket.on('auth:logout', () => {
@@ -2727,7 +2937,7 @@
             typingUsers.delete(payload.fromUserId);
           }
 
-          updateSelectedUserHeader();
+          scheduleHeaderUpdate();
         });
 
         socket.on('call:offer', (payload) => {
@@ -2778,6 +2988,12 @@
       async function selectUser(userId) {
         selectedUser = users.find((user) => user.id === userId) || null;
         renderedMessageIds = new Set();
+        messagePagination = {
+          nextBefore: null,
+          hasMore: false,
+          loadingOlder: false,
+          loadedForUserId: selectedUser?.id ?? null,
+        };
 
         if (!selectedUser) return;
 
@@ -2799,16 +3015,40 @@
         document.getElementById('message-container').classList.add('flex');
         document.getElementById('input-area').classList.remove('hidden');
         document.getElementById('messages-list').innerHTML = '';
+        clearAttachmentSelection();
+        closeChatActionsMenu();
+        closeComposerActionsMenu();
 
         updateSelectedUserHeader();
         applyChatTheme();
         renderUsers();
 
-        await loadChatPermission();
+        try {
+          await loadChatPermission();
+          await loadMessageChunk();
+          await ensureScrollableHistory();
+        } catch (error) {
+          alert(error.message || 'Failed to load this chat');
+          return;
+        }
 
-        const res = await api(
-          `/chat/messages?email=${encodeURIComponent(selectedUser.email)}`,
-        );
+        const container = document.getElementById('message-container');
+        container.scrollTop = container.scrollHeight;
+
+        if (!isFileOrigin) {
+          history.replaceState(null, '', `/?chat=${selectedUser.id}`);
+        }
+      }
+
+      async function loadMessageChunk(before = null, prepend = false) {
+        if (!selectedUser) {
+          return;
+        }
+
+        const url = before
+          ? `/chat/messages?email=${encodeURIComponent(selectedUser.email)}&before=${encodeURIComponent(before)}`
+          : `/chat/messages?email=${encodeURIComponent(selectedUser.email)}`;
+        const res = await api(url);
         const data = await readJsonResponse(
           res,
           {},
@@ -2816,11 +3056,20 @@
         );
 
         if (!res.ok) {
-          alert(data.message || 'Failed to load messages');
+          throw new Error(data.message || 'Failed to load messages');
+        }
+
+        const messages = data.messages || [];
+        messagePagination.nextBefore = data.nextBefore || null;
+        messagePagination.hasMore = Boolean(data.hasMore);
+        messagePagination.loadedForUserId = selectedUser.id;
+
+        if (prepend) {
+          prependMessages(messages);
           return;
         }
 
-        for (const message of data.messages || []) {
+        for (const message of messages) {
           updateRecentActivity(
             message.senderId === currentUser.id
               ? message.receiverId
@@ -2830,10 +3079,69 @@
           );
           appendMessage(message);
         }
+      }
 
-        if (!isFileOrigin) {
-          history.replaceState(null, '', `/?chat=${selectedUser.id}`);
+      async function loadOlderMessages() {
+        if (
+          !selectedUser ||
+          !messagePagination.hasMore ||
+          !messagePagination.nextBefore ||
+          messagePagination.loadingOlder ||
+          messagePagination.loadedForUserId !== selectedUser.id
+        ) {
+          return;
         }
+
+        const container = document.getElementById('message-container');
+        const previousHeight = container.scrollHeight;
+        messagePagination.loadingOlder = true;
+
+        try {
+          await loadMessageChunk(messagePagination.nextBefore, true);
+          const nextHeight = container.scrollHeight;
+          container.scrollTop = nextHeight - previousHeight + container.scrollTop;
+        } catch (error) {
+          alert(error.message || 'Failed to load older messages');
+        } finally {
+          messagePagination.loadingOlder = false;
+        }
+      }
+
+      async function ensureScrollableHistory() {
+        if (
+          !selectedUser ||
+          messagePagination.loadedForUserId !== selectedUser.id
+        ) {
+          return;
+        }
+
+        const container = document.getElementById('message-container');
+
+        while (
+          messagePagination.hasMore &&
+          !messagePagination.loadingOlder &&
+          messagePagination.loadedForUserId === selectedUser.id &&
+          container.scrollHeight <= container.clientHeight + 24
+        ) {
+          await loadOlderMessages();
+        }
+      }
+
+      async function handleMessageContainerScroll() {
+        if (historyScrollFrame) {
+          return;
+        }
+
+        historyScrollFrame = window.requestAnimationFrame(async () => {
+          historyScrollFrame = 0;
+          const container = getById('message-container');
+          if (container.scrollTop > 120) {
+            return;
+          }
+
+          await loadOlderMessages();
+          await ensureScrollableHistory();
+        });
       }
 
       async function loadChatPermission() {
@@ -2879,9 +3187,13 @@
         const input = document.getElementById('msg-input');
         const fileInput = document.getElementById('file-input');
         const fileLabel = document.getElementById('share-file-label');
+        const composerActionsBtn = document.getElementById(
+          'composer-actions-btn',
+        );
         const note = document.getElementById('chat-access-note');
         const actionBtn = document.getElementById('request-action-btn');
         const rejectBtn = document.getElementById('request-reject-btn');
+        const chatActionsBtn = document.getElementById('chat-actions-btn');
         const voiceCallBtn = document.getElementById('voice-call-btn');
         const videoCallBtn = document.getElementById('video-call-btn');
         const themeBtn = document.getElementById('chat-theme-btn');
@@ -2890,6 +3202,8 @@
         const voiceRecordBtn = document.getElementById('voice-record-btn');
         const sendBtn = document.getElementById('send-message-btn');
         const gatedButtons = [
+          composerActionsBtn,
+          chatActionsBtn,
           voiceCallBtn,
           videoCallBtn,
           themeBtn,
@@ -2904,6 +3218,11 @@
           fileInput.disabled = !enabled;
           fileLabel.classList.toggle('pointer-events-none', !enabled);
           fileLabel.classList.toggle('opacity-50', !enabled);
+
+          if (!enabled) {
+            closeComposerActionsMenu();
+            closeChatActionsMenu();
+          }
 
           for (const button of gatedButtons) {
             button.disabled = !enabled;
@@ -2955,21 +3274,17 @@
 
       function updateSelectedUserHeader() {
         if (!selectedUser) return;
-        document.getElementById('target-name').innerText =
-          displayName(selectedUser);
-        document.getElementById('target-avatar').src = userAvatar(selectedUser);
-        document
-          .getElementById('target-badge')
-          .classList.toggle('hidden', !selectedUser.nickname);
+        getById('target-name').innerText = displayName(selectedUser);
+        getById('target-avatar').src = userAvatar(selectedUser);
         applyChatTheme();
         const isOnline = onlineUserIds.has(selectedUser.id);
         const isTyping = typingUsers.has(selectedUser.id);
-        document.getElementById('target-status').innerText = isTyping
+        getById('target-status').innerText = isTyping
           ? 'Typing...'
           : isOnline
             ? 'Online'
             : 'Offline';
-        document.getElementById('target-status').className =
+        getById('target-status').className =
           `text-sm font-medium ${isTyping ? 'text-blue-500' : isOnline ? 'text-emerald-500' : 'text-slate-500'}`;
       }
 
@@ -2997,7 +3312,7 @@
           preview: getMessagePreview(message),
           unread: incrementUnread ? current.unread + 1 : current.unread,
         });
-        renderUsers();
+        scheduleRenderUsers();
       }
 
       async function sendMessage() {
@@ -3148,12 +3463,12 @@
           return;
         }
 
-        document.getElementById('file-name').innerText = file.name;
         document.getElementById('attachment-preview-title').innerText =
           file.name;
         document.getElementById('attachment-preview-meta').innerText =
           formatAttachmentMeta(file);
         preview.classList.remove('hidden');
+        closeComposerActionsMenu();
 
         if (file.type.startsWith('image/')) {
           attachmentPreviewUrl = URL.createObjectURL(file);
@@ -3690,6 +4005,66 @@
         URL.revokeObjectURL(blobUrl);
       }
 
+      function createMessageElement(message) {
+        const div = document.createElement('div');
+        const isSent = message.senderId === currentUser.id;
+        div.className = `${isSent ? 'self-end' : 'self-start'} max-w-full`;
+
+        const bubbleTone = isSent
+          ? 'rounded-[24px] rounded-br-md bg-blue-600 text-white shadow-lg'
+          : 'rounded-[24px] rounded-bl-md border border-slate-200 bg-white text-slate-800 shadow-sm';
+
+        if (message.messageType === 'IMAGE' && message.fileUrl) {
+          div.innerHTML = `
+                    <div class="${bubbleTone} w-fit max-w-[min(100%,42rem)] overflow-hidden p-3">
+                        <a href="${API_URL}${message.fileUrl}" target="_blank" rel="noopener noreferrer">
+                            <img src="${API_URL}${message.fileUrl}" loading="lazy" decoding="async" class="mb-2 max-h-80 w-auto rounded-2xl border border-black/5">
+                        </a>
+                        <div class="flex flex-wrap items-center gap-3 text-xs ${isSent ? 'text-blue-100' : 'text-slate-500'}">
+                            <a href="${API_URL}${message.fileUrl}" target="_blank" rel="noopener noreferrer" class="font-semibold underline">Open image</a>
+                            <button class="font-semibold underline" onclick="downloadFile('${API_URL}${message.fileUrl}', '${escapeHtml(message.fileName || 'image')}')">Download</button>
+                        </div>
+                    </div>
+                `;
+          return div;
+        }
+
+        if (message.messageType === 'AUDIO' && message.fileUrl) {
+          div.innerHTML = `
+                    <div class="${bubbleTone} w-fit max-w-[min(100%,42rem)] p-4">
+                        <div class="space-y-3">
+                            <p class="font-semibold">${escapeHtml(message.fileName || 'Voice message')}</p>
+                            <audio controls src="${API_URL}${message.fileUrl}" class="w-full max-w-md"></audio>
+                        </div>
+                    </div>
+                `;
+          return div;
+        }
+
+        if (message.messageType === 'DOCUMENT' && message.fileUrl) {
+          div.innerHTML = `
+                    <div class="${bubbleTone} w-fit max-w-[min(100%,42rem)] p-4">
+                        <div class="space-y-2">
+                            <p class="font-semibold">${escapeHtml(message.fileName || 'Document')}</p>
+                            <p class="text-xs ${isSent ? 'text-blue-100' : 'text-slate-500'}">${formatBytes(message.fileSize)}</p>
+                            <div class="flex flex-wrap items-center gap-3 text-xs ${isSent ? 'text-blue-100' : 'text-slate-500'}">
+                                <a href="${API_URL}${message.fileUrl}" target="_blank" rel="noopener noreferrer" class="font-semibold underline">Open file</a>
+                                <button class="font-semibold underline" onclick="downloadFile('${API_URL}${message.fileUrl}', '${escapeHtml(message.fileName || 'file')}')">Download</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+          return div;
+        }
+
+        div.innerHTML = `
+                    <div class="${bubbleTone} w-fit max-w-[min(100%,42rem)] px-4 py-3 text-sm leading-7">
+                        ${escapeHtml(message.content || message.ciphertext || '[Encrypted message]')}
+                    </div>
+                `;
+        return div;
+      }
+
       function appendMessage(message) {
         if (!message || renderedMessageIds.has(message.id) || !selectedUser) {
           return;
@@ -3706,61 +4081,40 @@
         }
 
         renderedMessageIds.add(message.id);
-
         const list = document.getElementById('messages-list');
-        const div = document.createElement('div');
-        const isSent = message.senderId === currentUser.id;
-        div.className = `${isSent ? 'self-end' : 'self-start'} max-w-full`;
-
-        const bubbleTone = isSent
-          ? 'rounded-[24px] rounded-br-md bg-blue-600 text-white shadow-lg'
-          : 'rounded-[24px] rounded-bl-md border border-slate-200 bg-white text-slate-800 shadow-sm';
-
-        if (message.messageType === 'IMAGE' && message.fileUrl) {
-          div.innerHTML = `
-                    <div class="${bubbleTone} w-fit max-w-[min(100%,42rem)] overflow-hidden p-3">
-                        <a href="${API_URL}${message.fileUrl}" target="_blank" rel="noopener noreferrer">
-                            <img src="${API_URL}${message.fileUrl}" class="mb-2 max-h-80 w-auto rounded-2xl border border-black/5">
-                        </a>
-                        <div class="flex flex-wrap items-center gap-3 text-xs ${isSent ? 'text-blue-100' : 'text-slate-500'}">
-                            <a href="${API_URL}${message.fileUrl}" target="_blank" rel="noopener noreferrer" class="font-semibold underline">Open image</a>
-                            <button class="font-semibold underline" onclick="downloadFile('${API_URL}${message.fileUrl}', '${escapeHtml(message.fileName || 'image')}')">Download</button>
-                        </div>
-                    </div>
-                `;
-        } else if (message.messageType === 'AUDIO' && message.fileUrl) {
-          div.innerHTML = `
-                    <div class="${bubbleTone} w-fit max-w-[min(100%,42rem)] p-4">
-                        <div class="space-y-3">
-                            <p class="font-semibold">${escapeHtml(message.fileName || 'Voice message')}</p>
-                            <audio controls src="${API_URL}${message.fileUrl}" class="w-full max-w-md"></audio>
-                        </div>
-                    </div>
-                `;
-        } else if (message.messageType === 'DOCUMENT' && message.fileUrl) {
-          div.innerHTML = `
-                    <div class="${bubbleTone} w-fit max-w-[min(100%,42rem)] p-4">
-                        <div class="space-y-2">
-                            <p class="font-semibold">${escapeHtml(message.fileName || 'Document')}</p>
-                            <p class="text-xs ${isSent ? 'text-blue-100' : 'text-slate-500'}">${formatBytes(message.fileSize)}</p>
-                            <div class="flex flex-wrap items-center gap-3 text-xs ${isSent ? 'text-blue-100' : 'text-slate-500'}">
-                                <a href="${API_URL}${message.fileUrl}" target="_blank" rel="noopener noreferrer" class="font-semibold underline">Open file</a>
-                                <button class="font-semibold underline" onclick="downloadFile('${API_URL}${message.fileUrl}', '${escapeHtml(message.fileName || 'file')}')">Download</button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-        } else {
-          div.innerHTML = `
-                    <div class="${bubbleTone} w-fit max-w-[min(100%,42rem)] px-4 py-3 text-sm leading-7">
-                        ${escapeHtml(message.content || message.ciphertext || '[Encrypted message]')}
-                    </div>
-                `;
-        }
-
-        list.appendChild(div);
+        list.appendChild(createMessageElement(message));
         const container = document.getElementById('message-container');
         container.scrollTop = container.scrollHeight;
+      }
+
+      function prependMessages(messages) {
+        if (!selectedUser || !Array.isArray(messages) || messages.length === 0) {
+          return;
+        }
+
+        const list = document.getElementById('messages-list');
+        const fragment = document.createDocumentFragment();
+
+        for (const message of messages) {
+          if (!message || renderedMessageIds.has(message.id)) {
+            continue;
+          }
+
+          const belongsToCurrentChat =
+            (message.senderId === currentUser.id &&
+              message.receiverId === selectedUser.id) ||
+            (message.senderId === selectedUser.id &&
+              message.receiverId === currentUser.id);
+
+          if (!belongsToCurrentChat) {
+            continue;
+          }
+
+          renderedMessageIds.add(message.id);
+          fragment.appendChild(createMessageElement(message));
+        }
+
+        list.prepend(fragment);
       }
 
       async function setupNotifications() {
@@ -3996,6 +4350,8 @@
         }
 
         closeImagePreview();
+        closeComposerActionsMenu();
+        closeChatActionsMenu();
         closeProfileModal();
         closeRenameModal();
         closeResetPasswordModal();
@@ -4006,8 +4362,73 @@
         }
       });
 
-      window.addEventListener('resize', syncLayout);
+      document.addEventListener('click', (event) => {
+        const composerMenu = document.getElementById('composer-actions-menu');
+        const composerBtn = document.getElementById('composer-actions-btn');
+        const chatMenu = document.getElementById('chat-actions-menu');
+        const chatBtn = document.getElementById('chat-actions-btn');
 
+        if (
+          composerMenu &&
+          !composerMenu.contains(event.target) &&
+          !composerBtn.contains(event.target)
+        ) {
+          closeComposerActionsMenu();
+        }
+
+        if (
+          chatMenu &&
+          !chatMenu.contains(event.target) &&
+          !chatBtn.contains(event.target)
+        ) {
+          closeChatActionsMenu();
+        }
+      });
+
+      document.addEventListener(
+        'focusin',
+        (event) => {
+          if (
+            window.innerWidth < 1024 &&
+            ['msg-input', 'rename-input'].includes(event.target?.id)
+          ) {
+            handleKeyboardState(true);
+            scheduleViewportHeight();
+          }
+        },
+        true,
+      );
+
+      document.addEventListener(
+        'focusout',
+        (event) => {
+          if (
+            window.innerWidth < 1024 &&
+            ['msg-input', 'rename-input'].includes(event.target?.id)
+          ) {
+            setTimeout(() => {
+              if (
+                !['msg-input', 'rename-input'].includes(
+                  document.activeElement?.id,
+                )
+              ) {
+                handleKeyboardState(false);
+                scheduleViewportHeight();
+              }
+            }, 60);
+          }
+        },
+        true,
+      );
+
+      window.addEventListener('resize', syncLayout);
+      window.addEventListener('resize', scheduleViewportHeight);
+
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', scheduleViewportHeight);
+      }
+
+      applyViewportHeight();
       syncLayout();
       configLoadPromise = loadPublicConfig();
       configLoadPromise.finally(() => {

@@ -39,8 +39,12 @@ export class ChatController {
 
   @UseGuards(JwtGuard)
   @Get('messages')
-  getMessages(@Query('email') otherUserEmail: string, @Req() req) {
-    return this.chatService.getMessages(req.user.userId, otherUserEmail);
+  getMessages(
+    @Query('email') otherUserEmail: string,
+    @Query('before') before: string | undefined,
+    @Req() req,
+  ) {
+    return this.chatService.getMessages(req.user.userId, otherUserEmail, before);
   }
 
   @Post('request')
