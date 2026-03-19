@@ -701,14 +701,19 @@ export class UserService {
       throw new BadRequestException('Theme preset is invalid');
     }
 
-    const preference = await this.saveContactPreference(userId, contactUserId, {
-      chatTheme: themePath ?? null,
-    });
+    const [ownerPreference] = await Promise.all([
+      this.saveContactPreference(userId, contactUserId, {
+        chatTheme: themePath ?? null,
+      }),
+      this.saveContactPreference(contactUserId, userId, {
+        chatTheme: themePath ?? null,
+      }),
+    ]);
 
     return {
       success: true,
-      chatTheme: preference.chatTheme,
-      nickname: preference.nickname,
+      chatTheme: ownerPreference.chatTheme,
+      nickname: ownerPreference.nickname,
     };
   }
 

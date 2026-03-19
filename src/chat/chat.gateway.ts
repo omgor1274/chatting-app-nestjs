@@ -62,6 +62,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to(request.receiverId).emit('request:update', request);
   }
 
+  emitThemeUpdate(payload: {
+    userId: string;
+    contactUserId: string;
+    chatTheme: string | null;
+  }) {
+    this.server.to(payload.userId).emit('chat-theme:update', payload);
+    this.server.to(payload.contactUserId).emit('chat-theme:update', payload);
+  }
+
   private async authenticateSocketUser(client: Socket, disconnect = false) {
     try {
       const token = client.handshake.auth?.token;

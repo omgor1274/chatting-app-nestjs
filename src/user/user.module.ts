@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { ChatModule } from '../chat/chat.module';
 import { MailModule } from '../mail/mail.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -8,6 +9,7 @@ import { UserService } from './user.service';
 
 @Module({
   imports: [
+    ChatModule,
     MailModule,
     PrismaModule,
     NotificationsModule,

@@ -14,6 +14,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { JwtGuard } from '../auth/jwt/jwt.guard';
+import { ChatGateway } from '../chat/chat.gateway';
 import { UserService } from './user.service';
 
 function avatarFileName(
@@ -42,7 +43,10 @@ function contactThemeFileName(
 
 @Controller('users')
 export class UserController {
-  constructor(private userService: UserService) {}
+  constructor(
+    private userService: UserService,
+    private chatGateway: ChatGateway,
+  ) {}
 
   @UseGuards(JwtGuard)
   @Get('me')
@@ -152,7 +156,8 @@ export class UserController {
       throw new BadRequestException('Theme image or preset is required');
     }
 
-    return this.userService.updateContactTheme(
+    return this.userService
+      .updateContactTheme(
       req.user.userId,
       body.contactUserId,
       shouldClear
@@ -162,7 +167,16 @@ export class UserController {
           : file
             ? `/uploads/chat-themes/${file.filename}`
             : null,
-    );
+      )
+      .then((result) => {
+        this.chatGateway.emitThemeUpdate({
+          userId: req.user.userId,
+          contactUserId: body.contactUserId,
+          chatTheme: result.chatTheme ?? null,
+        });
+
+        return result;
+      });
   }
 
   @Get('notifications/public-key')

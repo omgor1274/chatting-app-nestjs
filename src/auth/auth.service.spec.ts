@@ -1,5 +1,6 @@
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
+import { MailService } from '../mail/mail.service';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -16,6 +17,14 @@ describe('AuthService', () => {
             user: {
               findUnique: jest.fn(),
               create: jest.fn(),
+              update: jest.fn(),
+              findFirst: jest.fn(),
+            },
+            authToken: {
+              deleteMany: jest.fn(),
+              create: jest.fn(),
+              findFirst: jest.fn(),
+              update: jest.fn(),
             },
           },
         },
@@ -23,6 +32,13 @@ describe('AuthService', () => {
           provide: JwtService,
           useValue: {
             sign: jest.fn(),
+          },
+        },
+        {
+          provide: MailService,
+          useValue: {
+            sendVerificationEmail: jest.fn(),
+            sendPasswordResetEmail: jest.fn(),
           },
         },
       ],

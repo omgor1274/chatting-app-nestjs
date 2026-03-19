@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { MailService } from '../mail/mail.service';
 import { PushNotificationService } from '../notifications/push-notification.service';
 import { UserService } from './user.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -17,11 +18,22 @@ describe('UserService', () => {
               findUnique: jest.fn(),
               findMany: jest.fn(),
               update: jest.fn(),
+              findFirst: jest.fn(),
             },
             contactPreference: {
               findMany: jest.fn(),
-              deleteMany: jest.fn(),
+              findUnique: jest.fn(),
+              delete: jest.fn(),
               upsert: jest.fn(),
+            },
+            chatRequest: {
+              findFirst: jest.fn(),
+            },
+            authToken: {
+              deleteMany: jest.fn(),
+              create: jest.fn(),
+              findFirst: jest.fn(),
+              update: jest.fn(),
             },
           },
         },
@@ -31,6 +43,12 @@ describe('UserService', () => {
             getPublicKey: jest.fn(),
             subscribe: jest.fn(),
             unsubscribe: jest.fn(),
+          },
+        },
+        {
+          provide: MailService,
+          useValue: {
+            sendVerificationEmail: jest.fn(),
           },
         },
       ],
