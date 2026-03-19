@@ -9,12 +9,13 @@ export class AppController {
 
   @Get()
   getIndex(@Res() res: Response) {
+    res.setHeader('Cache-Control', 'no-store');
     return res.sendFile(join(process.cwd(), 'index.html'));
   }
 
   @Get('health')
-  getHello(): string {
-    return this.appService.getHello();
+  getHealth() {
+    return this.appService.getHealth();
   }
 
   @Get('config')

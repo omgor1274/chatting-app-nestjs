@@ -15,6 +15,17 @@ import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { JwtGuard } from '../auth/jwt/jwt.guard';
 import { ChatGateway } from '../chat/chat.gateway';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { ContactNicknameDto } from './dto/contact-nickname.dto';
+import {
+  NotificationSubscriptionDto,
+  NotificationUnsubscribeDto,
+} from './dto/notification-subscription.dto';
+import { PublicKeyDto } from './dto/public-key.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { UpdateSettingsDto } from './dto/update-settings.dto';
+import { UserIdDto } from './dto/user-id.dto';
+import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { UserService } from './user.service';
 
 function avatarFileName(
@@ -56,7 +67,7 @@ export class UserController {
 
   @UseGuards(JwtGuard)
   @Post('me')
-  updateProfile(@Req() req, @Body() body: { name?: string; email?: string }) {
+  updateProfile(@Req() req, @Body() body: UpdateProfileDto) {
     return this.userService.updateProfile(req.user.userId, body);
   }
 
@@ -64,24 +75,14 @@ export class UserController {
   @Post('settings')
   updateSettings(
     @Req() req,
-    @Body()
-    body: {
-      darkMode?: boolean;
-      backupEnabled?: boolean;
-      backupImages?: boolean;
-      backupVideos?: boolean;
-      backupFiles?: boolean;
-    },
+    @Body() body: UpdateSettingsDto,
   ) {
     return this.userService.updateSettings(req.user.userId, body);
   }
 
   @UseGuards(JwtGuard)
   @Post('password')
-  changePassword(
-    @Req() req,
-    @Body() body: { currentPassword?: string; newPassword: string },
-  ) {
+  changePassword(@Req() req, @Body() body: ChangePasswordDto) {
     return this.userService.changePassword(req.user.userId, body);
   }
 
@@ -93,7 +94,7 @@ export class UserController {
 
   @UseGuards(JwtGuard)
   @Post('email/verify')
-  verifyPendingEmail(@Req() req, @Body() body: { otp: string }) {
+  verifyPendingEmail(@Req() req, @Body() body: VerifyOtpDto) {
     return this.userService.verifyPendingEmail(req.user.userId, body.otp);
   }
 
@@ -111,13 +112,13 @@ export class UserController {
 
   @UseGuards(JwtGuard)
   @Post('keys/public')
-  updatePublicKey(@Req() req, @Body() body: { publicKey: string }) {
+  updatePublicKey(@Req() req, @Body() body: PublicKeyDto) {
     return this.userService.updatePublicKey(req.user.userId, body.publicKey);
   }
 
   @UseGuards(JwtGuard)
   @Post('blocks')
-  async blockUser(@Req() req, @Body() body: { userId: string }) {
+  async blockUser(@Req() req, @Body() body: UserIdDto) {
     const result = await this.userService.blockUser(req.user.userId, body.userId);
     this.chatGateway.emitConversationRefresh(
       [req.user.userId, body.userId].filter(Boolean),
@@ -131,7 +132,7 @@ export class UserController {
 
   @UseGuards(JwtGuard)
   @Post('blocks/remove')
-  async unblockUser(@Req() req, @Body() body: { userId: string }) {
+  async unblockUser(@Req() req, @Body() body: UserIdDto) {
     const result = await this.userService.unblockUser(req.user.userId, body.userId);
     this.chatGateway.emitConversationRefresh(
       [req.user.userId, body.userId].filter(Boolean),
@@ -147,7 +148,7 @@ export class UserController {
   @Post('contacts/nickname')
   updateContactNickname(
     @Req() req,
-    @Body() body: { contactUserId: string; nickname: string },
+    @Body() body: ContactNicknameDto,
   ) {
     return this.userService.updateContactNickname(
       req.user.userId,
@@ -229,19 +230,17 @@ export class UserController {
   @Post('notifications/subscribe')
   subscribeToNotifications(
     @Req() req,
-    @Body()
-    body: {
-      endpoint: string;
-      expirationTime?: string | null;
-      keys?: { p256dh?: string; auth?: string };
-    },
+    @Body() body: NotificationSubscriptionDto,
   ) {
     return this.userService.subscribeToNotifications(req.user.userId, body);
   }
 
   @UseGuards(JwtGuard)
   @Post('notifications/unsubscribe')
-  unsubscribeFromNotifications(@Req() req, @Body() body: { endpoint: string }) {
+  unsubscribeFromNotifications(
+    @Req() req,
+    @Body() body: NotificationUnsubscribeDto,
+  ) {
     return this.userService.unsubscribeFromNotifications(
       req.user.userId,
       body.endpoint,

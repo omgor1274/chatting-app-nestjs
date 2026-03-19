@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import type { Response } from 'express';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -14,9 +15,24 @@ describe('AppController', () => {
     appController = app.get<AppController>(AppController);
   });
 
-  describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
-    });
+  it('returns health details', () => {
+    const health = appController.getHealth();
+
+    expect(health.status).toBe('ok');
+    expect(typeof health.timestamp).toBe('string');
+  });
+
+  it('serves the app shell without caching', () => {
+    const sendFile = jest.fn();
+    const setHeader = jest.fn();
+    const response = {
+      sendFile,
+      setHeader,
+    } as unknown as Response;
+
+    appController.getIndex(response);
+
+    expect(setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store');
+    expect(sendFile).toHaveBeenCalled();
   });
 });

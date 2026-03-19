@@ -14,6 +14,7 @@ type MailPayload = {
 export class MailService {
   private readonly logger = new Logger(MailService.name);
   private readonly transporter?: Transporter;
+  private readonly smtpTimeoutMs = Number(process.env.SMTP_TIMEOUT_MS ?? 5000);
   private readonly mailboxPath = join(
     process.cwd(),
     'backups',
@@ -31,6 +32,9 @@ export class MailService {
         host: process.env.SMTP_HOST,
         port: Number(process.env.SMTP_PORT),
         secure: Number(process.env.SMTP_PORT) === 465,
+        connectionTimeout: this.smtpTimeoutMs,
+        greetingTimeout: this.smtpTimeoutMs,
+        socketTimeout: this.smtpTimeoutMs,
         auth: {
           user: process.env.SMTP_USER,
           pass: process.env.SMTP_PASS,
@@ -50,17 +54,8 @@ export class MailService {
     );
   }
 
-  async sendMail(payload: MailPayload) {
-    if (this.transporter) {
-      await this.transporter.sendMail({
-        from: process.env.SMTP_FROM || process.env.SMTP_USER,
-        to: payload.to,
-        subject: payload.subject,
-        text: payload.text,
-        html: payload.html,
-      });
-      return;
-    }
+  private writeMailboxPreview(payload: MailPayload) {
+    mkdirSync(join(process.cwd(), 'backups'), { recursive: true });
 
     appendFileSync(
       this.mailboxPath,
@@ -73,6 +68,40 @@ export class MailService {
       ].join('\n'),
       'utf-8',
     );
+  }
+
+  async sendMail(payload: MailPayload) {
+    if (this.transporter) {
+      try {
+        await Promise.race([
+          this.transporter.sendMail({
+            from: process.env.SMTP_FROM || process.env.SMTP_USER,
+            to: payload.to,
+            subject: payload.subject,
+            text: payload.text,
+            html: payload.html,
+          }),
+          new Promise((_, reject) => {
+            setTimeout(() => {
+              reject(
+                new Error(
+                  `SMTP delivery timed out after ${this.smtpTimeoutMs}ms`,
+                ),
+              );
+            }, this.smtpTimeoutMs);
+          }),
+        ]);
+        return;
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Unknown SMTP error';
+        this.logger.warn(
+          `SMTP delivery failed, falling back to backups/dev-mailbox.log. ${message}`,
+        );
+      }
+    }
+
+    this.writeMailboxPreview(payload);
   }
 
   async sendVerificationEmail(email: string, otp: string, ttlMs: number) {

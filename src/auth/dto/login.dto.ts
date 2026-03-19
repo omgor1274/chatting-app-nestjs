@@ -1,20 +1,7 @@
-import {
-  IsEmail,
-  IsNotEmpty,
-  IsString,
-  MaxLength,
-  MinLength,
-} from 'class-validator';
+import { IsEmail, IsNotEmpty, MaxLength, MinLength } from 'class-validator';
 import { NormalizeEmail, Trim } from '../../common/dto/transforms';
 
-export class RegisterDto {
-  @Trim()
-  @IsString()
-  @IsNotEmpty()
-  @MinLength(2)
-  @MaxLength(80)
-  name: string;
-
+export class LoginDto {
   @NormalizeEmail()
   @IsEmail()
   @IsNotEmpty()
