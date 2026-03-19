@@ -10,6 +10,7 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   mkdirSync(join(process.cwd(), 'uploads', 'avatars'), { recursive: true });
   mkdirSync(join(process.cwd(), 'uploads', 'chat'), { recursive: true });
+  mkdirSync(join(process.cwd(), 'uploads', 'groups'), { recursive: true });
   mkdirSync(join(process.cwd(), 'uploads', 'chat-themes'), { recursive: true });
   mkdirSync(join(process.cwd(), 'backups'), { recursive: true });
   mkdirSync(join(process.cwd(), 'public'), { recursive: true });
@@ -47,14 +48,14 @@ async function bootstrap() {
       },
     }),
   );
-  app.use(
-    rateLimit({
-      windowMs: 15 * 60 * 1000,
-      max: 300,
-      standardHeaders: true,
-      legacyHeaders: false,
-    }),
-  );
+  // app.use(
+  //   rateLimit({
+  //     windowMs: 15 * 60 * 1000,
+  //     max: 300,
+  //     standardHeaders: true,
+  //     legacyHeaders: false,
+  //   }),
+  // );
   app.use(
     express.static(join(process.cwd(), 'public'), {
       maxAge: '1d',

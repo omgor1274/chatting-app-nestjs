@@ -77,6 +77,9 @@ export class UserService {
     avatar?: string | null;
     emailVerified?: boolean;
     backupEnabled?: boolean;
+    backupImages?: boolean;
+    backupVideos?: boolean;
+    backupFiles?: boolean;
     darkMode?: boolean;
     publicKey?: string | null;
     publicKeyUpdatedAt?: Date | null;
@@ -89,6 +92,9 @@ export class UserService {
       pendingEmail: user.pendingEmail ?? null,
       emailVerified: user.emailVerified ?? false,
       backupEnabled: user.backupEnabled ?? true,
+      backupImages: user.backupImages ?? true,
+      backupVideos: user.backupVideos ?? true,
+      backupFiles: user.backupFiles ?? true,
       darkMode: user.darkMode ?? false,
       publicKey: user.publicKey ?? null,
       publicKeyUpdatedAt: user.publicKeyUpdatedAt ?? null,
@@ -120,6 +126,24 @@ export class UserService {
     userId: string,
     contactUserId: string,
   ) {
+    const block = await this.prisma.userBlock.findFirst({
+      where: {
+        OR: [
+          { blockerId: userId, blockedUserId: contactUserId },
+          { blockerId: contactUserId, blockedUserId: userId },
+        ],
+      },
+      select: { blockerId: true },
+    });
+
+    if (block) {
+      throw new ForbiddenException(
+        block.blockerId === userId
+          ? 'Unblock this user before using this feature'
+          : 'This user has blocked you',
+      );
+    }
+
     const acceptedRequest = await this.prisma.chatRequest.findFirst({
       where: {
         status: 'ACCEPTED',
@@ -142,6 +166,39 @@ export class UserService {
         'Accept a chat request before using this feature',
       );
     }
+  }
+
+  private async getBlockedUserIds(
+    userId: string,
+    options: {
+      blockedByMe?: boolean;
+      blockedMe?: boolean;
+    } = { blockedByMe: true, blockedMe: true },
+  ) {
+    const where: Array<{ blockerId: string } | { blockedUserId: string }> = [];
+    if (options.blockedByMe !== false) {
+      where.push({ blockerId: userId });
+    }
+    if (options.blockedMe !== false) {
+      where.push({ blockedUserId: userId });
+    }
+    if (!where.length) {
+      return new Set<string>();
+    }
+
+    const blocks = await this.prisma.userBlock.findMany({
+      where: { OR: where },
+      select: {
+        blockerId: true,
+        blockedUserId: true,
+      },
+    });
+
+    return new Set(
+      blocks.map((block) =>
+        block.blockerId === userId ? block.blockedUserId : block.blockerId,
+      ),
+    );
   }
 
   private async saveContactPreference(
@@ -289,6 +346,9 @@ export class UserService {
         avatar: true,
         emailVerified: true,
         backupEnabled: true,
+        backupImages: true,
+        backupVideos: true,
+        backupFiles: true,
         darkMode: true,
         publicKey: true,
         publicKeyUpdatedAt: true,
@@ -305,10 +365,18 @@ export class UserService {
   }
 
   async searchUsers(userId: string, query?: string) {
+    const blockedByOthers = await this.getBlockedUserIds(userId, {
+      blockedByMe: false,
+      blockedMe: true,
+    });
+
     const [users, preferences] = await Promise.all([
       this.prisma.user.findMany({
         where: {
-          id: { not: userId },
+          id: {
+            not: userId,
+            notIn: Array.from(blockedByOthers),
+          },
           emailVerified: true,
           OR: query
             ? [
@@ -360,6 +428,31 @@ export class UserService {
     });
   }
 
+  async getBlockedUsers(userId: string) {
+    const blocks = await this.prisma.userBlock.findMany({
+      where: { blockerId: userId },
+      include: {
+        blockedUser: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            avatar: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return blocks.map((block) => ({
+      id: block.blockedUser.id,
+      email: block.blockedUser.email,
+      name: block.blockedUser.name,
+      avatar: block.blockedUser.avatar,
+      blockedAt: block.createdAt,
+    }));
+  }
+
   async updatePublicKey(userId: string, publicKey: string) {
     if (!publicKey?.trim()) {
       throw new BadRequestException('Public key is required');
@@ -379,11 +472,65 @@ export class UserService {
         avatar: true,
         emailVerified: true,
         backupEnabled: true,
+        backupImages: true,
+        backupVideos: true,
+        backupFiles: true,
         darkMode: true,
         publicKey: true,
         publicKeyUpdatedAt: true,
       },
     });
+  }
+
+  async blockUser(userId: string, blockedUserId: string) {
+    await this.ensureContactUser(blockedUserId, userId);
+
+    await this.prisma.$transaction([
+      this.prisma.userBlock.upsert({
+        where: {
+          blockerId_blockedUserId: {
+            blockerId: userId,
+            blockedUserId,
+          },
+        },
+        update: {},
+        create: {
+          blockerId: userId,
+          blockedUserId,
+        },
+      }),
+      this.prisma.chatRequest.deleteMany({
+        where: {
+          OR: [
+            { senderId: userId, receiverId: blockedUserId },
+            { senderId: blockedUserId, receiverId: userId },
+          ],
+        },
+      }),
+    ]);
+
+    return {
+      success: true,
+      blockedUserId,
+      message: 'User blocked. A new chat request will be needed after unblocking.',
+    };
+  }
+
+  async unblockUser(userId: string, blockedUserId: string) {
+    await this.ensureContactUser(blockedUserId, userId);
+
+    await this.prisma.userBlock.deleteMany({
+      where: {
+        blockerId: userId,
+        blockedUserId,
+      },
+    });
+
+    return {
+      success: true,
+      blockedUserId,
+      message: 'User unblocked. Chat stays locked until a new request is sent and accepted.',
+    };
   }
 
   async updateAvatar(userId: string, avatarPath: string) {
@@ -402,7 +549,12 @@ export class UserService {
         avatar: true,
         emailVerified: true,
         backupEnabled: true,
+        backupImages: true,
+        backupVideos: true,
+        backupFiles: true,
         darkMode: true,
+        publicKey: true,
+        publicKeyUpdatedAt: true,
       },
     });
 
@@ -452,6 +604,9 @@ export class UserService {
         avatar: true,
         emailVerified: true,
         backupEnabled: true,
+        backupImages: true,
+        backupVideos: true,
+        backupFiles: true,
         darkMode: true,
         publicKey: true,
         publicKeyUpdatedAt: true,
@@ -580,11 +735,20 @@ export class UserService {
 
   async updateSettings(
     userId: string,
-    data: { darkMode?: boolean; backupEnabled?: boolean },
+    data: {
+      darkMode?: boolean;
+      backupEnabled?: boolean;
+      backupImages?: boolean;
+      backupVideos?: boolean;
+      backupFiles?: boolean;
+    },
   ) {
     if (
       typeof data.darkMode !== 'boolean' &&
-      typeof data.backupEnabled !== 'boolean'
+      typeof data.backupEnabled !== 'boolean' &&
+      typeof data.backupImages !== 'boolean' &&
+      typeof data.backupVideos !== 'boolean' &&
+      typeof data.backupFiles !== 'boolean'
     ) {
       throw new BadRequestException('At least one setting is required');
     }
@@ -598,6 +762,15 @@ export class UserService {
         ...(typeof data.backupEnabled === 'boolean'
           ? { backupEnabled: data.backupEnabled }
           : {}),
+        ...(typeof data.backupImages === 'boolean'
+          ? { backupImages: data.backupImages }
+          : {}),
+        ...(typeof data.backupVideos === 'boolean'
+          ? { backupVideos: data.backupVideos }
+          : {}),
+        ...(typeof data.backupFiles === 'boolean'
+          ? { backupFiles: data.backupFiles }
+          : {}),
       },
       select: {
         id: true,
@@ -607,6 +780,9 @@ export class UserService {
         avatar: true,
         emailVerified: true,
         backupEnabled: true,
+        backupImages: true,
+        backupVideos: true,
+        backupFiles: true,
         darkMode: true,
         publicKey: true,
         publicKeyUpdatedAt: true,

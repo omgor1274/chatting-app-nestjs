@@ -150,6 +150,9 @@ export class AuthService {
     emailVerified?: boolean;
     pendingEmail?: string | null;
     backupEnabled?: boolean;
+    backupImages?: boolean;
+    backupVideos?: boolean;
+    backupFiles?: boolean;
     darkMode?: boolean;
   }) {
     return {
@@ -160,6 +163,9 @@ export class AuthService {
       emailVerified: user.emailVerified ?? false,
       pendingEmail: user.pendingEmail ?? null,
       backupEnabled: user.backupEnabled ?? true,
+      backupImages: user.backupImages ?? true,
+      backupVideos: user.backupVideos ?? true,
+      backupFiles: user.backupFiles ?? true,
       darkMode: user.darkMode ?? false,
     };
   }
@@ -197,6 +203,9 @@ export class AuthService {
             emailVerified: true,
             pendingEmail: true,
             backupEnabled: true,
+            backupImages: true,
+            backupVideos: true,
+            backupFiles: true,
             darkMode: true,
           },
         });
@@ -232,6 +241,9 @@ export class AuthService {
         emailVerified: true,
         pendingEmail: true,
         backupEnabled: true,
+        backupImages: true,
+        backupVideos: true,
+        backupFiles: true,
         darkMode: true,
       },
     });

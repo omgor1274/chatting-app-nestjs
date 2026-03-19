@@ -64,7 +64,14 @@ export class UserController {
   @Post('settings')
   updateSettings(
     @Req() req,
-    @Body() body: { darkMode?: boolean; backupEnabled?: boolean },
+    @Body()
+    body: {
+      darkMode?: boolean;
+      backupEnabled?: boolean;
+      backupImages?: boolean;
+      backupVideos?: boolean;
+      backupFiles?: boolean;
+    },
   ) {
     return this.userService.updateSettings(req.user.userId, body);
   }
@@ -97,9 +104,43 @@ export class UserController {
   }
 
   @UseGuards(JwtGuard)
+  @Get('blocks')
+  getBlockedUsers(@Req() req) {
+    return this.userService.getBlockedUsers(req.user.userId);
+  }
+
+  @UseGuards(JwtGuard)
   @Post('keys/public')
   updatePublicKey(@Req() req, @Body() body: { publicKey: string }) {
     return this.userService.updatePublicKey(req.user.userId, body.publicKey);
+  }
+
+  @UseGuards(JwtGuard)
+  @Post('blocks')
+  async blockUser(@Req() req, @Body() body: { userId: string }) {
+    const result = await this.userService.blockUser(req.user.userId, body.userId);
+    this.chatGateway.emitConversationRefresh(
+      [req.user.userId, body.userId].filter(Boolean),
+      {
+        otherUserId: body.userId,
+        conversationType: 'direct',
+      },
+    );
+    return result;
+  }
+
+  @UseGuards(JwtGuard)
+  @Post('blocks/remove')
+  async unblockUser(@Req() req, @Body() body: { userId: string }) {
+    const result = await this.userService.unblockUser(req.user.userId, body.userId);
+    this.chatGateway.emitConversationRefresh(
+      [req.user.userId, body.userId].filter(Boolean),
+      {
+        otherUserId: body.userId,
+        conversationType: 'direct',
+      },
+    );
+    return result;
   }
 
   @UseGuards(JwtGuard)

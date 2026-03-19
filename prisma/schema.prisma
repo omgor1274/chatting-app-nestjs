@@ -16,6 +16,9 @@ model User {
   avatar             String?
   emailVerified      Boolean     @default(false)
   backupEnabled      Boolean     @default(true)
+  backupImages       Boolean     @default(true)
+  backupVideos       Boolean     @default(true)
+  backupFiles        Boolean     @default(true)
   darkMode           Boolean     @default(false)
   tokenVersion       Int         @default(0)
   publicKey          String?
@@ -23,6 +26,13 @@ model User {
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @default(now()) @updatedAt
   authTokens         AuthToken[]
+  createdGroups      Group[]     @relation("GroupCreator")
+  groupMemberships   GroupMember[]
+  groupInvites       GroupJoinRequest[] @relation("GroupInvitee")
+  sentGroupInvites   GroupJoinRequest[] @relation("GroupInviter")
+  hiddenMessages     MessageHidden[]
+  blockedUsers       UserBlock[] @relation("UserBlocker")
+  blockedByUsers     UserBlock[] @relation("UserBlocked")
 }
 
 enum MessageType {
@@ -37,7 +47,8 @@ model Message {
   content      String?
   ciphertext   String?
   senderId     String
-  receiverId   String
+  receiverId   String?
+  groupId      String?
   messageType  MessageType @default(TEXT)
   fileUrl      String?
   fileName     String?
@@ -47,7 +58,15 @@ model Message {
   iv           String?
   algorithm    String?
   isEncrypted  Boolean     @default(false)
+  readAt       DateTime?
+  deletedForEveryoneAt DateTime?
+  deletedForEveryoneById String?
   createdAt    DateTime    @default(now())
+  group        Group?      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  hiddenForUsers MessageHidden[]
+
+  @@index([senderId, receiverId, createdAt])
+  @@index([groupId, createdAt])
 }
 
 enum RequestStatus {
@@ -85,6 +104,84 @@ model ContactPreference {
   updatedAt     DateTime @default(now()) @updatedAt
 
   @@unique([ownerId, contactUserId])
+}
+
+enum GroupMemberRole {
+  ADMIN
+  MEMBER
+}
+
+enum GroupJoinRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model Group {
+  id          String        @id @default(uuid())
+  name        String
+  avatar      String?
+  createdById String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @default(now()) @updatedAt
+  createdBy   User          @relation("GroupCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  members     GroupMember[]
+  joinRequests GroupJoinRequest[]
+  messages    Message[]
+}
+
+model GroupMember {
+  id         String          @id @default(uuid())
+  groupId    String
+  userId     String
+  role       GroupMemberRole @default(MEMBER)
+  joinedAt   DateTime        @default(now())
+  lastReadAt DateTime?
+  group      Group           @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([userId, groupId])
+}
+
+model GroupJoinRequest {
+  id            String                 @id @default(uuid())
+  groupId       String
+  invitedById   String
+  invitedUserId String
+  status        GroupJoinRequestStatus @default(PENDING)
+  createdAt     DateTime               @default(now())
+  respondedAt   DateTime?
+  group         Group                  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  invitedBy     User                   @relation("GroupInviter", fields: [invitedById], references: [id], onDelete: Cascade)
+  invitedUser   User                   @relation("GroupInvitee", fields: [invitedUserId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, invitedUserId, status])
+  @@index([invitedUserId, status])
+}
+
+model MessageHidden {
+  id        String   @id @default(uuid())
+  messageId String
+  userId    String
+  createdAt DateTime @default(now())
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([userId, createdAt])
+}
+
+model UserBlock {
+  id            String   @id @default(uuid())
+  blockerId     String
+  blockedUserId String
+  createdAt     DateTime @default(now())
+  blocker       User     @relation("UserBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedUser   User     @relation("UserBlocked", fields: [blockedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedUserId])
+  @@index([blockedUserId, blockerId])
 }
 
 enum AuthTokenType {
