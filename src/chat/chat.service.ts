@@ -508,14 +508,16 @@ export class ChatService {
         where: { ownerId: userId },
         select: { contactUserId: true, nickname: true, chatTheme: true },
       }),
-      this.prisma.message.findMany({
-        where: {
-          groupId: { in: groupIds.length ? groupIds : ['__none__'] },
-          hiddenForUsers: { none: { userId } },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 250,
-      }),
+      groupIds.length
+        ? this.prisma.message.findMany({
+            where: {
+              groupId: { in: groupIds },
+              hiddenForUsers: { none: { userId } },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 250,
+          })
+        : Promise.resolve([]),
     ]);
     const groupJoinedAtById = new Map(
       groupMemberships.map((membership) => [

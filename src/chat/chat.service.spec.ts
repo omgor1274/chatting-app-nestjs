@@ -10,6 +10,13 @@ describe('ChatService', () => {
   let prisma: {
     user: {
       findUnique: jest.Mock;
+      findMany: jest.Mock;
+    };
+    message: {
+      findMany: jest.Mock;
+    };
+    userBlock: {
+      findMany: jest.Mock;
     };
     chatRequest: {
       findFirst: jest.Mock;
@@ -17,9 +24,13 @@ describe('ChatService', () => {
       findUnique: jest.Mock;
       update: jest.Mock;
     };
+    contactPreference: {
+      findMany: jest.Mock;
+    };
     groupMember: {
       update: jest.Mock;
       delete: jest.Mock;
+      findMany: jest.Mock;
     };
     group: {
       update: jest.Mock;
@@ -32,6 +43,13 @@ describe('ChatService', () => {
     prisma = {
       user: {
         findUnique: jest.fn(),
+        findMany: jest.fn(),
+      },
+      message: {
+        findMany: jest.fn(),
+      },
+      userBlock: {
+        findMany: jest.fn(),
       },
       chatRequest: {
         findFirst: jest.fn(),
@@ -39,9 +57,13 @@ describe('ChatService', () => {
         findUnique: jest.fn(),
         update: jest.fn(),
       },
+      contactPreference: {
+        findMany: jest.fn(),
+      },
       groupMember: {
         update: jest.fn(),
         delete: jest.fn(),
+        findMany: jest.fn(),
       },
       group: {
         update: jest.fn(),
@@ -151,5 +173,31 @@ describe('ChatService', () => {
         role: GroupMemberRole.ADMIN,
       },
     });
+  });
+
+  it('returns recent direct chats when the user has no groups', async () => {
+    prisma.userBlock.findMany.mockResolvedValue([]);
+    prisma.groupMember.findMany.mockResolvedValue([]);
+    prisma.message.findMany.mockResolvedValueOnce([]);
+    prisma.user.findMany.mockResolvedValue([
+      {
+        id: 'user-2',
+        email: 'user2@example.com',
+        name: 'User Two',
+        avatar: null,
+      },
+    ]);
+    prisma.contactPreference.findMany.mockResolvedValue([]);
+
+    const result = await service.getRecentChats('user-1');
+
+    expect(prisma.message.findMany).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: 'user-2',
+        chatType: 'direct',
+        displayName: 'User Two',
+      }),
+    ]);
   });
 });
