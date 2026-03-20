@@ -67,3 +67,6 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 /smoke-note.txt
 
 /generated/prisma
+
+# Desktop build artifacts
+/release

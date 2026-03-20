@@ -1,13 +1,19 @@
 {
   "name": "chat-app-nestjs",
   "version": "0.0.1",
-  "description": "",
+  "description": "O-chat web and desktop app",
   "author": "",
+  "main": "electron/main.js",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
+    "desktop:dev": "npm run build && electron .",
+    "desktop:dist": "npm run build && electron-builder --win nsis",
+    "desktop:pack": "npm run build && electron-builder --dir",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate:deploy": "prisma migrate deploy",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
@@ -62,6 +68,8 @@
     "@types/node": "^22.10.7",
     "@types/supertest": "^6.0.2",
     "dotenv-cli": "^11.0.0",
+    "electron": "^41.0.3",
+    "electron-builder": "^26.8.1",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",
@@ -93,5 +101,42 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
+  },
+  "build": {
+    "appId": "com.ochat.desktop",
+    "productName": "O-chat",
+    "afterPack": "electron/after-pack.js",
+    "asar": true,
+    "asarUnpack": [
+      "dist/**/*",
+      "electron/**/*",
+      "index.html",
+      "public/**/*",
+      ".env",
+      "node_modules/.prisma/**/*",
+      "node_modules/@prisma/**/*",
+      "node_modules/bcrypt/**/*"
+    ],
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "index.html",
+      "public/**/*",
+      "package.json",
+      ".env"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "public/icons/icon-512.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

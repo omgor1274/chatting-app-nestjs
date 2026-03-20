@@ -23,6 +23,33 @@ export class AuthService {
     return email.trim().toLowerCase();
   }
 
+  private isLocalAppOrigin(origin: string) {
+    return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin.trim());
+  }
+
+  private shouldExposeOtpPreview() {
+    const appOrigin =
+      process.env.APP_ORIGIN ||
+      process.env.PUBLIC_API_URL ||
+      `http://localhost:${process.env.PORT ?? 3000}`;
+
+    return (
+      this.mailService.isPreviewMailboxEnabled() &&
+      this.isLocalAppOrigin(appOrigin)
+    );
+  }
+
+  private getOtpPreviewPayload(otp: string) {
+    if (!this.shouldExposeOtpPreview()) {
+      return {};
+    }
+
+    return {
+      devOtp: otp,
+      devMailboxPath: this.mailService.getPreviewMailboxPath(),
+    };
+  }
+
   private hashToken(token: string) {
     return createHash('sha256').update(token).digest('hex');
   }
@@ -210,16 +237,23 @@ export class AuthService {
           },
         });
 
-        await this.issueVerificationOtp(
+        const otp = await this.issueOtp(
           user.id,
           AuthTokenType.VERIFY_EMAIL,
           user.email,
+          EMAIL_OTP_TTL_MS,
+        );
+        await this.mailService.sendVerificationEmail(
+          user.email,
+          otp,
+          EMAIL_OTP_TTL_MS,
         );
 
         return {
           message:
             'Finish registration by entering the OTP sent to your email.',
           user: this.serializeUser(user),
+          ...this.getOtpPreviewPayload(otp),
         };
       }
 
@@ -248,16 +282,23 @@ export class AuthService {
       },
     });
 
-    await this.issueVerificationOtp(
+    const otp = await this.issueOtp(
       user.id,
       AuthTokenType.VERIFY_EMAIL,
       user.email,
+      EMAIL_OTP_TTL_MS,
+    );
+    await this.mailService.sendVerificationEmail(
+      user.email,
+      otp,
+      EMAIL_OTP_TTL_MS,
     );
 
     return {
       message:
         'Registration successful. Enter the OTP sent to your email to verify your account.',
       user: this.serializeUser(user),
+      ...this.getOtpPreviewPayload(otp),
     };
   }
 
@@ -278,14 +319,21 @@ export class AuthService {
       };
     }
 
-    await this.issueVerificationOtp(
+    const otp = await this.issueOtp(
       user.id,
       AuthTokenType.VERIFY_EMAIL,
       user.email,
+      EMAIL_OTP_TTL_MS,
+    );
+    await this.mailService.sendVerificationEmail(
+      user.email,
+      otp,
+      EMAIL_OTP_TTL_MS,
     );
 
     return {
       message: 'If the account exists, a verification OTP has been sent.',
+      ...this.getOtpPreviewPayload(otp),
     };
   }
 
@@ -358,7 +406,23 @@ export class AuthService {
     });
 
     if (user) {
-      await this.issuePasswordResetOtp(user.id, user.email);
+      const otp = await this.issueOtp(
+        user.id,
+        AuthTokenType.RESET_PASSWORD,
+        user.email,
+        RESET_OTP_TTL_MS,
+        null,
+      );
+      await this.mailService.sendPasswordResetEmail(
+        user.email,
+        otp,
+        RESET_OTP_TTL_MS,
+      );
+
+      return {
+        message: 'If the account exists, a password reset OTP has been sent.',
+        ...this.getOtpPreviewPayload(otp),
+      };
     }
 
     return {

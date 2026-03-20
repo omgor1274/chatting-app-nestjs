@@ -1,7 +1,7 @@
 import { Controller, Get, Res } from '@nestjs/common';
 import type { Response } from 'express';
-import { join } from 'path';
 import { AppService } from './app.service';
+import { resolveAppRootPath } from './common/app-paths';
 
 @Controller()
 export class AppController {
@@ -10,7 +10,7 @@ export class AppController {
   @Get()
   getIndex(@Res() res: Response) {
     res.setHeader('Cache-Control', 'no-store');
-    return res.sendFile(join(process.cwd(), 'index.html'));
+    return res.sendFile(resolveAppRootPath('index.html'));
   }
 
   @Get('health')

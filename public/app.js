@@ -1,4 +1,5 @@
 const isFileOrigin = window.location.protocol === 'file:';
+    const isDesktopRuntime = Boolean(window.desktopApp?.isDesktop);
     const localBackendOrigin = 'http://localhost:3000';
     let appConfig = {
       apiUrl: localBackendOrigin,
@@ -21,6 +22,8 @@ const isFileOrigin = window.location.protocol === 'file:';
     let conversationMessages = new Map();
     let recentActivity = new Map();
     let swRegistration = null;
+    let deferredInstallPrompt = null;
+    let serviceWorkerMessageBound = false;
     let typingTimeout = null;
     let typingUsers = new Map();
     let sidebarOpen = false;
@@ -46,6 +49,7 @@ const isFileOrigin = window.location.protocol === 'file:';
     let recordedAudioFile = null;
     let recordedAudioUrl = null;
     let recordedChunks = [];
+    let discardRecordedAudioOnStop = false;
     let mediaRecorder = null;
     let mediaRecorderStream = null;
     let pendingIncomingCall = null;
@@ -71,6 +75,16 @@ const isFileOrigin = window.location.protocol === 'file:';
 
     function getById(id) {
       return document.getElementById(id);
+    }
+
+    function canUseWebPush() {
+      return (
+        !isFileOrigin &&
+        !isDesktopRuntime &&
+        'serviceWorker' in navigator &&
+        'PushManager' in window &&
+        'Notification' in window
+      );
     }
 
     function canUseE2EE() {
@@ -689,6 +703,20 @@ const isFileOrigin = window.location.protocol === 'file:';
       setFeedbackMessage('reset-password-feedback', message, type);
     }
 
+    function buildOtpPreviewMessage(data, fallbackMessage) {
+      const message = fallbackMessage || data?.message || '';
+
+      if (!data?.devOtp) {
+        return message;
+      }
+
+      const mailboxNote = data.devMailboxPath
+        ? `\nLocal mailbox preview: ${data.devMailboxPath}`
+        : '';
+
+      return `${message}\n\nLocal OTP preview: ${data.devOtp}${mailboxNote}`;
+    }
+
     function sanitizeOtpInput(input) {
       input.value = String(input.value || '')
         .replace(/\D/g, '')
@@ -885,6 +913,61 @@ const isFileOrigin = window.location.protocol === 'file:';
         darkModeInput.checked = Boolean(enabled);
       }
       applyChatTheme();
+    }
+
+    function isStandaloneApp() {
+      return (
+        window.matchMedia('(display-mode: standalone)').matches ||
+        window.navigator.standalone === true
+      );
+    }
+
+    function updateInstallAppUI() {
+      const installBtn = getById('install-app-btn');
+      const installNote = getById('install-app-note');
+
+      if (!installBtn || !installNote) {
+        return;
+      }
+
+      const installed = isStandaloneApp();
+      installBtn.classList.toggle('hidden', installed);
+
+      if (installed) {
+        installNote.innerText = 'O-chat is already installed on this device.';
+        return;
+      }
+
+      if (deferredInstallPrompt) {
+        installNote.innerText =
+          'Install O-chat for a desktop-style window and quick access from your taskbar or dock.';
+        return;
+      }
+
+      installNote.innerText =
+        'If the browser does not show an install prompt yet, refresh once and then try the browser menu in Chrome or Edge.';
+    }
+
+    async function promptInstallApp() {
+      if (isStandaloneApp()) {
+        updateInstallAppUI();
+        return;
+      }
+
+      if (!deferredInstallPrompt) {
+        alert(
+          'Your browser has not offered app installation yet. In Chrome or Edge, open the browser menu and choose Install app.',
+        );
+        updateInstallAppUI();
+        return;
+      }
+
+      const installPrompt = deferredInstallPrompt;
+      deferredInstallPrompt = null;
+      updateInstallAppUI();
+      await installPrompt.prompt();
+      await installPrompt.userChoice.catch(() => null);
+      updateInstallAppUI();
     }
 
     function updateSettingsUI() {
@@ -1274,6 +1357,7 @@ const isFileOrigin = window.location.protocol === 'file:';
     async function openProfileModal() {
       if (!currentUser) return;
       updateSettingsUI();
+      updateInstallAppUI();
       try {
         await loadBlockedUsers();
       } catch (error) {
@@ -1411,9 +1495,15 @@ const isFileOrigin = window.location.protocol === 'file:';
         return;
       }
 
-      showResetPasswordStep(email, data.message || 'Reset OTP sent.');
+      showResetPasswordStep(
+        email,
+        buildOtpPreviewMessage(data, data.message || 'Reset OTP sent.'),
+      );
       showResetPasswordFeedback(
-        'Enter the OTP from your email and choose a new password.',
+        buildOtpPreviewMessage(
+          data,
+          'Enter the OTP from your email and choose a new password.',
+        ),
         'success',
       );
     }
@@ -1450,7 +1540,10 @@ const isFileOrigin = window.location.protocol === 'file:';
       pendingResetEmail = email;
       document.getElementById('reset-email-input').value = email;
       showResetPasswordFeedback(
-        data.message || 'A fresh reset OTP has been sent.',
+        buildOtpPreviewMessage(
+          data,
+          data.message || 'A fresh reset OTP has been sent.',
+        ),
         'success',
       );
     }
@@ -1490,12 +1583,21 @@ const isFileOrigin = window.location.protocol === 'file:';
           .classList.contains('hidden')
       ) {
         document.getElementById('verification-message').innerText =
-          data.message || 'Verification OTP sent.';
-        showVerificationFeedback('A fresh OTP has been sent.', 'success');
+          buildOtpPreviewMessage(
+            data,
+            data.message || 'Verification OTP sent.',
+          );
+        showVerificationFeedback(
+          buildOtpPreviewMessage(data, 'A fresh OTP has been sent.'),
+          'success',
+        );
         return;
       }
 
-      showAuthFeedback(data.message, 'success');
+      showAuthFeedback(
+        buildOtpPreviewMessage(data, data.message),
+        'success',
+      );
     }
 
     async function resendVerificationForCurrentUser() {
@@ -1658,11 +1760,15 @@ const isFileOrigin = window.location.protocol === 'file:';
 
           if (
             isLogin &&
-            String(message).toLowerCase().includes('verify your email')
+            (
+              String(message).toLowerCase().includes('verify your email') ||
+              String(message).toLowerCase().includes('email verification') ||
+              String(message).toLowerCase().includes('before logging in')
+            )
           ) {
-            showAuthFeedback(
-              'Complete email verification during signup before logging in.',
-              'error',
+            showVerificationStep(
+              email,
+              'Complete email verification to log in. Enter the 6-digit OTP sent to your email, or resend it below.',
             );
             return;
           }
@@ -1691,8 +1797,11 @@ const isFileOrigin = window.location.protocol === 'file:';
         document.getElementById('password-input').value = '';
         showVerificationStep(
           email,
-          data.message ||
-          'Registration successful. Enter the 6-digit OTP sent to your email.',
+          buildOtpPreviewMessage(
+            data,
+            data.message ||
+              'Registration successful. Enter the 6-digit OTP sent to your email.',
+          ),
         );
       } catch (error) {
         if (error instanceof TypeError) {
@@ -1712,7 +1821,11 @@ const isFileOrigin = window.location.protocol === 'file:';
       await ensureEncryptionKeys(true);
       await loadUsers();
       connectSocket();
-      await setupNotifications();
+      try {
+        await setupNotifications();
+      } catch (error) {
+        console.warn('Push notification setup skipped', error);
+      }
       document.getElementById('auth-screen').classList.add('hidden');
 
       const chatId = new URLSearchParams(window.location.search).get('chat');
@@ -2374,6 +2487,7 @@ const isFileOrigin = window.location.protocol === 'file:';
       document.getElementById('input-area').classList.remove('hidden');
       document.getElementById('messages-list').innerHTML = '';
       clearAttachmentSelection();
+      clearRecordedAudio();
       closeChatActionsMenu();
       closeComposerActionsMenu();
 
@@ -2606,6 +2720,7 @@ const isFileOrigin = window.location.protocol === 'file:';
       const blockBtn = document.getElementById('block-user-btn');
       const manageGroupBtn = document.getElementById('manage-group-btn');
       const voiceRecordBtn = document.getElementById('voice-record-btn');
+      const voiceSendBtn = document.getElementById('voice-send-btn');
       const sendBtn = document.getElementById('send-message-btn');
       const gatedButtons = [
         composerActionsBtn,
@@ -2615,6 +2730,7 @@ const isFileOrigin = window.location.protocol === 'file:';
         clearThemeBtn,
         renameBtn,
         voiceRecordBtn,
+        voiceSendBtn,
         sendBtn,
       ];
 
@@ -3166,6 +3282,15 @@ const isFileOrigin = window.location.protocol === 'file:';
       document.getElementById('manage-group-avatar-input').value = '';
       document.getElementById('manage-group-avatar-name').innerText =
         merged.avatar ? 'Current photo saved' : 'No photo selected';
+      const adminCount = (merged.members || []).filter(
+        (member) => member.role === 'ADMIN',
+      ).length;
+      document.getElementById('manage-group-leave-note').innerText =
+        merged.role === 'ADMIN'
+          ? adminCount <= 1 && (merged.members || []).length > 1
+            ? 'If you leave now, another remaining member will automatically become admin.'
+            : 'You are an admin. You can promote members or leave the group at any time.'
+          : 'You can leave this group at any time.';
 
       const memberIds = new Set((merged.members || []).map((member) => member.userId));
       const pendingIds = new Set(
@@ -3178,11 +3303,16 @@ const isFileOrigin = window.location.protocol === 'file:';
                 <img src="${userAvatar(member)}" class="h-10 w-10 rounded-xl object-cover">
                 <div class="min-w-0 flex-1">
                   <p class="truncate text-sm font-semibold text-slate-900">${escapeHtml(member.name)}</p>
-                  <p class="truncate text-xs text-slate-500">${escapeHtml(member.role)}</p>
+                  <p class="truncate text-xs text-slate-500">${escapeHtml(member.role)}${member.userId === currentUser.id ? ' · You' : ''}</p>
                 </div>
-                ${selectedUser.createdById === currentUser.id && member.userId !== currentUser.id
-                  ? `<button onclick="removeMemberFromGroup('${member.userId}')" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">Remove</button>`
-                  : ''}
+                <div class="flex flex-wrap items-center gap-2">
+                  ${merged.role === 'ADMIN' && member.userId !== currentUser.id && member.role !== 'ADMIN'
+                    ? `<button onclick="makeGroupAdmin('${member.userId}')" class="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100">Make Admin</button>`
+                    : ''}
+                  ${merged.role === 'ADMIN' && member.userId !== currentUser.id
+                    ? `<button onclick="removeMemberFromGroup('${member.userId}')" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">Remove</button>`
+                    : ''}
+                </div>
               </div>
             `,
           )
@@ -3315,6 +3445,79 @@ const isFileOrigin = window.location.protocol === 'file:';
       );
       syncSelectedUser();
       await openManageGroupModal();
+    }
+
+    async function makeGroupAdmin(userId) {
+      if (!selectedUser || !isGroupConversation(selectedUser)) {
+        return;
+      }
+
+      const confirmed = window.confirm(
+        'Make this member an admin of the group?',
+      );
+      if (!confirmed) {
+        return;
+      }
+
+      const res = await api(
+        `/chat/groups/${encodeURIComponent(selectedUser.id)}/promote-admin`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId }),
+        },
+      );
+      const data = await readJsonResponse(
+        res,
+        {},
+        'Failed to promote this member.',
+      );
+      if (!res.ok) {
+        alert(data.message || 'Failed to make member admin');
+        return;
+      }
+
+      users = users.map((user) =>
+        user.id === data.id ? normalizeUser({ ...data, chatType: 'group' }, user) : user,
+      );
+      syncSelectedUser();
+      await openManageGroupModal();
+    }
+
+    async function leaveCurrentGroup() {
+      if (!selectedUser || !isGroupConversation(selectedUser)) {
+        return;
+      }
+
+      const confirmed = window.confirm(
+        selectedUser.role === 'ADMIN'
+          ? 'Leave this group? If you are the last admin, another member will automatically become admin.'
+          : 'Leave this group?',
+      );
+      if (!confirmed) {
+        return;
+      }
+
+      const groupId = selectedUser.id;
+      const res = await api(`/chat/groups/${encodeURIComponent(groupId)}/leave`, {
+        method: 'POST',
+      });
+      const data = await readJsonResponse(
+        res,
+        {},
+        'Failed to leave the group.',
+      );
+      if (!res.ok) {
+        alert(data.message || 'Failed to leave group');
+        return;
+      }
+
+      closeManageGroupModal();
+      await loadUsers();
+      if (selectedUser && selectedUser.id === groupId) {
+        syncSelectedUser();
+      }
+      alert(data.message || 'You left the group.');
     }
 
     function openMessageActions(x, y, message) {
@@ -3553,23 +3756,115 @@ const isFileOrigin = window.location.protocol === 'file:';
       applyChatTheme();
     }
 
-    function clearRecordedAudio() {
+    function stopVoiceRecorderStream() {
+      if (mediaRecorderStream) {
+        mediaRecorderStream.getTracks().forEach((track) => track.stop());
+      }
+
+      mediaRecorderStream = null;
+    }
+
+    function updateVoiceComposerUI() {
+      const voiceStatus = getById('voice-status');
+      const voicePreview = getById('voice-preview');
+      const voicePreviewAudio = getById('voice-preview-audio');
+      const voicePreviewNote = getById('voice-preview-note');
+      const recordBtn = getById('voice-record-btn');
+      const stopBtn = getById('voice-stop-btn');
+      const deleteBtn = getById('voice-delete-btn');
+      const sendBtn = getById('voice-send-btn');
+      const isRecording = Boolean(
+        mediaRecorder && mediaRecorder.state === 'recording',
+      );
+      const hasDraft = Boolean(recordedAudioFile && recordedAudioUrl);
+
+      if (!voiceStatus || !voicePreview || !voicePreviewAudio || !recordBtn) {
+        return;
+      }
+
+      recordBtn.innerText = 'Record Voice';
+      stopBtn?.classList.toggle('hidden', !isRecording);
+      deleteBtn?.classList.toggle('hidden', !hasDraft);
+      sendBtn?.classList.toggle('hidden', !hasDraft);
+      voicePreview.classList.toggle('hidden', !isRecording && !hasDraft);
+
+      if (isRecording) {
+        voiceStatus.innerText = 'Recording...';
+        voiceStatus.classList.remove('hidden');
+        voicePreviewNote.innerText =
+          'Tap Stop Recording when your voice message is ready.';
+        voicePreviewAudio.pause();
+        voicePreviewAudio.removeAttribute('src');
+        voicePreviewAudio.classList.add('hidden');
+        voicePreviewAudio.load();
+        return;
+      }
+
+      if (hasDraft) {
+        voiceStatus.innerText = 'Voice message ready to send';
+        voiceStatus.classList.remove('hidden');
+        voicePreviewNote.innerText =
+          'Listen to your recording, send it now, or delete it before sending.';
+        voicePreviewAudio.src = recordedAudioUrl;
+        voicePreviewAudio.classList.remove('hidden');
+        return;
+      }
+
+      voiceStatus.classList.add('hidden');
+      voiceStatus.innerText = '';
+      voicePreviewNote.innerText = '';
+      voicePreviewAudio.pause();
+      voicePreviewAudio.removeAttribute('src');
+      voicePreviewAudio.classList.add('hidden');
+      voicePreviewAudio.load();
+    }
+
+    function clearRecordedAudio(options = {}) {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        discardRecordedAudioOnStop = true;
+        mediaRecorder.stop();
+        return;
+      }
+
       if (recordedAudioUrl) {
         URL.revokeObjectURL(recordedAudioUrl);
       }
 
+      discardRecordedAudioOnStop = false;
+      recordedChunks = [];
       recordedAudioUrl = null;
       recordedAudioFile = null;
-      document.getElementById('voice-status').classList.add('hidden');
-      document.getElementById('voice-status').innerText = '';
+      stopVoiceRecorderStream();
+
+      if (options.keepMenuOpen !== true) {
+        closeComposerActionsMenu();
+      }
+
+      updateVoiceComposerUI();
+    }
+
+    function stopVoiceRecording() {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+      }
+    }
+
+    async function sendRecordedVoiceMessage() {
+      if (!recordedAudioFile) {
+        return;
+      }
+
+      try {
+        await uploadAttachment(recordedAudioFile);
+        clearRecordedAudio();
+      } catch (error) {
+        alert(error.message || 'Failed to send voice message');
+      }
     }
 
     async function toggleVoiceRecording() {
-      const voiceBtn = document.getElementById('voice-record-btn');
-      const voiceStatus = document.getElementById('voice-status');
-
       if (mediaRecorder && mediaRecorder.state === 'recording') {
-        mediaRecorder.stop();
+        stopVoiceRecording();
         return;
       }
 
@@ -3583,6 +3878,8 @@ const isFileOrigin = window.location.protocol === 'file:';
       }
 
       try {
+        clearRecordedAudio({ keepMenuOpen: true });
+        discardRecordedAudioOnStop = false;
         recordedChunks = [];
         mediaRecorderStream = await navigator.mediaDevices.getUserMedia({
           audio: true,
@@ -3596,39 +3893,42 @@ const isFileOrigin = window.location.protocol === 'file:';
         });
 
         mediaRecorder.addEventListener('stop', () => {
+          const shouldDiscard = discardRecordedAudioOnStop;
           const mimeType = mediaRecorder.mimeType || 'audio/webm';
           const blob = new Blob(recordedChunks, { type: mimeType });
+          stopVoiceRecorderStream();
+          mediaRecorder = null;
+          discardRecordedAudioOnStop = false;
+
+          if (shouldDiscard || blob.size === 0) {
+            recordedChunks = [];
+            updateVoiceComposerUI();
+            return;
+          }
+
           const extension = mimeType.includes('ogg')
             ? 'ogg'
             : mimeType.includes('mpeg')
               ? 'mp3'
               : 'webm';
 
-          clearRecordedAudio();
+          clearRecordedAudio({ keepMenuOpen: true });
           recordedAudioFile = new File(
             [blob],
             `voice-message-${Date.now()}.${extension}`,
             { type: mimeType },
           );
           recordedAudioUrl = URL.createObjectURL(blob);
-          voiceBtn.innerText = 'Record Voice';
-          voiceStatus.innerText = 'Voice message ready to send';
-          voiceStatus.classList.remove('hidden');
-
-          if (mediaRecorderStream) {
-            mediaRecorderStream.getTracks().forEach((track) => track.stop());
-          }
-
-          mediaRecorder = null;
-          mediaRecorderStream = null;
+          updateVoiceComposerUI();
         });
 
         mediaRecorder.start();
-        voiceBtn.innerText = 'Stop Recording';
-        voiceStatus.innerText = 'Recording...';
-        voiceStatus.classList.remove('hidden');
+        updateVoiceComposerUI();
       } catch (error) {
+        stopVoiceRecorderStream();
+        mediaRecorder = null;
         alert(error.message || 'Unable to access microphone');
+        updateVoiceComposerUI();
       }
     }
 
@@ -4110,35 +4410,45 @@ const isFileOrigin = window.location.protocol === 'file:';
       list.prepend(fragment);
     }
 
+    async function ensureServiceWorkerReady() {
+      if (!canUseWebPush()) {
+        return null;
+      }
+
+      if (!swRegistration) {
+        swRegistration = await navigator.serviceWorker.register('/sw.js');
+      }
+
+      if (!serviceWorkerMessageBound) {
+        navigator.serviceWorker.addEventListener('message', (event) => {
+          if (event.data?.type === 'notification-click' && event.data.url) {
+            const url = new URL(event.data.url, window.location.origin);
+            const chatId = url.searchParams.get('chat');
+            const groupId = url.searchParams.get('group');
+            if (groupId) {
+              selectUser(groupId);
+              return;
+            }
+            if (chatId) {
+              selectUser(chatId);
+            }
+          }
+        });
+        serviceWorkerMessageBound = true;
+      }
+
+      return swRegistration;
+    }
+
     async function setupNotifications() {
-      if (isFileOrigin) {
+      if (!canUseWebPush()) {
         return;
       }
 
-      if (
-        !('serviceWorker' in navigator) ||
-        !('PushManager' in window) ||
-        !('Notification' in window)
-      ) {
+      await ensureServiceWorkerReady();
+      if (!swRegistration) {
         return;
       }
-
-      swRegistration = await navigator.serviceWorker.register('/sw.js');
-
-      navigator.serviceWorker.addEventListener('message', (event) => {
-        if (event.data?.type === 'notification-click' && event.data.url) {
-          const url = new URL(event.data.url, window.location.origin);
-          const chatId = url.searchParams.get('chat');
-          const groupId = url.searchParams.get('group');
-          if (groupId) {
-            selectUser(groupId);
-            return;
-          }
-          if (chatId) {
-            selectUser(chatId);
-          }
-        }
-      });
 
       if (Notification.permission === 'granted') {
         await subscribeForPush();
@@ -4146,32 +4456,50 @@ const isFileOrigin = window.location.protocol === 'file:';
     }
 
     async function subscribeForPush() {
-      const keyResponse = await fetch(
-        `${API_URL}/users/notifications/public-key`,
-      );
-      const keyData = await readJsonResponse(
-        keyResponse,
-        {},
-        'Failed to load notification settings.',
-      );
-
-      if (!keyData.publicKey) {
+      if (!swRegistration) {
         return;
       }
 
-      let subscription = await swRegistration.pushManager.getSubscription();
-      if (!subscription) {
-        subscription = await swRegistration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(keyData.publicKey),
-        });
-      }
+      try {
+        const keyResponse = await fetch(
+          `${API_URL}/users/notifications/public-key`,
+        );
+        const keyData = await readJsonResponse(
+          keyResponse,
+          {},
+          'Failed to load notification settings.',
+        );
 
-      await api('/users/notifications/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(subscription),
-      });
+        if (!keyResponse.ok || !keyData.publicKey) {
+          return;
+        }
+
+        let subscription = await swRegistration.pushManager.getSubscription();
+        if (!subscription) {
+          subscription = await swRegistration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(keyData.publicKey),
+          });
+        }
+
+        const subscribeResponse = await api('/users/notifications/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(subscription),
+        });
+        if (!subscribeResponse.ok) {
+          const data = await readJsonResponse(
+            subscribeResponse,
+            {},
+            'Failed to save push subscription.',
+          );
+          console.warn(
+            data.message || 'Push subscription could not be saved.',
+          );
+        }
+      } catch (error) {
+        console.warn('Push subscription unavailable', error);
+      }
     }
 
     function maybeShowForegroundNotification(message) {
@@ -4438,12 +4766,26 @@ const isFileOrigin = window.location.protocol === 'file:';
 
     window.addEventListener('resize', syncLayout);
     window.addEventListener('resize', scheduleViewportHeight);
+    window.addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();
+      deferredInstallPrompt = event;
+      updateInstallAppUI();
+    });
+    window.addEventListener('appinstalled', () => {
+      deferredInstallPrompt = null;
+      updateInstallAppUI();
+    });
 
     if (window.visualViewport) {
       window.visualViewport.addEventListener('resize', scheduleViewportHeight);
     }
 
     applyViewportHeight();
+    updateInstallAppUI();
+    updateVoiceComposerUI();
+    ensureServiceWorkerReady().catch((error) => {
+      console.error(error);
+    });
     syncLayout();
     configLoadPromise = loadPublicConfig();
     configLoadPromise.finally(() => {

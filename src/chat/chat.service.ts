@@ -167,6 +167,24 @@ export class ChatService {
     return membership;
   }
 
+  private pickNextGroupOwner(
+    members: Array<{
+      userId: string;
+      role: GroupMemberRole;
+      joinedAt: Date;
+    }>,
+  ) {
+    return [...members].sort((left, right) => {
+      if (left.role === GroupMemberRole.ADMIN && right.role !== GroupMemberRole.ADMIN) {
+        return -1;
+      }
+      if (left.role !== GroupMemberRole.ADMIN && right.role === GroupMemberRole.ADMIN) {
+        return 1;
+      }
+      return left.joinedAt.getTime() - right.joinedAt.getTime();
+    })[0];
+  }
+
   private serializeGroup(membership: Awaited<ReturnType<ChatService['ensureGroupMember']>>) {
     return {
       id: membership.group.id,
@@ -826,9 +844,9 @@ export class ChatService {
   }
 
   async removeGroupMember(userId: string, groupId: string, memberUserId: string) {
-    const membership = await this.ensureGroupMember(groupId, userId);
-    if (membership.group.createdById !== userId) {
-      throw new ForbiddenException('Only the group creator can remove members');
+    const membership = await this.ensureGroupMember(groupId, userId, true);
+    if (memberUserId === userId) {
+      throw new BadRequestException('Use leave group to remove yourself');
     }
     const target = membership.group.members.find(
       (member) => member.userId === memberUserId,
@@ -842,10 +860,124 @@ export class ChatService {
       throw new BadRequestException('A group must keep at least one admin');
     }
 
-    await this.prisma.groupMember.delete({
-      where: { groupId_userId: { groupId, userId: memberUserId } },
-    });
+    const remainingMembers = membership.group.members.filter(
+      (member) => member.userId !== memberUserId,
+    );
+    const nextGroupOwner =
+      membership.group.createdById === memberUserId
+        ? this.pickNextGroupOwner(remainingMembers)
+        : null;
+
+    await this.prisma.$transaction([
+      ...(nextGroupOwner
+        ? [
+            this.prisma.group.update({
+              where: { id: groupId },
+              data: { createdById: nextGroupOwner.userId },
+            }),
+          ]
+        : []),
+      this.prisma.groupMember.delete({
+        where: { groupId_userId: { groupId, userId: memberUserId } },
+      }),
+    ]);
+
     return this.getGroupDetails(userId, groupId);
+  }
+
+  async promoteGroupMember(userId: string, groupId: string, memberUserId: string) {
+    const membership = await this.ensureGroupMember(groupId, userId, true);
+    const target = membership.group.members.find(
+      (member) => member.userId === memberUserId,
+    );
+    if (!target) {
+      throw new NotFoundException('Member not found');
+    }
+    if (target.role === GroupMemberRole.ADMIN) {
+      throw new BadRequestException('This member is already an admin');
+    }
+
+    await this.prisma.groupMember.update({
+      where: {
+        groupId_userId: {
+          groupId,
+          userId: memberUserId,
+        },
+      },
+      data: {
+        role: GroupMemberRole.ADMIN,
+      },
+    });
+
+    return this.getGroupDetails(userId, groupId);
+  }
+
+  async leaveGroup(userId: string, groupId: string) {
+    const membership = await this.ensureGroupMember(groupId, userId);
+    const remainingMembers = membership.group.members.filter(
+      (member) => member.userId !== userId,
+    );
+
+    if (!remainingMembers.length) {
+      await this.prisma.group.delete({
+        where: { id: groupId },
+      });
+
+      return {
+        success: true,
+        groupId,
+        deletedGroup: true,
+        remainingMemberIds: [] as string[],
+        promotedAdminUserId: null as string | null,
+        message: 'You left the group. The group was deleted because no members remained.',
+      };
+    }
+
+    const adminCount = membership.group.members.filter(
+      (member) => member.role === GroupMemberRole.ADMIN,
+    ).length;
+    let promotedAdminUserId: string | null = null;
+    const nextGroupOwner = this.pickNextGroupOwner(remainingMembers);
+    await this.prisma.$transaction(async (tx) => {
+      if (
+        membership.role === GroupMemberRole.ADMIN
+        && adminCount <= 1
+        && nextGroupOwner
+      ) {
+        promotedAdminUserId = nextGroupOwner.userId;
+        await tx.groupMember.update({
+          where: {
+            groupId_userId: {
+              groupId,
+              userId: nextGroupOwner.userId,
+            },
+          },
+          data: { role: GroupMemberRole.ADMIN },
+        });
+      }
+
+      if (membership.group.createdById === userId && nextGroupOwner) {
+        await tx.group.update({
+          where: { id: groupId },
+          data: { createdById: nextGroupOwner.userId },
+        });
+      }
+
+      await tx.groupMember.delete({
+        where: { groupId_userId: { groupId, userId } },
+      });
+    });
+
+    return {
+      success: true,
+      groupId,
+      deletedGroup: false,
+      remainingMemberIds: remainingMembers.map((member) => member.userId),
+      promotedAdminUserId,
+      message: promotedAdminUserId
+        ? 'You left the group. Another member was promoted to admin automatically.'
+        : 'You left the group.',
+    };
   }
 
   async createEncryptedMessage(input: {

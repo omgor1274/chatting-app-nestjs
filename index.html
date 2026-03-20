@@ -4,7 +4,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#2563eb" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="O-chat" />
   <title>O-chat</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="./public/app.css" />
 </head>
@@ -345,6 +352,27 @@
           <div id="voice-status"
             class="hidden rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-rose-600">
           </div>
+          <div id="voice-preview"
+            class="hidden rounded-[24px] border border-slate-200 bg-slate-50 p-3">
+            <div class="flex flex-col gap-3">
+              <div class="flex flex-wrap items-center gap-2">
+                <button id="voice-stop-btn" type="button" onclick="stopVoiceRecording()"
+                  class="hidden rounded-2xl border border-rose-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-rose-600 transition hover:bg-rose-50">
+                  Stop Recording
+                </button>
+                <button id="voice-delete-btn" type="button" onclick="clearRecordedAudio()"
+                  class="hidden rounded-2xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-700 transition hover:bg-slate-100">
+                  Delete Recording
+                </button>
+                <button id="voice-send-btn" type="button" onclick="sendRecordedVoiceMessage()"
+                  class="hidden rounded-2xl bg-blue-600 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-blue-700">
+                  Send Voice
+                </button>
+              </div>
+              <audio id="voice-preview-audio" controls class="hidden w-full"></audio>
+              <p id="voice-preview-note" class="text-xs leading-5 text-slate-500"></p>
+            </div>
+          </div>
           <div class="rounded-[28px] border border-slate-200 bg-white p-2 shadow-sm">
             <div class="relative flex items-end gap-2">
               <div class="relative shrink-0">
@@ -517,6 +545,16 @@
               class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
               Save Preferences
             </button>
+            <div class="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+              <p class="text-sm font-semibold text-slate-900">Desktop App</p>
+              <p id="install-app-note" class="mt-1 text-sm leading-6 text-slate-500">
+                Open this site in Chrome or Edge to install it as a desktop app.
+              </p>
+              <button id="install-app-btn" onclick="promptInstallApp()"
+                class="mt-4 hidden w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700">
+                Install O-chat App
+              </button>
+            </div>
           </div>
         </section>
 
@@ -697,7 +735,7 @@
             Manage group
           </h3>
           <p class="mt-2 text-sm leading-6 text-slate-500">
-            Update the group name and photo, invite members, or remove them.
+            Update the group name and photo, manage admins, invite members, or leave the group.
           </p>
         </div>
         <button onclick="closeManageGroupModal()"
@@ -723,6 +761,11 @@
           <button onclick="saveGroupSettings()"
             class="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700">
             Save Group Settings
+          </button>
+          <p id="manage-group-leave-note" class="text-xs leading-5 text-slate-500"></p>
+          <button onclick="leaveCurrentGroup()"
+            class="w-full rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-600 transition hover:bg-rose-100">
+            Leave Group
           </button>
         </section>
         <section class="space-y-4 rounded-[24px] border border-slate-200 bg-slate-50 p-4">

@@ -4,6 +4,7 @@ import { join } from 'path';
 import { MessageType } from '@prisma/client';
 import { v2 as cloudinary } from 'cloudinary';
 import { PrismaService } from '../prisma/prisma.service';
+import { resolveWritableDataPath } from '../common/app-paths';
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -11,13 +12,23 @@ const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 export class ChatBackupService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ChatBackupService.name);
   private backupTimeout?: NodeJS.Timeout;
-  private readonly metadataPath = join(process.cwd(), 'backups', 'backup-meta.json');
-  private readonly backupDir = join(process.cwd(), 'backups');
+  private readonly metadataPath = resolveWritableDataPath(
+    'backups',
+    'backup-meta.json',
+  );
+  private readonly backupDir = resolveWritableDataPath('backups');
 
   constructor(private prisma: PrismaService) { }
 
   async onModuleInit() {
     mkdirSync(this.backupDir, { recursive: true });
+    if (!this.isBackupEnabled()) {
+      this.logger.log(
+        'Chat backups are disabled via CHAT_BACKUPS_ENABLED.',
+      );
+      return;
+    }
+
     this.configureCloudinary();
     await this.scheduleNextBackup();
   }
@@ -69,6 +80,11 @@ export class ChatBackupService implements OnModuleInit, OnModuleDestroy {
       api_secret: apiSecret,
       secure: true,
     });
+  }
+
+  private isBackupEnabled() {
+    const value = process.env.CHAT_BACKUPS_ENABLED?.trim().toLowerCase();
+    return !['0', 'false', 'no', 'off'].includes(value ?? '');
   }
 
   private isCloudBackupEnabled() {
@@ -158,6 +174,14 @@ export class ChatBackupService implements OnModuleInit, OnModuleDestroy {
   }
 
   async backupChats() {
+    if (!this.isBackupEnabled()) {
+      return {
+        backupPath: null,
+        cloudBackupUrl: null,
+        cloudBackupPublicId: null,
+      };
+    }
+
     const backupEnabledUsers = await this.prisma.user.findMany({
       where: { backupEnabled: true },
       select: {

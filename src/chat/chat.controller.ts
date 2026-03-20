@@ -16,6 +16,7 @@ import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { MessageType } from '@prisma/client';
 import { JwtGuard } from '../auth/jwt/jwt.guard';
+import { resolveWritableDataPath } from '../common/app-paths';
 import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
 
@@ -166,7 +167,7 @@ export class ChatController {
   @UseInterceptors(
     FileInterceptor('avatar', {
       storage: diskStorage({
-        destination: 'uploads/groups',
+        destination: resolveWritableDataPath('uploads', 'groups'),
         filename: groupAvatarFileName,
       }),
       limits: {
@@ -205,7 +206,7 @@ export class ChatController {
   @UseInterceptors(
     FileInterceptor('avatar', {
       storage: diskStorage({
-        destination: 'uploads/groups',
+        destination: resolveWritableDataPath('uploads', 'groups'),
         filename: groupAvatarFileName,
       }),
       limits: {
@@ -307,6 +308,36 @@ export class ChatController {
     return group;
   }
 
+  @Post('groups/:groupId/promote-admin')
+  @UseGuards(JwtGuard)
+  async promoteGroupAdmin(
+    @Req() req,
+    @Param('groupId') groupId: string,
+    @Body() body: { userId: string },
+  ) {
+    const group = await this.chatService.promoteGroupMember(
+      req.user.userId,
+      groupId,
+      body.userId,
+    );
+    this.chatGateway.emitConversationRefresh(
+      group.members.map((member) => member.userId),
+      { groupId },
+    );
+    return group;
+  }
+
+  @Post('groups/:groupId/leave')
+  @UseGuards(JwtGuard)
+  async leaveGroup(@Req() req, @Param('groupId') groupId: string) {
+    const result = await this.chatService.leaveGroup(req.user.userId, groupId);
+    this.chatGateway.emitConversationRefresh(
+      [req.user.userId, ...result.remainingMemberIds],
+      { groupId },
+    );
+    return result;
+  }
+
   @Get('permission')
   @UseGuards(JwtGuard)
   getChatPermission(@Req() req, @Query('userId') otherUserId: string) {
@@ -359,7 +390,7 @@ export class ChatController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: diskStorage({
-        destination: 'uploads/chat',
+        destination: resolveWritableDataPath('uploads', 'chat'),
         filename: attachmentFileName,
       }),
       limits: {

@@ -1,6 +1,7 @@
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
 
@@ -27,9 +28,18 @@ describe('ChatGateway', () => {
         {
           provide: PrismaService,
           useValue: {
+            groupMember: {
+              findMany: jest.fn(),
+            },
             user: {
               findUnique: jest.fn(),
             },
+          },
+        },
+        {
+          provide: RedisService,
+          useValue: {
+            getClient: jest.fn(),
           },
         },
       ],

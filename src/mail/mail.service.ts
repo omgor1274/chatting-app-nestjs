@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { appendFileSync, mkdirSync } from 'fs';
 import nodemailer, { Transporter } from 'nodemailer';
-import { join } from 'path';
+import { resolveWritableDataPath } from '../common/app-paths';
 
 type MailPayload = {
   to: string;
@@ -15,8 +15,7 @@ export class MailService {
   private readonly logger = new Logger(MailService.name);
   private readonly transporter?: Transporter;
   private readonly smtpTimeoutMs = Number(process.env.SMTP_TIMEOUT_MS ?? 5000);
-  private readonly mailboxPath = join(
-    process.cwd(),
+  private readonly mailboxPath = resolveWritableDataPath(
     'backups',
     'dev-mailbox.log',
   );
@@ -41,7 +40,7 @@ export class MailService {
         },
       });
     } else {
-      mkdirSync(join(process.cwd(), 'backups'), { recursive: true });
+      mkdirSync(resolveWritableDataPath('backups'), { recursive: true });
       this.logger.warn(
         'SMTP is not configured. Email previews will be written to backups/dev-mailbox.log',
       );
@@ -54,8 +53,16 @@ export class MailService {
     );
   }
 
+  isPreviewMailboxEnabled() {
+    return !this.transporter;
+  }
+
+  getPreviewMailboxPath() {
+    return this.mailboxPath;
+  }
+
   private writeMailboxPreview(payload: MailPayload) {
-    mkdirSync(join(process.cwd(), 'backups'), { recursive: true });
+    mkdirSync(resolveWritableDataPath('backups'), { recursive: true });
 
     appendFileSync(
       this.mailboxPath,

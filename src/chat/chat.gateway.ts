@@ -1,3 +1,4 @@
+import { Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import {
   ConnectedSocket,
   MessageBody,
@@ -9,8 +10,11 @@ import {
 } from '@nestjs/websockets';
 import { JwtService } from '@nestjs/jwt';
 import { MessageType } from '@prisma/client';
+import { randomUUID } from 'crypto';
+import Redis from 'ioredis';
 import { Server, Socket } from 'socket.io';
 import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { ChatService } from './chat.service';
 
 const socketAllowedOrigins = (
@@ -27,20 +31,243 @@ const socketAllowedOrigins = (
     origin: socketAllowedOrigins,
   },
 })
-export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class ChatGateway
+  implements
+    OnGatewayConnection,
+    OnGatewayDisconnect,
+    OnModuleInit,
+    OnModuleDestroy
+{
   @WebSocketServer()
   server!: Server;
+
+  private readonly logger = new Logger(ChatGateway.name);
+  private readonly instanceId = randomUUID();
+  private redisSubscriber?: Redis;
+  private redisEnabled = false;
+
+  private readonly onlineUsersRedisKey = 'ochat:presence:online-users';
+  private readonly presenceChannel = 'ochat:presence:sync';
+  private readonly typingChannel = 'ochat:typing:relay';
+  private readonly realtimeChannel = 'ochat:realtime:relay';
 
   constructor(
     private jwt: JwtService,
     private chatService: ChatService,
     private prisma: PrismaService,
+    private redisService: RedisService,
   ) {}
 
   private onlineUsers = new Map<string, Set<string>>();
 
-  private broadcastOnlineUsers() {
-    this.server.emit('onlineUsers', Array.from(this.onlineUsers.keys()));
+  async onModuleInit() {
+    const redisClient = await this.redisService.getClient();
+    if (!redisClient) {
+      this.redisEnabled = false;
+      this.logger.warn(
+        'Redis is unavailable. Realtime sync will stay on this single app instance only.',
+      );
+      return;
+    }
+
+    this.redisEnabled = true;
+    this.redisSubscriber = redisClient.duplicate();
+    if (this.redisSubscriber.status === 'wait') {
+      await this.redisSubscriber.connect();
+    }
+
+    await this.redisSubscriber.subscribe(
+      this.presenceChannel,
+      this.typingChannel,
+      this.realtimeChannel,
+    );
+
+    this.redisSubscriber.on('message', (channel, rawMessage) => {
+      void this.handleRedisMessage(channel, rawMessage);
+    });
+  }
+
+  async onModuleDestroy() {
+    if (!this.redisSubscriber || this.redisSubscriber.status === 'end') {
+      return;
+    }
+
+    await this.redisSubscriber.quit();
+  }
+
+  private async handleRedisMessage(channel: string, rawMessage: string) {
+    try {
+      const payload = JSON.parse(rawMessage);
+      if (payload.instanceId === this.instanceId) {
+        return;
+      }
+
+      if (channel === this.presenceChannel) {
+        await this.broadcastOnlineUsers();
+        return;
+      }
+
+      if (channel === this.typingChannel) {
+        if (!payload.fromUserId || !Array.isArray(payload.recipientUserIds)) {
+          return;
+        }
+
+        this.emitToUsers(payload.recipientUserIds, 'typing', {
+          fromUserId: payload.fromUserId,
+          groupId: payload.groupId ?? undefined,
+          isTyping: Boolean(payload.isTyping),
+        });
+        return;
+      }
+
+      if (channel === this.realtimeChannel) {
+        if (
+          typeof payload.eventName !== 'string'
+          || !Array.isArray(payload.recipientUserIds)
+        ) {
+          return;
+        }
+
+        this.emitToUsers(
+          payload.recipientUserIds,
+          payload.eventName,
+          payload.payload ?? null,
+        );
+      }
+    } catch {
+      return;
+    }
+  }
+
+  private async getRedisClient() {
+    return this.redisService.getClient();
+  }
+
+  private async getOnlineUserIds() {
+    if (!this.redisEnabled) {
+      return Array.from(this.onlineUsers.keys());
+    }
+
+    const redis = await this.getRedisClient();
+    if (!redis) {
+      return Array.from(this.onlineUsers.keys());
+    }
+
+    const presenceFields = await redis.hkeys(this.onlineUsersRedisKey);
+    return Array.from(
+      new Set(
+        presenceFields
+          .map((field) => field.split(':')[0])
+          .filter(Boolean),
+      ),
+    );
+  }
+
+  private async broadcastOnlineUsers() {
+    this.server.emit('onlineUsers', await this.getOnlineUserIds());
+  }
+
+  private async publishPresenceUpdate() {
+    const redis = await this.getRedisClient();
+    if (!redis) {
+      return;
+    }
+
+    await redis.publish(
+      this.presenceChannel,
+      JSON.stringify({ instanceId: this.instanceId, type: 'refresh' }),
+    );
+  }
+
+  private async publishTypingEvent(payload: {
+    fromUserId: string;
+    recipientUserIds: string[];
+    groupId?: string;
+    isTyping: boolean;
+  }) {
+    const redis = await this.getRedisClient();
+    if (!redis) {
+      return;
+    }
+
+    await redis.publish(
+      this.typingChannel,
+      JSON.stringify({
+        ...payload,
+        instanceId: this.instanceId,
+      }),
+    );
+  }
+
+  private emitToUsers(
+    userIds: Array<string | null | undefined>,
+    eventName: string,
+    payload: unknown,
+  ) {
+    for (const userId of Array.from(new Set(userIds.filter(Boolean)))) {
+      this.server.to(userId as string).emit(eventName, payload);
+    }
+  }
+
+  private async publishRealtimeEvent(
+    eventName: string,
+    userIds: Array<string | null | undefined>,
+    payload: unknown,
+  ) {
+    const recipientUserIds = Array.from(new Set(userIds.filter(Boolean)));
+    if (!recipientUserIds.length) {
+      return;
+    }
+
+    const redis = await this.getRedisClient();
+    if (!redis) {
+      return;
+    }
+
+    await redis.publish(
+      this.realtimeChannel,
+      JSON.stringify({
+        instanceId: this.instanceId,
+        eventName,
+        recipientUserIds,
+        payload,
+      }),
+    );
+  }
+
+  private relayToUsers(
+    userIds: Array<string | null | undefined>,
+    eventName: string,
+    payload: unknown,
+  ) {
+    this.emitToUsers(userIds, eventName, payload);
+    void this.publishRealtimeEvent(eventName, userIds, payload).catch(() => undefined);
+  }
+
+  private getPresenceRedisField(userId: string) {
+    return `${userId}:${this.instanceId}`;
+  }
+
+  private async markUserOnline(userId: string) {
+    const redis = await this.getRedisClient();
+    if (!redis) {
+      return;
+    }
+
+    await redis.hset(
+      this.onlineUsersRedisKey,
+      this.getPresenceRedisField(userId),
+      new Date().toISOString(),
+    );
+  }
+
+  private async markUserOffline(userId: string) {
+    const redis = await this.getRedisClient();
+    if (!redis) {
+      return;
+    }
+
+    await redis.hdel(this.onlineUsersRedisKey, this.getPresenceRedisField(userId));
   }
 
   private async getGroupMemberIds(groupId: string, excludeUserIds: string[] = []) {
@@ -63,17 +290,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const recipients = await this.getGroupMemberIds(message.groupId, [
         message.senderId,
       ]);
-      for (const userId of recipients) {
-        this.server.to(userId).emit('receiveMessage', message);
-      }
-      this.server.to(message.senderId).emit('messageSent', message);
+      this.relayToUsers(recipients, 'receiveMessage', message);
+      this.relayToUsers([message.senderId], 'messageSent', message);
       return;
     }
 
     if (message.receiverId) {
-      this.server.to(message.receiverId).emit('receiveMessage', message);
+      this.relayToUsers([message.receiverId], 'receiveMessage', message);
     }
-    this.server.to(message.senderId).emit('messageSent', message);
+    this.relayToUsers([message.senderId], 'messageSent', message);
   }
 
   async emitMessageUpdated(message: {
@@ -86,13 +311,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       ? await this.getGroupMemberIds(message.groupId)
       : [message.senderId, message.receiverId].filter(Boolean);
 
-    for (const userId of recipients as string[]) {
-      this.server.to(userId).emit('message:update', message);
-    }
+    this.relayToUsers(recipients as string[], 'message:update', message);
   }
 
   emitMessageHidden(userId: string, messageId: string) {
-    this.server.to(userId).emit('message:hidden', { messageId });
+    this.relayToUsers([userId], 'message:hidden', { messageId });
   }
 
   emitReadReceipt(payload: {
@@ -103,15 +326,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     userId: string;
   }) {
     if (payload.conversationType === 'direct' && payload.otherUserId) {
-      this.server.to(payload.otherUserId).emit('messages:read', payload);
+      this.relayToUsers([payload.otherUserId], 'messages:read', payload);
       return;
     }
 
     if (payload.groupId) {
       this.getGroupMemberIds(payload.groupId, [payload.userId]).then((members) => {
-        for (const userId of members) {
-          this.server.to(userId).emit('messages:read', payload);
-        }
+        this.relayToUsers(members, 'messages:read', payload);
       });
     }
   }
@@ -122,8 +343,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     receiverId: string;
     status: string;
   }) {
-    this.server.to(request.senderId).emit('request:update', request);
-    this.server.to(request.receiverId).emit('request:update', request);
+    this.relayToUsers(
+      [request.senderId, request.receiverId],
+      'request:update',
+      request,
+    );
   }
 
   emitThemeUpdate(payload: {
@@ -131,14 +355,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     contactUserId: string;
     chatTheme: string | null;
   }) {
-    this.server.to(payload.userId).emit('chat-theme:update', payload);
-    this.server.to(payload.contactUserId).emit('chat-theme:update', payload);
+    this.relayToUsers(
+      [payload.userId, payload.contactUserId],
+      'chat-theme:update',
+      payload,
+    );
   }
 
   emitConversationRefresh(userIds: string[], payload: Record<string, unknown>) {
-    for (const userId of Array.from(new Set(userIds.filter(Boolean)))) {
-      this.server.to(userId).emit('conversation:refresh', payload);
-    }
+    this.relayToUsers(userIds, 'conversation:refresh', payload);
   }
 
   private async authenticateSocketUser(client: Socket, disconnect = false) {
@@ -213,13 +438,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (data.groupId) {
       await this.chatService.getGroupDetails(sender.userId, data.groupId);
       const members = await this.getGroupMemberIds(data.groupId, [sender.userId]);
-      for (const userId of members) {
-        this.server.to(userId).emit('typing', {
-          fromUserId: sender.userId,
-          groupId: data.groupId,
-          isTyping: Boolean(data.isTyping),
-        });
-      }
+      this.emitToUsers(members, 'typing', {
+        fromUserId: sender.userId,
+        groupId: data.groupId,
+        isTyping: Boolean(data.isTyping),
+      });
+      await this.publishTypingEvent({
+        fromUserId: sender.userId,
+        recipientUserIds: members,
+        groupId: data.groupId,
+        isTyping: Boolean(data.isTyping),
+      });
       return;
     }
 
@@ -229,8 +458,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     await this.chatService.assertUsersCanChat(sender.userId, data.toUserId);
 
-    this.server.to(data.toUserId).emit('typing', {
+    this.emitToUsers([data.toUserId], 'typing', {
       fromUserId: sender.userId,
+      isTyping: Boolean(data.isTyping),
+    });
+    await this.publishTypingEvent({
+      fromUserId: sender.userId,
+      recipientUserIds: [data.toUserId],
       isTyping: Boolean(data.isTyping),
     });
   }
@@ -250,7 +484,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return { error: 'Invalid call request' };
     }
     await this.chatService.assertUsersCanChat(sender.userId, data.toUserId);
-    this.server.to(data.toUserId).emit('call:offer', {
+    this.relayToUsers([data.toUserId], 'call:offer', {
       fromUserId: sender.userId,
       offer: data.offer,
       callType: data.callType === 'video' ? 'video' : 'audio',
@@ -273,7 +507,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return { error: 'Invalid call answer' };
     }
     await this.chatService.assertUsersCanChat(sender.userId, data.toUserId);
-    this.server.to(data.toUserId).emit('call:answer', {
+    this.relayToUsers([data.toUserId], 'call:answer', {
       fromUserId: sender.userId,
       answer: data.answer,
       callType: data.callType === 'video' ? 'video' : 'audio',
@@ -295,7 +529,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return { error: 'Invalid ICE candidate' };
     }
     await this.chatService.assertUsersCanChat(sender.userId, data.toUserId);
-    this.server.to(data.toUserId).emit('call:ice', {
+    this.relayToUsers([data.toUserId], 'call:ice', {
       fromUserId: sender.userId,
       candidate: data.candidate,
     });
@@ -312,7 +546,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return { error: 'Invalid call decline' };
     }
     await this.chatService.assertUsersCanChat(sender.userId, data.toUserId);
-    this.server.to(data.toUserId).emit('call:decline', {
+    this.relayToUsers([data.toUserId], 'call:decline', {
       fromUserId: sender.userId,
     });
     return { success: true };
@@ -328,7 +562,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return { error: 'Invalid call end' };
     }
     await this.chatService.assertUsersCanChat(sender.userId, data.toUserId);
-    this.server.to(data.toUserId).emit('call:end', {
+    this.relayToUsers([data.toUserId], 'call:end', {
       fromUserId: sender.userId,
     });
     return { success: true };
@@ -343,10 +577,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const sockets = this.onlineUsers.get(user.userId) ?? new Set<string>();
     sockets.add(client.id);
     this.onlineUsers.set(user.userId, sockets);
-    this.broadcastOnlineUsers();
+    if (sockets.size === 1) {
+      await this.markUserOnline(user.userId);
+      await this.publishPresenceUpdate();
+    }
+    await this.broadcastOnlineUsers();
   }
 
-  handleDisconnect(client: Socket) {
+  async handleDisconnect(client: Socket) {
     const user = client.data.user;
     if (!user?.userId) {
       return;
@@ -360,11 +598,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     sockets.delete(client.id);
     if (sockets.size === 0) {
       this.onlineUsers.delete(user.userId);
+      await this.markUserOffline(user.userId);
+      await this.publishPresenceUpdate();
     } else {
       this.onlineUsers.set(user.userId, sockets);
     }
 
-    this.broadcastOnlineUsers();
+    await this.broadcastOnlineUsers();
   }
 
   @SubscribeMessage('sendMessage')

@@ -3,9 +3,16 @@ import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import express from 'express';
+import { config as loadEnv } from 'dotenv';
 import { mkdirSync } from 'fs';
-import { join } from 'path';
 import { AppModule } from './app.module';
+import {
+  getEnvFilePath,
+  resolveAppRootPath,
+  resolveWritableDataPath,
+} from './common/app-paths';
+
+loadEnv({ path: getEnvFilePath(), override: false });
 
 function readEnvNumber(name: string, fallback: number) {
   const raw = process.env[name];
@@ -39,12 +46,13 @@ function isAllowedLocalDevOrigin(origin: string) {
 }
 
 async function bootstrap() {
-  mkdirSync(join(process.cwd(), 'uploads', 'avatars'), { recursive: true });
-  mkdirSync(join(process.cwd(), 'uploads', 'chat'), { recursive: true });
-  mkdirSync(join(process.cwd(), 'uploads', 'groups'), { recursive: true });
-  mkdirSync(join(process.cwd(), 'uploads', 'chat-themes'), { recursive: true });
-  mkdirSync(join(process.cwd(), 'backups'), { recursive: true });
-  mkdirSync(join(process.cwd(), 'public'), { recursive: true });
+  mkdirSync(resolveWritableDataPath('uploads', 'avatars'), { recursive: true });
+  mkdirSync(resolveWritableDataPath('uploads', 'chat'), { recursive: true });
+  mkdirSync(resolveWritableDataPath('uploads', 'groups'), { recursive: true });
+  mkdirSync(resolveWritableDataPath('uploads', 'chat-themes'), {
+    recursive: true,
+  });
+  mkdirSync(resolveWritableDataPath('backups'), { recursive: true });
 
   const app = await NestFactory.create(AppModule);
   const expressApp = app.getHttpAdapter().getInstance();
@@ -144,20 +152,20 @@ async function bootstrap() {
   );
   app.use(
     '/public',
-    express.static(join(process.cwd(), 'public'), {
+    express.static(resolveAppRootPath('public'), {
       maxAge: '1d',
       index: false,
     }),
   );
   app.use(
-    express.static(join(process.cwd(), 'public'), {
+    express.static(resolveAppRootPath('public'), {
       maxAge: '1d',
       index: false,
     }),
   );
   app.use(
     '/uploads',
-    express.static(join(process.cwd(), 'uploads'), {
+    express.static(resolveWritableDataPath('uploads'), {
       maxAge: '1d',
       index: false,
     }),

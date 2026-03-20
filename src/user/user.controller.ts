@@ -15,6 +15,7 @@ import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { JwtGuard } from '../auth/jwt/jwt.guard';
 import { ChatGateway } from '../chat/chat.gateway';
+import { resolveWritableDataPath } from '../common/app-paths';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ContactNicknameDto } from './dto/contact-nickname.dto';
 import {
@@ -162,7 +163,7 @@ export class UserController {
   @UseInterceptors(
     FileInterceptor('theme', {
       storage: diskStorage({
-        destination: 'uploads/chat-themes',
+        destination: resolveWritableDataPath('uploads', 'chat-themes'),
         filename: contactThemeFileName,
       }),
       limits: {
@@ -252,7 +253,7 @@ export class UserController {
   @UseInterceptors(
     FileInterceptor('avatar', {
       storage: diskStorage({
-        destination: 'uploads/avatars',
+        destination: resolveWritableDataPath('uploads', 'avatars'),
         filename: avatarFileName,
       }),
       limits: {
