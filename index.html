@@ -54,7 +54,7 @@
                   Login
                 </button>
                 <button type="button" id="forgot-password-btn" onclick="showForgotPasswordStep()"
-                  class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+                  class="hidden w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
                   Forgot Password
                 </button>
                 <p onclick="toggleAuthMode()" id="auth-switch"
@@ -65,7 +65,7 @@
               <div id="verification-step" class="hidden space-y-4">
                 <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
                   <p id="verification-message" class="leading-6">
-                    Enter the 6-digit OTP sent to your email.
+                    Email verification is disabled for this app.
                   </p>
                   <p class="mt-2 font-semibold text-slate-900" id="verification-email">
                     your-email@example.com
@@ -95,8 +95,7 @@
               <div id="forgot-password-step" class="hidden space-y-4">
                 <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
                   <p class="leading-6">
-                    Enter your email and we will send a 6-digit OTP to reset
-                    your password.
+                    Password reset by email is disabled for this app.
                   </p>
                 </div>
                 <input id="forgot-email-input" type="email" placeholder="Email Address"
@@ -116,7 +115,7 @@
               <div id="reset-password-step" class="hidden space-y-4">
                 <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
                   <p id="reset-password-message" class="leading-6">
-                    Enter your email, the 6-digit OTP, and a new password.
+                    Password reset by email is disabled for this app.
                   </p>
                 </div>
                 <input id="reset-email-input" type="email" placeholder="Email Address"

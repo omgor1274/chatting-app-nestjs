@@ -735,7 +735,7 @@ const isFileOrigin = window.location.protocol === 'file:';
         : 'Create Account';
       document.getElementById('auth-subtitle').innerText = isLogin
         ? 'Login to continue.'
-        : 'Create your account and verify your email.';
+        : 'Create your account to start chatting.';
       document.getElementById('auth-switch').innerText = isLogin
         ? 'New here? Create an account'
         : 'Already have an account? Login';
@@ -747,7 +747,7 @@ const isFileOrigin = window.location.protocol === 'file:';
         .classList.toggle('hidden', isLogin);
       document
         .getElementById('forgot-password-btn')
-        .classList.toggle('hidden', !isLogin);
+        .classList.add('hidden');
     }
 
     function showAuthForm() {
@@ -1011,28 +1011,14 @@ const isFileOrigin = window.location.protocol === 'file:';
       );
       updateBackupSettingsAvailability();
 
-      if (currentUser.pendingEmail) {
-        note.innerText = `Email change pending verification: ${currentUser.pendingEmail}`;
-        note.classList.remove('hidden');
-        confirmWrap.classList.remove('hidden');
-        confirmCopy.innerText = `Enter the 6-digit OTP sent to ${currentUser.pendingEmail} to finish changing your email.`;
-        pendingOtpWrap.classList.remove('hidden');
-      } else {
-        note.classList.add('hidden');
-        note.innerText = '';
-        confirmWrap.classList.add('hidden');
-        confirmCopy.innerText =
-          'Enter the 6-digit OTP sent to your new email address.';
-        pendingOtpWrap.classList.add('hidden');
-        pendingOtpInput.value = '';
-        confirmOtpInput.value = '';
-      }
-
-      verificationStatus.innerText = currentUser.pendingEmail
-        ? `Current email: ${currentUser.email}. Pending verification for ${currentUser.pendingEmail}. Enter the OTP below to finish the change.`
-        : currentUser.emailVerified
-          ? `Verified email: ${currentUser.email}`
-          : `Email not verified yet: ${currentUser.email}`;
+      note.classList.add('hidden');
+      note.innerText = '';
+      confirmWrap.classList.add('hidden');
+      confirmCopy.innerText = 'Email changes apply immediately.';
+      pendingOtpWrap.classList.add('hidden');
+      pendingOtpInput.value = '';
+      confirmOtpInput.value = '';
+      verificationStatus.innerText = `Email: ${currentUser.email}`;
 
       renderBlockedUsers();
     }
@@ -1688,28 +1674,7 @@ const isFileOrigin = window.location.protocol === 'file:';
     }
 
     async function processAuthLink() {
-      const url = new URL(window.location.href);
-      const verifyToken = url.searchParams.get('verify');
-      const resetPasswordToken = url.searchParams.get('reset');
-
-      if (verifyToken) {
-        setAuthMode(false);
-        showAuthForm();
-        showAuthFeedback(
-          'Email verification now happens during signup with a 6-digit OTP.',
-          'info',
-        );
-        normalizeSearchParams(['verify']);
-      }
-
-      if (resetPasswordToken) {
-        setAuthMode(true);
-        showForgotPasswordStep(
-          '',
-          'Password reset now uses a 6-digit OTP. Request a new code below.',
-        );
-        normalizeSearchParams(['reset']);
-      }
+      normalizeSearchParams(['verify', 'reset']);
     }
 
     function toggleAuthMode() {
@@ -1777,31 +1742,30 @@ const isFileOrigin = window.location.protocol === 'file:';
           return;
         }
 
-        if (isLogin) {
-          token = data.token || data.access_token;
-          if (!token) {
-            showAuthFeedback(
-              'Authentication failed: No token received',
-              'error',
-            );
-            return;
-          }
-
+        const authToken = data.token || data.access_token;
+        if (authToken) {
+          token = authToken;
           localStorage.setItem('chat_token', token);
           showAuthFeedback('', 'info');
           await startApp();
           return;
         }
 
-        setAuthMode(false);
+        if (isLogin) {
+          showAuthFeedback(
+            'Authentication failed: No token received',
+            'error',
+          );
+          return;
+        }
+
+        setAuthMode(true);
+        showAuthForm();
+        document.getElementById('email-input').value = email;
         document.getElementById('password-input').value = '';
-        showVerificationStep(
-          email,
-          buildOtpPreviewMessage(
-            data,
-            data.message ||
-              'Registration successful. Enter the 6-digit OTP sent to your email.',
-          ),
+        showAuthFeedback(
+          data.message || 'Registration successful. Please log in.',
+          'success',
         );
       } catch (error) {
         if (error instanceof TypeError) {

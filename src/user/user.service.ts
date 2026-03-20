@@ -593,7 +593,7 @@ export class UserService {
       data: {
         ...(name ? { name } : {}),
         ...(email && email !== currentUser.email
-          ? { pendingEmail: email }
+          ? { email, pendingEmail: null, emailVerified: true }
           : {}),
       },
       select: {
@@ -615,121 +615,26 @@ export class UserService {
       },
     });
 
-    if (email && email !== currentUser.email) {
-      await this.sendVerificationOtp(
-        userId,
-        email,
-        AuthTokenType.VERIFY_PENDING_EMAIL,
-      );
-    }
-
     return {
       ...this.serializeProfile(user),
       message:
         email && email !== currentUser.email
-          ? `Profile updated. Verify ${email} before it replaces your current email.`
+          ? `Profile updated. Your email is now ${email}.`
           : 'Profile updated successfully.',
     };
   }
 
-  async resendEmailVerification(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        pendingEmail: true,
-        emailVerified: true,
-      },
-    });
-
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    if (user.pendingEmail) {
-      await this.sendVerificationOtp(
-        user.id,
-        user.pendingEmail,
-        AuthTokenType.VERIFY_PENDING_EMAIL,
-      );
-      return {
-        success: true,
-        message: `Verification OTP re-sent to ${user.pendingEmail}.`,
-      };
-    }
-
-    if (user.emailVerified) {
-      return {
-        success: true,
-        message: 'Your current email is already verified.',
-      };
-    }
-
-    await this.sendVerificationOtp(
-      user.id,
-      user.email,
-      AuthTokenType.VERIFY_EMAIL,
-    );
-
+  async resendEmailVerification(_userId: string) {
     return {
       success: true,
-      message: `Verification OTP re-sent to ${user.email}.`,
+      message: 'Email verification is disabled for this app.',
     };
   }
 
-  async verifyPendingEmail(userId: string, otp: string) {
-    if (!otp?.trim()) {
-      throw new BadRequestException('OTP is required');
-    }
-
-    if (!/^\d{6}$/.test(otp.trim())) {
-      throw new BadRequestException('OTP must be a 6-digit code');
-    }
-
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        pendingEmail: true,
-      },
-    });
-
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    if (!user.pendingEmail) {
-      throw new BadRequestException('There is no pending email to verify');
-    }
-
-    await this.assertEmailAvailable(user.pendingEmail, user.id);
-    const token = await this.getUsableVerificationOtp(
-      user.id,
-      AuthTokenType.VERIFY_PENDING_EMAIL,
-      user.pendingEmail,
-      otp,
-    );
-
-    await Promise.all([
-      this.prisma.user.update({
-        where: { id: user.id },
-        data: {
-          email: user.pendingEmail,
-          pendingEmail: null,
-          emailVerified: true,
-        },
-      }),
-      this.prisma.authToken.update({
-        where: { id: token.id },
-        data: { consumedAt: new Date() },
-      }),
-    ]);
-
+  async verifyPendingEmail(_userId: string, _otp: string) {
     return {
       success: true,
-      message: 'Email updated and verified successfully.',
+      message: 'Email verification is disabled for this app.',
     };
   }
 

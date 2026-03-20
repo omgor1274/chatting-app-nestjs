@@ -1,6 +1,5 @@
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
-import { MailService } from '../mail/mail.service';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -20,11 +19,8 @@ describe('AuthService', () => {
       update: jest.Mock;
     };
   };
-  let mailService: {
-    sendVerificationEmail: jest.Mock;
-    sendPasswordResetEmail: jest.Mock;
-    isPreviewMailboxEnabled: jest.Mock;
-    getPreviewMailboxPath: jest.Mock;
+  let jwtService: {
+    sign: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -43,11 +39,8 @@ describe('AuthService', () => {
       },
     };
 
-    mailService = {
-      sendVerificationEmail: jest.fn(),
-      sendPasswordResetEmail: jest.fn(),
-      isPreviewMailboxEnabled: jest.fn(() => true),
-      getPreviewMailboxPath: jest.fn(() => 'backups/dev-mailbox.log'),
+    jwtService = {
+      sign: jest.fn(() => 'signed-token'),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -59,13 +52,7 @@ describe('AuthService', () => {
         },
         {
           provide: JwtService,
-          useValue: {
-            sign: jest.fn(),
-          },
-        },
-        {
-          provide: MailService,
-          useValue: mailService,
+          useValue: jwtService,
         },
       ],
     }).compile();
@@ -82,20 +69,21 @@ describe('AuthService', () => {
     expect(service).toBeDefined();
   });
 
-  it('returns a local otp preview after registration when smtp preview mode is enabled', async () => {
+  it('registers and immediately returns an auth token', async () => {
     prismaService.user.findFirst.mockResolvedValue(null);
     prismaService.user.create.mockResolvedValue({
       id: 'user-1',
       email: 'user@example.com',
       name: 'User',
       avatar: null,
-      emailVerified: false,
+      emailVerified: true,
       pendingEmail: null,
       backupEnabled: true,
       backupImages: true,
       backupVideos: true,
       backupFiles: true,
       darkMode: false,
+      tokenVersion: 0,
     });
 
     const result = await service.register({
@@ -104,29 +92,14 @@ describe('AuthService', () => {
       password: 'secret123',
     });
 
-    expect(result.devOtp).toMatch(/^\d{6}$/);
-    expect(result.devMailboxPath).toBe('backups/dev-mailbox.log');
-    expect(mailService.sendVerificationEmail).toHaveBeenCalledWith(
-      'user@example.com',
-      result.devOtp,
-      expect.any(Number),
-    );
+    expect(result.token).toBe('signed-token');
+    expect(result.user.emailVerified).toBe(true);
+    expect(jwtService.sign).toHaveBeenCalled();
   });
 
-  it('returns a local otp preview for password reset when smtp preview mode is enabled', async () => {
-    prismaService.user.findUnique.mockResolvedValue({
-      id: 'user-1',
-      email: 'user@example.com',
-    });
-
-    const result = await service.requestPasswordReset('user@example.com');
-
-    expect(result.devOtp).toMatch(/^\d{6}$/);
-    expect(result.devMailboxPath).toBe('backups/dev-mailbox.log');
-    expect(mailService.sendPasswordResetEmail).toHaveBeenCalledWith(
-      'user@example.com',
-      result.devOtp,
-      expect.any(Number),
-    );
+  it('rejects password reset when email recovery is disabled', async () => {
+    await expect(
+      service.requestPasswordReset('user@example.com'),
+    ).rejects.toThrow('Password reset by email is disabled');
   });
 });
