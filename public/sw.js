@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ochat-shell-v2';
+const CACHE_NAME = 'ochat-shell-v3';
 const APP_SHELL = [
   '/',
   '/public/app.css',
@@ -62,12 +62,8 @@ self.addEventListener('fetch', (event) => {
   }
 
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-
-      return fetch(event.request).then((networkResponse) => {
+    fetch(event.request)
+      .then((networkResponse) => {
         if (networkResponse && networkResponse.ok) {
           const responseClone = networkResponse.clone();
           caches
@@ -76,8 +72,8 @@ self.addEventListener('fetch', (event) => {
         }
 
         return networkResponse;
-      });
-    }),
+      })
+      .catch(() => caches.match(event.request)),
   );
 });
 
