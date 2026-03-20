@@ -24,12 +24,13 @@ Important env vars for the first launch:
 You still need:
 - a Postgres database
 - a real `JWT_SECRET`
-- SMTP configured so OTP emails reach users
+- SMTP only if you want email features such as pending-email confirmation later
 
 You do not need for the first launch:
 - Redis
 - Cloudinary
 - desktop packaging
+- OTP signup emails
 
 Beginner flow:
 1. Push this repo to GitHub again after these deployment changes.
@@ -42,7 +43,12 @@ Beginner flow:
 8. Add a volume mounted at `/data`.
 9. Add the environment variables from `.env.example`.
 10. Deploy and wait for `/health` to go green.
-11. Open the Railway domain and test signup, OTP email, login, and sending a message.
+11. Open the Railway domain and test signup, direct login, and sending a message.
+
+If the website still shows an old OTP signup screen after deployment:
+- hard refresh the page once
+- unregister the old service worker in the browser
+- redeploy Railway so the latest `index.html` and `sw.js` go live together
 
 Local verification before Railway:
 - Set `DATABASE_URL` in `.env` to the pooled Neon connection string.

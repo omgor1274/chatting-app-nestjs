@@ -45,6 +45,22 @@ function isAllowedLocalDevOrigin(origin: string) {
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin.trim());
 }
 
+function setStaticAssetHeaders(
+  res: express.Response,
+  filePath: string,
+) {
+  const normalizedPath = filePath.replaceAll('\\', '/');
+
+  if (normalizedPath.endsWith('/sw.js')) {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    return;
+  }
+
+  if (normalizedPath.endsWith('/manifest.webmanifest')) {
+    res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+  }
+}
+
 async function bootstrap() {
   mkdirSync(resolveWritableDataPath('uploads', 'avatars'), { recursive: true });
   mkdirSync(resolveWritableDataPath('uploads', 'chat'), { recursive: true });
@@ -155,12 +171,14 @@ async function bootstrap() {
     express.static(resolveAppRootPath('public'), {
       maxAge: '1d',
       index: false,
+      setHeaders: setStaticAssetHeaders,
     }),
   );
   app.use(
     express.static(resolveAppRootPath('public'), {
       maxAge: '1d',
       index: false,
+      setHeaders: setStaticAssetHeaders,
     }),
   );
   app.use(
