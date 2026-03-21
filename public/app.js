@@ -311,7 +311,8 @@ async function decryptTextMessage(message) {
   }
 
   if (
-    message.displayText !== undefined &&
+    typeof message.displayText === 'string' &&
+    message.displayText.trim() &&
     !['Decrypting message...', 'Decrypting message…'].includes(
       String(message.displayText),
     )
@@ -501,14 +502,30 @@ function createRenderableMessage(message) {
     renderable.displayText =
       renderable.content ||
       renderable.displayText ||
-      (renderable.isEncrypted
-        ? 'Decrypting message...'
-        : renderable.ciphertext || '');
+      renderable.ciphertext ||
+      '';
   } else {
     renderable.displayText = renderable.content || '';
   }
 
   return renderable;
+}
+
+function getResolvedMessageText(message) {
+  if (!message) {
+    return '[Encrypted message]';
+  }
+
+  const text = String(message.displayText || message.content || '').trim();
+  if (text) {
+    return text;
+  }
+
+  if (message.isEncrypted && message.messageType === 'TEXT') {
+    return 'Decrypting message...';
+  }
+
+  return '[Encrypted message]';
 }
 
 async function hydrateAndRefreshMessage(message) {
@@ -1512,12 +1529,51 @@ function closeComposerActionsMenu() {
 }
 
 function toggleChatActionsMenu() {
-  document.getElementById('chat-actions-menu').classList.toggle('hidden');
+  const menu = document.getElementById('chat-actions-menu');
+  const isHidden = menu.classList.contains('hidden');
+  menu.classList.toggle('hidden');
+  if (isHidden) {
+    updateChatActionsMenuPosition();
+  }
   closeComposerActionsMenu();
 }
 
 function closeChatActionsMenu() {
-  document.getElementById('chat-actions-menu').classList.add('hidden');
+  const menu = document.getElementById('chat-actions-menu');
+  menu.classList.add('hidden');
+  menu.style.left = '';
+  menu.style.top = '';
+}
+
+function updateChatActionsMenuPosition() {
+  const menu = document.getElementById('chat-actions-menu');
+  const button = document.getElementById('chat-actions-btn');
+
+  if (!menu || !button || menu.classList.contains('hidden')) {
+    return;
+  }
+
+  menu.style.left = '0px';
+  menu.style.top = '0px';
+
+  const buttonRect = button.getBoundingClientRect();
+  const menuRect = menu.getBoundingClientRect();
+  const padding = 16;
+  const maxLeft = Math.max(
+    padding,
+    window.innerWidth - menuRect.width - padding,
+  );
+  const left = Math.min(
+    Math.max(padding, buttonRect.right - menuRect.width),
+    maxLeft,
+  );
+  const top = Math.min(
+    buttonRect.bottom + 8,
+    Math.max(padding, window.innerHeight - menuRect.height - padding),
+  );
+
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
 }
 
 function applyViewportHeight() {
@@ -3187,7 +3243,7 @@ function getMessagePreview(message) {
   if (message.messageType === 'DOCUMENT') {
     return message.fileName ? `File: ${message.fileName}` : 'Document';
   }
-  return message.displayText || message.content || 'Encrypted message';
+  return getResolvedMessageText(message);
 }
 
 function belongsToSelectedConversation(message) {
@@ -4735,7 +4791,7 @@ function createMessageElement(message) {
   } else {
     div.innerHTML = `
             <div class="${bubbleTone} w-fit max-w-[min(100%,42rem)] px-4 py-3 text-sm leading-7">
-              ${escapeHtml(message.displayText || message.content || '[Encrypted message]')}
+              ${escapeHtml(getResolvedMessageText(message))}
               ${footer}
             </div>
           `;
@@ -5215,6 +5271,14 @@ document.addEventListener(
 
 window.addEventListener('resize', syncLayout);
 window.addEventListener('resize', scheduleViewportHeight);
+window.addEventListener('resize', updateChatActionsMenuPosition);
+window.addEventListener(
+  'scroll',
+  () => {
+    updateChatActionsMenuPosition();
+  },
+  true,
+);
 window.addEventListener('beforeinstallprompt', (event) => {
   event.preventDefault();
   deferredInstallPrompt = event;
