@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ochat-shell-v3';
+const CACHE_NAME = 'ochat-shell-v4';
 const APP_SHELL = [
   '/',
   '/public/app.css',
@@ -101,17 +101,19 @@ self.addEventListener('notificationclick', (event) => {
   const targetUrl = event.notification.data?.url || '/';
 
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if ('focus' in client) {
-          client.postMessage({ type: 'notification-click', url: targetUrl });
-          return client.focus();
+    clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then((clientList) => {
+        for (const client of clientList) {
+          if ('focus' in client) {
+            client.postMessage({ type: 'notification-click', url: targetUrl });
+            return client.focus();
+          }
         }
-      }
 
-      if (clients.openWindow) {
-        return clients.openWindow(targetUrl);
-      }
-    }),
+        if (clients.openWindow) {
+          return clients.openWindow(targetUrl);
+        }
+      }),
   );
 });

@@ -8,11 +8,11 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="O-chat" />
     <title>O-chat</title>
-    <link rel="manifest" href="/manifest.webmanifest?v=20260321" />
+    <link rel="manifest" href="/manifest.webmanifest?v=20260321-desktopfix" />
     <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="./public/app.css?v=20260321" />
+    <link rel="stylesheet" href="./public/app.css?v=20260321-desktopfix" />
   </head>
 
   <body
@@ -1571,7 +1571,7 @@
       import {
         hasValidSession,
         loadPublicConfig,
-      } from '/public/runtime.js?v=20260321';
+      } from '/public/runtime.js?v=20260321-desktopfix';
 
       const loadScript = (src) =>
         new Promise((resolve, reject) => {
@@ -1589,7 +1589,7 @@
         window.location.replace('/auth');
       } else {
         loadScript('https://cdn.socket.io/4.7.2/socket.io.min.js')
-          .then(() => loadScript('/public/app.js?v=20260321'))
+          .then(() => loadScript('/public/app.js?v=20260321-desktopfix'))
           .catch((error) =>
             console.error('Failed to load chat runtime', error),
           );
