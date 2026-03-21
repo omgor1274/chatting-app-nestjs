@@ -577,6 +577,7 @@ body.dark-mode #empty-state > div {
 }
 
 body.dark-mode .bg-white,
+body.dark-mode .bg-white\/95,
 body.dark-mode .bg-white\/70,
 body.dark-mode .bg-white\/85,
 body.dark-mode .bg-white\/88,

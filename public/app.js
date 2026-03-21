@@ -1582,7 +1582,8 @@ function closeComposerActionsMenu() {
 }
 
 function toggleChatActionsMenu(event) {
-  event?.stopPropagation();
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
   const menu = document.getElementById('chat-actions-menu');
   const isOpening = menu.classList.contains('hidden');
   closeComposerActionsMenu();
@@ -1608,6 +1609,21 @@ function closeChatActionsMenu() {
   menu.style.bottom = '';
   menu.style.width = '';
   menu.style.maxHeight = '';
+}
+
+function bindChatActionMenuButton() {
+  const button = document.getElementById('chat-actions-btn');
+  if (!button || button.dataset.bound === '1') {
+    return;
+  }
+
+  button.dataset.bound = '1';
+  button.addEventListener('click', (event) => {
+    toggleChatActionsMenu(event);
+  });
+  button.addEventListener('touchend', (event) => {
+    toggleChatActionsMenu(event);
+  });
 }
 
 function updateChatActionsMenuPosition() {
@@ -2886,6 +2902,16 @@ async function handleIncomingMessage(message, isOwnMessage) {
   const hydratedMessage = createRenderableMessage(message);
   const chatUserId =
     message.groupId || (isOwnMessage ? message.receiverId : message.senderId);
+
+  if (chatUserId && !users.some((user) => user.id === chatUserId)) {
+    void loadUsers().catch((error) => {
+      console.error(
+        'Failed to refresh conversations for incoming message',
+        error,
+      );
+    });
+  }
+
   updateRecentActivity(
     chatUserId,
     hydratedMessage,
@@ -2911,7 +2937,9 @@ async function handleIncomingMessage(message, isOwnMessage) {
 }
 
 async function selectUser(userId) {
-  selectedUser = users.find((user) => user.id === userId) || null;
+  const fallbackUser = getSearchUserPool().find((user) => user.id === userId);
+  selectedUser =
+    users.find((user) => user.id === userId) || fallbackUser || null;
   renderedMessageIds = new Set();
   conversationMessages = new Map();
   messagePagination = {
@@ -2922,6 +2950,10 @@ async function selectUser(userId) {
   };
 
   if (!selectedUser) return;
+
+  if (!users.some((user) => user.id === selectedUser.id)) {
+    users = [selectedUser, ...users];
+  }
 
   if (window.innerWidth < 1024) {
     closeSidebar();
@@ -5512,6 +5544,7 @@ if (window.visualViewport) {
 applyViewportHeight();
 updateInstallAppUI();
 updateVoiceComposerUI();
+bindChatActionMenuButton();
 ensureServiceWorkerReady().catch((error) => {
   console.error(error);
 });
