@@ -770,7 +770,9 @@
                 </p>
               </div>
               <button
-                onclick="document.getElementById('avatar-input').click()"
+                id="profile-avatar-btn"
+                type="button"
+                onclick="openMyAvatarPicker()"
                 class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               >
                 Update Photo
@@ -844,6 +846,8 @@
                 </div>
               </div>
               <button
+                id="save-profile-btn"
+                type="button"
                 onclick="saveProfile()"
                 class="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700"
               >

@@ -37,6 +37,8 @@ let reloadUsersAfterCurrentLoad = false;
 let renderedUserSignatures = new Map();
 let composerSendInFlight = false;
 let pendingOptimisticMessageIdsByRoom = new Map();
+let lastSubmittedDraftFingerprint = '';
+let lastSubmittedDraftAt = 0;
 let messagePagination = {
   nextBefore: null,
   hasMore: false,
@@ -544,6 +546,49 @@ function createOptimisticTextMessage(text) {
       : 1,
     readByCount: 0,
   };
+}
+
+function buildDraftFingerprint({ roomId, text, attachmentFile, voiceFile }) {
+  const describeFile = (file) =>
+    file
+      ? `${file.name || 'file'}:${file.size || 0}:${file.lastModified || 0}:${file.type || ''}`
+      : '';
+
+  return [
+    roomId || '',
+    (text || '').trim(),
+    describeFile(attachmentFile),
+    describeFile(voiceFile),
+  ].join('|');
+}
+
+function markDraftSubmitted(fingerprint) {
+  if (!fingerprint) {
+    return;
+  }
+
+  lastSubmittedDraftFingerprint = fingerprint;
+  lastSubmittedDraftAt = Date.now();
+}
+
+function clearDraftSubmissionGuard(fingerprint) {
+  if (!fingerprint || fingerprint !== lastSubmittedDraftFingerprint) {
+    return;
+  }
+
+  lastSubmittedDraftFingerprint = '';
+  lastSubmittedDraftAt = 0;
+}
+
+function shouldSkipDuplicateDraft(fingerprint) {
+  if (!fingerprint) {
+    return false;
+  }
+
+  return (
+    fingerprint === lastSubmittedDraftFingerprint &&
+    Date.now() - lastSubmittedDraftAt < 1800
+  );
 }
 
 function setComposerSendingState(isSending, label = 'Send') {
@@ -1407,6 +1452,16 @@ function closeImagePreview() {
   document.getElementById('image-preview-src').src = '';
 }
 
+function openMyAvatarPicker() {
+  const input = document.getElementById('avatar-input');
+  if (!input) {
+    return;
+  }
+
+  input.value = '';
+  input.click();
+}
+
 function toggleComposerActionsMenu() {
   document.getElementById('composer-actions-menu').classList.toggle('hidden');
   closeChatActionsMenu();
@@ -1939,49 +1994,65 @@ async function loadProfile() {
 async function saveProfile() {
   if (!currentUser) return;
 
+  const saveButton = document.getElementById('save-profile-btn');
   const name = document.getElementById('profile-name-input').value.trim();
   const email = document.getElementById('profile-email-input').value.trim();
 
-  const res = await api('/users/me', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, email }),
-  });
-  const data = await readJsonResponse(
-    res,
-    {},
-    'Failed to update profile. The server returned an invalid response.',
-  );
+  if (saveButton) {
+    saveButton.disabled = true;
+    saveButton.classList.add('opacity-70', 'cursor-wait');
+    saveButton.innerHTML =
+      '<span class="inline-flex items-center gap-2"><span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white"></span><span>Saving...</span></span>';
+  }
 
-  if (!res.ok) {
-    alert(
-      Array.isArray(data.message)
-        ? data.message.join(', ')
-        : data.message || 'Failed to update profile',
+  try {
+    const res = await api('/users/me', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email }),
+    });
+    const data = await readJsonResponse(
+      res,
+      {},
+      'Failed to update profile. The server returned an invalid response.',
     );
-    return;
+
+    if (!res.ok) {
+      alert(
+        Array.isArray(data.message)
+          ? data.message.join(', ')
+          : data.message || 'Failed to update profile',
+      );
+      return;
+    }
+
+    applyCurrentUser(data);
+    users = users.map((user) =>
+      user.id === currentUser.id
+        ? normalizeUser({ ...user, ...data }, user)
+        : user,
+    );
+    syncSelectedUser();
+    renderUsers();
+    updateSelectedUserHeader();
+    alert(data.message || 'Profile updated');
+
+    if (data.pendingEmail) {
+      document.getElementById('settings-email-confirm-otp-input').value = '';
+      document.getElementById('settings-pending-email-otp-input').value = '';
+      updateSettingsUI();
+      document.getElementById('settings-email-confirm-otp-input').focus();
+      return;
+    }
+
+    closeProfileModal();
+  } finally {
+    if (saveButton) {
+      saveButton.disabled = false;
+      saveButton.classList.remove('opacity-70', 'cursor-wait');
+      saveButton.textContent = 'Save Profile';
+    }
   }
-
-  applyCurrentUser(data);
-  users = users.map((user) =>
-    user.id === currentUser.id
-      ? normalizeUser({ ...user, ...data }, user)
-      : user,
-  );
-  syncSelectedUser();
-  renderUsers();
-  updateSelectedUserHeader();
-  alert(data.message || 'Profile updated');
-
-  if (data.pendingEmail) {
-    document.getElementById('settings-email-confirm-otp-input').value = '';
-    document.getElementById('settings-pending-email-otp-input').value = '';
-    updateSettingsUI();
-    document.getElementById('settings-email-confirm-otp-input').focus();
-    return;
-  }
-
-  closeProfileModal();
 }
 
 async function saveSettings() {
@@ -3200,17 +3271,29 @@ async function sendMessage() {
   const attachmentFile =
     fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
   const voiceFile = recordedAudioFile;
+  const draftFingerprint = buildDraftFingerprint({
+    roomId: selectedConversationRoomId(),
+    text,
+    attachmentFile,
+    voiceFile,
+  });
+
+  if (!text && !attachmentFile && !voiceFile) {
+    return;
+  }
+
+  if (shouldSkipDuplicateDraft(draftFingerprint)) {
+    return;
+  }
+
   const optimisticMessage = text ? createOptimisticTextMessage(text) : null;
 
   try {
     setComposerSendingState(true);
+    markDraftSubmitted(draftFingerprint);
     const canChat = await ensureChatPermissionReady();
     if (!canChat) {
       alert('Accept a chat request before sending messages.');
-      return;
-    }
-
-    if (!text && !attachmentFile && !voiceFile) {
       return;
     }
 
@@ -3252,6 +3335,7 @@ async function sendMessage() {
       clearRecordedAudio();
     }
   } catch (error) {
+    clearDraftSubmissionGuard(draftFingerprint);
     if (optimisticMessage) {
       removeOptimisticMessage(optimisticMessage.id);
       const roomId = optimisticMessage.groupId || optimisticMessage.receiverId;
@@ -3849,24 +3933,50 @@ function handleAttachmentSelected() {
 
 async function uploadMyAvatar() {
   const input = document.getElementById('avatar-input');
+  const button = document.getElementById('profile-avatar-btn');
   if (!input.files || !input.files[0]) return;
 
   const formData = new FormData();
   formData.append('avatar', input.files[0]);
 
-  const res = await api('/users/profile/avatar', {
-    method: 'POST',
-    body: formData,
-  });
-  const data = await readJsonResponse(res, {}, 'Failed to upload your avatar.');
-
-  if (!res.ok) {
-    alert(data.message || 'Failed to upload avatar');
-    return;
+  if (button) {
+    button.disabled = true;
+    button.classList.add('opacity-70', 'cursor-wait');
+    button.textContent = 'Uploading...';
   }
 
-  applyCurrentUser({ ...currentUser, ...data });
-  input.value = '';
+  try {
+    const res = await api('/users/profile/avatar', {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await readJsonResponse(
+      res,
+      {},
+      'Failed to upload your avatar.',
+    );
+
+    if (!res.ok) {
+      alert(data.message || 'Failed to upload avatar');
+      return;
+    }
+
+    applyCurrentUser(data);
+    users = users.map((user) =>
+      user.id === data.id ? normalizeUser({ ...user, ...data }, user) : user,
+    );
+    syncSelectedUser();
+    renderUsers();
+    updateSelectedUserHeader();
+    alert('Profile photo updated');
+  } finally {
+    input.value = '';
+    if (button) {
+      button.disabled = false;
+      button.classList.remove('opacity-70', 'cursor-wait');
+      button.textContent = 'Update Photo';
+    }
+  }
 }
 
 async function chooseChatTheme() {
@@ -4060,11 +4170,23 @@ async function sendRecordedVoiceMessage() {
     return;
   }
 
+  const draftFingerprint = buildDraftFingerprint({
+    roomId: selectedConversationRoomId(),
+    text: '',
+    attachmentFile: null,
+    voiceFile: recordedAudioFile,
+  });
+  if (shouldSkipDuplicateDraft(draftFingerprint)) {
+    return;
+  }
+
   try {
     setComposerSendingState(true);
+    markDraftSubmitted(draftFingerprint);
     await uploadAttachment(recordedAudioFile);
     clearRecordedAudio();
   } catch (error) {
+    clearDraftSubmissionGuard(draftFingerprint);
     alert(error.message || 'Failed to send voice message');
   } finally {
     setComposerSendingState(false);

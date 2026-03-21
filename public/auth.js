@@ -14,6 +14,10 @@ function getById(id) {
   return document.getElementById(id);
 }
 
+function revealAuthShell() {
+  getById('auth-shell')?.style.setProperty('visibility', 'visible');
+}
+
 function setVisible(id, visible) {
   getById(id)?.classList.toggle('hidden', !visible);
 }
@@ -428,10 +432,12 @@ async function boot() {
   setAuthMode(true);
   showSection('auth-form');
   bindEvents();
+  revealAuthShell();
 }
 
 boot().catch((error) => {
   console.error(error);
+  revealAuthShell();
   showFeedback(
     'auth-feedback',
     error?.message || 'Failed to start auth page.',

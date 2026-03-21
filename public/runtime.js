@@ -29,7 +29,8 @@ export function clearToken() {
   localStorage.removeItem('chat_token');
 }
 
-export async function hasValidSession() {
+export async function hasValidSession(options = {}) {
+  const { allowStaleToken = true } = options;
   const token = getToken();
   if (!token) {
     return false;
@@ -43,11 +44,13 @@ export async function hasValidSession() {
 
     if (response.status === 401) {
       clearToken();
+      return false;
     }
-    return false;
+
+    return allowStaleToken;
   } catch (error) {
     console.error(error);
-    return false;
+    return allowStaleToken;
   }
 }
 
