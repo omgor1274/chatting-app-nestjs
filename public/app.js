@@ -1448,13 +1448,34 @@ function assetUrl(path) {
 
 function applyChatTheme() {
   const container = document.getElementById('message-container');
-  const clearButton = document.getElementById('chat-theme-clear-btn');
+  const clearButtons = [
+    document.getElementById('chat-theme-clear-btn'),
+    document.getElementById('contact-theme-clear-btn'),
+  ].filter(Boolean);
+  const themeState = document.getElementById('chat-contact-panel-theme-state');
   const themeUrl = selectedUser?.chatTheme
     ? assetUrl(selectedUser.chatTheme)
     : '';
   const isDarkMode = document.body.classList.contains('dark-mode');
 
-  clearButton.classList.toggle('hidden', !themeUrl);
+  clearButtons.forEach((button) => {
+    button.classList.toggle('hidden', !themeUrl);
+  });
+
+  if (themeState) {
+    if (!selectedUser) {
+      themeState.innerText = '';
+    } else if (isGroupConversation(selectedUser)) {
+      themeState.innerText =
+        'Group conversation controls and member options live here.';
+    } else if (themeUrl) {
+      themeState.innerText =
+        'Custom chat background active for this conversation.';
+    } else {
+      themeState.innerText =
+        'Default chat background active for this conversation.';
+    }
+  }
 
   if (!themeUrl) {
     container.style.setProperty('--chat-theme-background', 'none');
@@ -1633,6 +1654,114 @@ function closeChatActionsMenu() {
   menu.style.bottom = '';
   menu.style.width = '';
   menu.style.maxHeight = '';
+}
+
+function isChatContactPanelOpen() {
+  const panel = document.getElementById('chat-contact-panel');
+  return Boolean(panel && !panel.classList.contains('hidden'));
+}
+
+function openChatContactPanel() {
+  if (!selectedUser) {
+    return;
+  }
+
+  closeChatActionsMenu();
+  closeComposerActionsMenu();
+  updateChatContactPanel();
+
+  const panel = document.getElementById('chat-contact-panel');
+  if (!panel) {
+    return;
+  }
+
+  panel.classList.remove('hidden');
+  panel.classList.add('flex');
+}
+
+function closeChatContactPanel(event) {
+  if (event && event.target !== event.currentTarget) {
+    return;
+  }
+
+  const panel = document.getElementById('chat-contact-panel');
+  if (!panel) {
+    return;
+  }
+
+  panel.classList.add('hidden');
+  panel.classList.remove('flex');
+}
+
+function getSelectedUserStatusMeta(user = selectedUser) {
+  if (!user) {
+    return {
+      text: 'Offline',
+      className: 'text-sm font-medium text-slate-500',
+    };
+  }
+
+  const activeTypingUsers = currentTypingUsers();
+  const isOnline = !isGroupConversation(user) && onlineUserIds.has(user.id);
+
+  return {
+    text: activeTypingUsers.length
+      ? formatTypingStatus(activeTypingUsers)
+      : isGroupConversation(user)
+        ? `${user.memberCount || user.members?.length || 0} members`
+        : isOnline
+          ? 'Online'
+          : 'Offline',
+    className: `text-sm font-medium ${
+      activeTypingUsers.length
+        ? 'text-blue-500'
+        : isOnline
+          ? 'text-emerald-500'
+          : 'text-slate-500'
+    }`,
+  };
+}
+
+function updateChatContactPanel() {
+  const panelTitle = document.getElementById('chat-contact-panel-title');
+  const avatar = document.getElementById('chat-contact-panel-avatar');
+  const name = document.getElementById('chat-contact-panel-name');
+  const status = document.getElementById('chat-contact-panel-status');
+  const infoLabel = document.getElementById('chat-open-info-label');
+  const themeBtn = document.getElementById('contact-theme-btn');
+  const clearThemeBtn = document.getElementById('contact-theme-clear-btn');
+  const renameBtn = document.getElementById('contact-rename-btn');
+  const blockBtn = document.getElementById('contact-block-btn');
+  const manageGroupBtn = document.getElementById('contact-manage-group-btn');
+
+  if (!panelTitle || !avatar || !name || !status || !infoLabel) {
+    return;
+  }
+
+  if (!selectedUser) {
+    panelTitle.innerText = 'Contact info';
+    infoLabel.innerText = 'Chat Info';
+    name.innerText = 'Contact';
+    status.innerText = 'Offline';
+    status.className = 'mt-1 text-sm font-medium text-slate-500';
+    return;
+  }
+
+  const isGroup = isGroupConversation(selectedUser);
+  const statusMeta = getSelectedUserStatusMeta(selectedUser);
+
+  panelTitle.innerText = isGroup ? 'Group info' : 'Contact info';
+  infoLabel.innerText = isGroup ? 'Group Info' : 'Chat Info';
+  avatar.src = userAvatar(selectedUser);
+  avatar.alt = `${displayName(selectedUser)} profile photo`;
+  name.innerText = displayName(selectedUser);
+  status.innerText = statusMeta.text;
+  status.className = `mt-1 ${statusMeta.className}`;
+  themeBtn?.classList.toggle('hidden', isGroup);
+  clearThemeBtn?.classList.toggle('hidden', isGroup || !selectedUser.chatTheme);
+  renameBtn?.classList.toggle('hidden', isGroup);
+  blockBtn?.classList.toggle('hidden', isGroup);
+  manageGroupBtn?.classList.toggle('hidden', !isGroup);
 }
 
 function bindChatActionsMenu() {
@@ -3013,6 +3142,7 @@ async function selectUser(userId) {
   document.getElementById('messages-list').innerHTML = '';
   clearAttachmentSelection();
   clearRecordedAudio();
+  closeChatContactPanel();
   closeChatActionsMenu();
   closeComposerActionsMenu();
 
@@ -3246,17 +3376,24 @@ function updateChatAccessUI() {
   const fileLabel = document.getElementById('share-file-label');
   const composerActionsBtn = document.getElementById('composer-actions-btn');
   const note = document.getElementById('chat-access-note');
+  const panelNote = document.getElementById('chat-contact-panel-access-note');
   const headerActions = document.querySelector('.mobile-chat-header-actions');
+  const headerShortcuts = document.getElementById('chat-header-shortcuts');
   const actionBtn = document.getElementById('request-action-btn');
   const rejectBtn = document.getElementById('request-reject-btn');
   const chatActionsBtn = document.getElementById('chat-actions-btn');
   const voiceCallBtn = document.getElementById('voice-call-btn');
   const videoCallBtn = document.getElementById('video-call-btn');
-  const themeBtn = document.getElementById('chat-theme-btn');
-  const clearThemeBtn = document.getElementById('chat-theme-clear-btn');
-  const renameBtn = document.getElementById('rename-contact-btn');
-  const blockBtn = document.getElementById('block-user-btn');
+  const themeBtn = document.getElementById('contact-theme-btn');
+  const clearThemeBtn = document.getElementById('contact-theme-clear-btn');
+  const renameBtn = document.getElementById('contact-rename-btn');
+  const blockBtn = document.getElementById('contact-block-btn');
+  const blockLabel = document.getElementById('contact-block-btn-label');
+  const blockCopy = document.getElementById('contact-block-btn-copy');
   const manageGroupBtn = document.getElementById('manage-group-btn');
+  const panelManageGroupBtn = document.getElementById(
+    'contact-manage-group-btn',
+  );
   const voiceRecordBtn = document.getElementById('voice-record-btn');
   const voiceSendBtn = document.getElementById('voice-send-btn');
   const sendBtn = document.getElementById('send-message-btn');
@@ -3270,7 +3407,7 @@ function updateChatAccessUI() {
     voiceRecordBtn,
     voiceSendBtn,
     sendBtn,
-  ];
+  ].filter(Boolean);
 
   const applyGatedState = (enabled) => {
     input.disabled = !enabled;
@@ -3301,76 +3438,106 @@ function updateChatAccessUI() {
     );
   };
 
+  const setAccessNote = (message = '') => {
+    const hasMessage = Boolean(message);
+    note.classList.toggle('hidden', !hasMessage);
+    panelNote?.classList.toggle('hidden', !hasMessage);
+    note.textContent = hasMessage ? message : '';
+
+    if (panelNote) {
+      panelNote.textContent = hasMessage ? message : '';
+    }
+  };
+
+  const finalizeAccessUI = () => {
+    syncHeaderActionsVisibility();
+    updateChatContactPanel();
+  };
+
+  const isGroup = Boolean(selectedUser && isGroupConversation(selectedUser));
+
   actionBtn.classList.add('hidden');
   rejectBtn.classList.add('hidden');
-  note.classList.add('hidden');
   actionBtn.disabled = false;
-  blockBtn.classList.toggle(
-    'hidden',
-    !selectedUser || isGroupConversation(selectedUser),
-  );
-  manageGroupBtn.classList.toggle('hidden', !isGroupConversation(selectedUser));
-  renameBtn.classList.toggle('hidden', isGroupConversation(selectedUser));
-  themeBtn.classList.toggle('hidden', isGroupConversation(selectedUser));
-  clearThemeBtn.classList.toggle('hidden', isGroupConversation(selectedUser));
-  voiceCallBtn.classList.toggle('hidden', isGroupConversation(selectedUser));
-  videoCallBtn.classList.toggle('hidden', isGroupConversation(selectedUser));
+  setAccessNote('');
+  blockBtn?.classList.toggle('hidden', !selectedUser || isGroup);
+  manageGroupBtn?.classList.toggle('hidden', !isGroup);
+  panelManageGroupBtn?.classList.toggle('hidden', !isGroup);
+  renameBtn?.classList.toggle('hidden', isGroup);
+  themeBtn?.classList.toggle('hidden', isGroup);
+  clearThemeBtn?.classList.toggle('hidden', isGroup || !selectedUser?.chatTheme);
+  voiceCallBtn?.classList.toggle('hidden', !selectedUser || isGroup);
+  videoCallBtn?.classList.toggle('hidden', !selectedUser || isGroup);
+  headerShortcuts?.classList.toggle('hidden', !selectedUser || isGroup);
 
   if (!selectedUser) {
     applyGatedState(false);
-    syncHeaderActionsVisibility();
+    chatActionsBtn.disabled = true;
+    chatActionsBtn.classList.add('opacity-50', 'cursor-not-allowed');
+    finalizeAccessUI();
     return;
   }
 
-  if (isGroupConversation(selectedUser)) {
-    blockBtn.classList.add('hidden');
-    applyGatedState(true);
-    note.classList.add('hidden');
-    syncHeaderActionsVisibility();
-    return;
-  }
-
-  blockBtn.classList.remove('hidden');
-  blockBtn.innerHTML = `<span>${chatPermission.blockedByMe ? 'Unblock User' : 'Block User'}</span>`;
-  blockBtn.classList.toggle('text-rose-600', !chatPermission.blockedByMe);
-  blockBtn.classList.toggle('hover:bg-rose-50', !chatPermission.blockedByMe);
-  blockBtn.classList.toggle('text-emerald-600', chatPermission.blockedByMe);
-  blockBtn.classList.toggle('hover:bg-emerald-50', chatPermission.blockedByMe);
   chatActionsBtn.disabled = false;
   chatActionsBtn.classList.remove('opacity-50', 'cursor-not-allowed');
 
+  if (isGroup) {
+    blockBtn?.classList.add('hidden');
+    applyGatedState(true);
+    finalizeAccessUI();
+    return;
+  }
+
+  blockBtn?.classList.remove('hidden');
+
+  if (blockBtn && blockLabel && blockCopy) {
+    const isBlockedByMe = Boolean(chatPermission.blockedByMe);
+    blockLabel.innerText = isBlockedByMe ? 'Unblock user' : 'Block user';
+    blockCopy.innerText = isBlockedByMe
+      ? 'Allow them again, but a new chat request will still be needed.'
+      : 'Stop chat access until you unblock them.';
+    blockBtn.classList.toggle('border-rose-200', !isBlockedByMe);
+    blockBtn.classList.toggle('bg-rose-50', !isBlockedByMe);
+    blockBtn.classList.toggle('hover:bg-rose-100', !isBlockedByMe);
+    blockBtn.classList.toggle('border-emerald-200', isBlockedByMe);
+    blockBtn.classList.toggle('bg-emerald-50', isBlockedByMe);
+    blockBtn.classList.toggle('hover:bg-emerald-100', isBlockedByMe);
+    blockLabel.classList.toggle('text-rose-600', !isBlockedByMe);
+    blockLabel.classList.toggle('text-emerald-600', isBlockedByMe);
+    blockCopy.classList.toggle('text-rose-500', !isBlockedByMe);
+    blockCopy.classList.toggle('text-emerald-500', isBlockedByMe);
+  }
+
   if (chatPermission.blockedByMe) {
     applyGatedState(false);
-    note.classList.remove('hidden');
-    note.textContent = `You blocked ${displayName(selectedUser)}. Unblock them to chat again.`;
-    syncHeaderActionsVisibility();
+    setAccessNote(
+      `You blocked ${displayName(selectedUser)}. Unblock them to chat again.`,
+    );
+    finalizeAccessUI();
     return;
   }
 
   if (chatPermission.blockedByUser) {
     applyGatedState(false);
-    note.classList.remove('hidden');
-    note.textContent = `${displayName(selectedUser)} has blocked you.`;
-    syncHeaderActionsVisibility();
+    setAccessNote(`${displayName(selectedUser)} has blocked you.`);
+    finalizeAccessUI();
     return;
   }
 
   if (chatPermission.canChat) {
     applyGatedState(true);
-    note.classList.add('hidden');
-    syncHeaderActionsVisibility();
+    finalizeAccessUI();
     return;
   }
 
   applyGatedState(false);
-  note.classList.remove('hidden');
 
   if (chatPermission.incomingRequestId) {
     actionBtn.textContent = 'Accept Request';
     actionBtn.classList.remove('hidden');
     rejectBtn.classList.remove('hidden');
-    note.textContent = `${displayName(selectedUser)} sent you a chat request.`;
-    syncHeaderActionsVisibility();
+    setAccessNote(`${displayName(selectedUser)} sent you a chat request.`);
+    finalizeAccessUI();
     return;
   }
 
@@ -3378,16 +3545,18 @@ function updateChatAccessUI() {
     actionBtn.textContent = 'Request Pending';
     actionBtn.classList.remove('hidden');
     actionBtn.disabled = true;
-    note.textContent = `Waiting for ${displayName(selectedUser)} to accept your request.`;
-    syncHeaderActionsVisibility();
+    setAccessNote(
+      `Waiting for ${displayName(selectedUser)} to accept your request.`,
+    );
+    finalizeAccessUI();
     return;
   }
 
   actionBtn.textContent = 'Send Request';
   actionBtn.classList.remove('hidden');
   actionBtn.disabled = false;
-  note.textContent = 'Send a request before starting this chat.';
-  syncHeaderActionsVisibility();
+  setAccessNote('Send a request before starting this chat.');
+  finalizeAccessUI();
 }
 
 async function toggleBlockedUser() {
@@ -3441,19 +3610,12 @@ function updateSelectedUserHeader() {
   if (!selectedUser) return;
   getById('target-name').innerText = displayName(selectedUser);
   getById('target-avatar').src = userAvatar(selectedUser);
+  getById('target-avatar').alt = `${displayName(selectedUser)} profile photo`;
   applyChatTheme();
-  const activeTypingUsers = currentTypingUsers();
-  const isOnline =
-    !isGroupConversation(selectedUser) && onlineUserIds.has(selectedUser.id);
-  getById('target-status').innerText = activeTypingUsers.length
-    ? formatTypingStatus(activeTypingUsers)
-    : isGroupConversation(selectedUser)
-      ? `${selectedUser.memberCount || selectedUser.members?.length || 0} members`
-      : isOnline
-        ? 'Online'
-        : 'Offline';
-  getById('target-status').className =
-    `text-sm font-medium ${activeTypingUsers.length ? 'text-blue-500' : isOnline ? 'text-emerald-500' : 'text-slate-500'}`;
+  const statusMeta = getSelectedUserStatusMeta(selectedUser);
+  getById('target-status').innerText = statusMeta.text;
+  getById('target-status').className = statusMeta.className;
+  updateChatContactPanel();
 }
 
 function getMessagePreview(message) {
@@ -5484,6 +5646,7 @@ document.addEventListener('keydown', (event) => {
   closeImagePreview();
   closeComposerActionsMenu();
   closeChatActionsMenu();
+  closeChatContactPanel();
   closeMessageActions();
   closeProfileModal();
   closeRenameModal();

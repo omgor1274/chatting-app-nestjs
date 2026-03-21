@@ -160,6 +160,38 @@ img {
   z-index: 16;
 }
 
+#chat-contact-trigger {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border: 0;
+  background: transparent;
+  padding: 0.35rem 0.45rem;
+  border-radius: 1.25rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+
+#chat-contact-trigger:hover {
+  background: rgba(241, 245, 249, 0.92);
+}
+
+#chat-contact-trigger:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.28);
+  outline-offset: 2px;
+}
+
+#chat-header-shortcuts {
+  flex-shrink: 0;
+}
+
+.chat-header-icon {
+  width: 2.75rem;
+  height: 2.75rem;
+}
+
 #chat-actions-btn {
   min-width: 2.75rem;
   min-height: 2.75rem;
@@ -183,6 +215,11 @@ img {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.contact-panel-action[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 @media (max-width: 767px) {
@@ -253,9 +290,8 @@ img {
     z-index: 17;
     padding-top: calc(0.35rem + env(safe-area-inset-top));
     padding-bottom: 0.35rem;
-    padding-right: 3.35rem;
     display: grid !important;
-    grid-template-columns: auto auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
     align-items: center;
     column-gap: 0.55rem;
     row-gap: 0.2rem;
@@ -271,28 +307,30 @@ img {
   }
 
   .mobile-chat-header .chat-actions-anchor {
-    position: absolute;
-    top: calc(0.35rem + env(safe-area-inset-top));
-    right: 0.35rem;
-    z-index: 3;
+    margin-left: 0 !important;
   }
 
   .mobile-chat-header #chat-actions-btn {
     position: static;
-    min-width: 2.6rem;
-    min-height: 2.6rem;
-    padding: 0.45rem 0.65rem;
+    min-width: 2.45rem;
+    min-height: 2.45rem;
+    padding: 0.35rem 0.55rem;
     border-radius: 18px;
   }
 
+  .mobile-chat-header #chat-contact-trigger {
+    padding: 0.25rem 0.15rem;
+    gap: 0.55rem;
+  }
+
   .mobile-chat-header #target-avatar {
-    width: 2.6rem;
-    height: 2.6rem;
-    min-width: 2.6rem;
+    width: 2.45rem;
+    height: 2.45rem;
+    min-width: 2.45rem;
     border-radius: 0.95rem;
   }
 
-  .mobile-chat-header .min-w-0.flex-1 {
+  .mobile-chat-header #chat-contact-trigger .min-w-0.flex-1 {
     min-width: 0;
   }
 
@@ -306,9 +344,19 @@ img {
     font-size: 0.95rem;
   }
 
+  .mobile-chat-header #chat-header-shortcuts {
+    gap: 0.35rem;
+  }
+
+  .mobile-chat-header .chat-header-icon {
+    width: 2.45rem;
+    height: 2.45rem;
+    border-radius: 0.9rem;
+  }
+
   .mobile-chat-header #target-status {
     font-size: 0.72rem;
-    max-width: calc(100vw - 7.2rem);
+    max-width: calc(100vw - 13.5rem);
   }
 
   .mobile-chat-scroll {
@@ -416,6 +464,7 @@ img {
   }
 
   #profile-modal,
+  #chat-contact-panel,
   #rename-modal,
   #create-group-modal,
   #manage-group-modal,
@@ -427,6 +476,7 @@ img {
   }
 
   #profile-modal > div,
+  #chat-contact-panel > div,
   #rename-modal > div,
   #create-group-modal > div,
   #manage-group-modal > div,
@@ -542,6 +592,7 @@ body.dark-mode #chat-header,
 body.dark-mode #input-area,
 body.dark-mode #auth-screen > div,
 body.dark-mode #profile-modal > div,
+body.dark-mode #chat-contact-panel > div,
 body.dark-mode #chat-theme-modal > div,
 body.dark-mode #rename-modal > div,
 body.dark-mode #reset-password-modal > div,
@@ -559,6 +610,10 @@ body.dark-mode .sidebar-account-card {
   background: rgba(30, 41, 59, 0.72) !important;
   border-color: rgba(71, 85, 105, 0.9) !important;
   box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.04);
+}
+
+body.dark-mode #chat-contact-trigger:hover {
+  background: rgba(30, 41, 59, 0.88);
 }
 
 body.dark-mode .sidebar-header-btn {
