@@ -284,6 +284,20 @@ img {
     padding: calc(1rem + env(safe-area-inset-top)) 1rem
       calc(1rem + env(safe-area-inset-bottom));
   }
+
+  body.keyboard-open .mobile-page,
+  body.keyboard-open .mobile-page-shell {
+    padding-bottom: 0 !important;
+  }
+
+  body.keyboard-open #message-container {
+    padding-bottom: 0.5rem !important;
+  }
+
+  body.keyboard-open #input-area {
+    bottom: 0;
+    padding-bottom: 0.5rem !important;
+  }
 }
 
 @media (max-width: 1023px) {

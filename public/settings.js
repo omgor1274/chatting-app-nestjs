@@ -12,6 +12,24 @@ function getById(id) {
   return document.getElementById(id);
 }
 
+function setBlockedUsersState(message, type = 'empty') {
+  const container = getById('settings-blocked-users');
+  if (!container) {
+    return;
+  }
+
+  const toneClass =
+    type === 'error'
+      ? 'border-red-200 bg-red-50 text-red-700'
+      : 'border-dashed border-slate-200 bg-slate-50 text-slate-500';
+
+  container.innerHTML = `
+    <div class="rounded-2xl border px-4 py-6 text-sm ${toneClass}">
+      ${message}
+    </div>
+  `;
+}
+
 function showFeedback(message, type = 'info') {
   const box = getById('settings-feedback');
   if (!box) {
@@ -62,11 +80,7 @@ function renderBlockedUsers(blockedUsers) {
   }
 
   if (!blockedUsers.length) {
-    container.innerHTML = `
-      <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-        You have not blocked anyone.
-      </div>
-    `;
+    setBlockedUsersState('You have not blocked anyone.');
     return;
   }
 
@@ -154,12 +168,23 @@ async function uploadAvatar() {
     showFeedback(data.message || 'Profile picture updated.', 'success');
     await loadProfile();
   } finally {
+    input.value = '';
     if (button) {
       button.disabled = false;
       button.textContent = 'Change Profile Picture';
       button.classList.remove('opacity-70', 'cursor-wait');
     }
   }
+}
+
+function openAvatarPicker() {
+  const input = getById('avatar-input');
+  if (!input) {
+    return;
+  }
+
+  input.value = '';
+  input.click();
 }
 
 async function loadProfile() {
@@ -299,9 +324,7 @@ async function boot() {
   getById('preferences-form').addEventListener('submit', savePreferences);
   getById('password-form').addEventListener('submit', changePassword);
   getById('logout-btn').addEventListener('click', logout);
-  getById('change-avatar-btn').addEventListener('click', () =>
-    getById('avatar-input').click(),
-  );
+  getById('change-avatar-btn').addEventListener('click', openAvatarPicker);
   getById('avatar-input').addEventListener('change', uploadAvatar);
   getById('settings-blocked-users').addEventListener('click', async (event) => {
     const button = event.target.closest('[data-unblock-user-id]');
@@ -316,7 +339,16 @@ async function boot() {
     }
   });
   await loadProfile();
-  await loadBlockedUsers();
+  setBlockedUsersState('Loading blocked users...');
+  try {
+    await loadBlockedUsers();
+  } catch (error) {
+    console.error(error);
+    setBlockedUsersState(
+      error?.message || 'Failed to load blocked users.',
+      'error',
+    );
+  }
 }
 
 boot().catch((error) => {

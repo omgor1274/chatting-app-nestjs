@@ -64,6 +64,24 @@
               </button>
             </div>
             <div
+              class="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4"
+            >
+              <label
+                for="avatar-input"
+                class="block text-sm font-semibold text-slate-900"
+                >Choose another profile photo</label
+              >
+              <input
+                id="avatar-input"
+                type="file"
+                accept="image/*"
+                class="mt-3 block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-blue-600 file:px-4 file:py-2.5 file:font-semibold file:text-white hover:file:bg-blue-700"
+              />
+              <p class="mt-2 text-xs leading-5 text-slate-500">
+                You can change your profile picture any time.
+              </p>
+            </div>
+            <div
               id="settings-feedback"
               class="hidden mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700"
             ></div>
@@ -243,7 +261,6 @@
       </section>
     </main>
 
-    <input id="avatar-input" type="file" accept="image/*" class="hidden" />
     <script type="module" src="/public/settings.js?v=20260321"></script>
   </body>
 </html>
