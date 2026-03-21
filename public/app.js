@@ -310,7 +310,12 @@ async function decryptTextMessage(message) {
     return message?.content || message?.ciphertext || '';
   }
 
-  if (message.displayText !== undefined) {
+  if (
+    message.displayText !== undefined &&
+    !['Decrypting message...', 'Decrypting message…'].includes(
+      String(message.displayText),
+    )
+  ) {
     return message.displayText;
   }
 

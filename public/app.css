@@ -314,6 +314,21 @@ img {
   }
 }
 
+@media (min-width: 1024px) {
+  #app-shell {
+    overflow: visible !important;
+  }
+
+  #sidebar,
+  main {
+    overflow: hidden;
+  }
+
+  #chat-actions-menu {
+    z-index: 80;
+  }
+}
+
 body.keyboard-open #app-shell {
   height: var(--app-shell-height, 100dvh) !important;
 }
