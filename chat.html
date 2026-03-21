@@ -8,11 +8,11 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="O-chat" />
     <title>O-chat</title>
-    <link rel="manifest" href="/manifest.webmanifest?v=20260321-desktopfix2" />
+    <link rel="manifest" href="/manifest.webmanifest?v=20260321-mobileclean4" />
     <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="./public/app.css?v=20260321-desktopfix2" />
+    <link rel="stylesheet" href="./public/app.css?v=20260321-mobileclean4" />
   </head>
 
   <body class="mobile-page min-h-screen bg-slate-100 text-slate-900 lg:p-3">
@@ -378,6 +378,7 @@
         class="mobile-chat-main flex min-h-0 min-w-0 flex-1 flex-col bg-white/60"
       >
         <div
+          id="mobile-chat-topbar"
           class="mobile-chat-topbar flex items-center justify-between border-b border-slate-200 bg-white/85 px-3 py-2.5 backdrop-blur lg:hidden"
         >
           <button
@@ -449,7 +450,7 @@
             <button
               type="button"
               id="chat-actions-btn"
-              onclick="toggleChatActionsMenu()"
+              onclick="toggleChatActionsMenu(event)"
               class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xl font-semibold leading-none text-slate-700 transition hover:bg-slate-50"
               aria-label="Open chat actions"
             >
@@ -1575,7 +1576,7 @@
       import {
         hasValidSession,
         loadPublicConfig,
-      } from '/public/runtime.js?v=20260321-desktopfix2';
+      } from '/public/runtime.js?v=20260321-mobileclean4';
 
       const loadScript = (src) =>
         new Promise((resolve, reject) => {
@@ -1593,7 +1594,7 @@
         window.location.replace('/auth');
       } else {
         loadScript('https://cdn.socket.io/4.7.2/socket.io.min.js')
-          .then(() => loadScript('/public/app.js?v=20260321-desktopfix2'))
+          .then(() => loadScript('/public/app.js?v=20260321-mobileclean4'))
           .catch((error) =>
             console.error('Failed to load chat runtime', error),
           );

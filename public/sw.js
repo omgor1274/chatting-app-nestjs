@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ochat-shell-v5';
+const CACHE_NAME = 'ochat-shell-v6';
 const APP_SHELL = [
   '/',
   '/public/app.css',

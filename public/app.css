@@ -243,14 +243,14 @@ img {
     position: sticky;
     top: 0;
     z-index: 17;
-    padding-top: calc(0.45rem + env(safe-area-inset-top));
-    padding-bottom: 0.45rem;
-    padding-right: 3.65rem;
+    padding-top: calc(0.35rem + env(safe-area-inset-top));
+    padding-bottom: 0.35rem;
+    padding-right: 3.35rem;
     display: grid !important;
     grid-template-columns: auto auto minmax(0, 1fr);
     align-items: center;
-    column-gap: 0.6rem;
-    row-gap: 0.25rem;
+    column-gap: 0.55rem;
+    row-gap: 0.2rem;
     min-height: auto;
   }
 
@@ -264,8 +264,8 @@ img {
 
   .mobile-chat-header .chat-actions-anchor {
     position: absolute;
-    top: calc(0.45rem + env(safe-area-inset-top));
-    right: 0.45rem;
+    top: calc(0.35rem + env(safe-area-inset-top));
+    right: 0.35rem;
     z-index: 3;
   }
 
@@ -278,10 +278,10 @@ img {
   }
 
   .mobile-chat-header #target-avatar {
-    width: 2.8rem;
-    height: 2.8rem;
-    min-width: 2.8rem;
-    border-radius: 1rem;
+    width: 2.6rem;
+    height: 2.6rem;
+    min-width: 2.6rem;
+    border-radius: 0.95rem;
   }
 
   .mobile-chat-header .min-w-0.flex-1 {
@@ -289,18 +289,18 @@ img {
   }
 
   .mobile-chat-header > button:first-child {
-    min-height: 2.35rem;
+    min-height: 2.2rem;
     border-radius: 18px;
-    padding: 0.45rem 0.75rem;
+    padding: 0.4rem 0.7rem;
   }
 
   .mobile-chat-header #target-name {
-    font-size: 1rem;
+    font-size: 0.95rem;
   }
 
   .mobile-chat-header #target-status {
-    font-size: 0.76rem;
-    max-width: calc(100vw - 7.8rem);
+    font-size: 0.72rem;
+    max-width: calc(100vw - 7.2rem);
   }
 
   .mobile-chat-scroll {
@@ -365,13 +365,32 @@ img {
     border-radius: 28px;
   }
 
+  #message-actions-menu {
+    left: 0.75rem !important;
+    right: 0.75rem !important;
+    bottom: calc(env(safe-area-inset-bottom) + 5.75rem) !important;
+    top: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    border-radius: 24px;
+  }
+
+  #messages-list > div > div {
+    max-width: min(84vw, 21rem) !important;
+  }
+
+  #messages-list video,
+  #messages-list img {
+    max-width: 100%;
+  }
+
   body.chat-mode-active .mobile-chat-topbar {
     display: none;
   }
 
   body.chat-mode-active .mobile-chat-header {
     top: 0;
-    padding-top: calc(0.35rem + env(safe-area-inset-top));
+    padding-top: calc(0.25rem + env(safe-area-inset-top));
   }
 
   body.chat-mode-active #message-container {
@@ -463,8 +482,8 @@ img {
 
   .mobile-chat-header {
     gap: 0.75rem;
-    padding-top: 0.7rem;
-    padding-bottom: 0.7rem;
+    padding-top: 0.55rem;
+    padding-bottom: 0.55rem;
   }
 
   .mobile-chat-header-actions {

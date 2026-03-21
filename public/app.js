@@ -15,6 +15,7 @@ let currentUser = null;
 let currentPrivateKey = null;
 let users = [];
 let peopleDirectory = [];
+let peopleDirectoryLoaded = false;
 let groupInvites = [];
 let selectedUser = null;
 let onlineUserIds = new Set();
@@ -32,6 +33,7 @@ let usersRenderFrame = 0;
 let headerRenderFrame = 0;
 let historyScrollFrame = 0;
 let viewportHeightFrame = 0;
+let stickToLatestUntil = 0;
 let loadUsersPromise = null;
 let reloadUsersAfterCurrentLoad = false;
 let renderedUserSignatures = new Map();
@@ -912,6 +914,7 @@ function resetSelectedConversation() {
   document.getElementById('message-container').classList.remove('flex');
   document.getElementById('input-area').classList.add('hidden');
   document.body.classList.remove('chat-mode-active');
+  document.getElementById('mobile-chat-topbar')?.classList.remove('hidden');
   closeChatActionsMenu();
   closeComposerActionsMenu();
   if (!isFileOrigin) {
@@ -964,6 +967,16 @@ function scheduleHeaderUpdate() {
 }
 
 function handleUserSearchInput() {
+  const query = document.getElementById('user-search')?.value.trim();
+  if (query && !peopleDirectoryLoaded) {
+    void loadPeopleDirectory()
+      .catch((error) => {
+        console.error('Failed to load people directory', error);
+      })
+      .finally(() => {
+        scheduleRenderUsers();
+      });
+  }
   scheduleRenderUsers();
 }
 
@@ -1568,7 +1581,8 @@ function closeComposerActionsMenu() {
   document.getElementById('composer-actions-menu').classList.add('hidden');
 }
 
-function toggleChatActionsMenu() {
+function toggleChatActionsMenu(event) {
+  event?.stopPropagation();
   const menu = document.getElementById('chat-actions-menu');
   const isOpening = menu.classList.contains('hidden');
   closeComposerActionsMenu();
@@ -1579,7 +1593,9 @@ function toggleChatActionsMenu() {
   }
 
   menu.classList.remove('hidden');
-  updateChatActionsMenuPosition();
+  window.requestAnimationFrame(() => {
+    updateChatActionsMenuPosition();
+  });
 }
 
 function closeChatActionsMenu() {
@@ -2315,14 +2331,13 @@ async function loadUsers() {
   }
 
   loadUsersPromise = (async () => {
-    const [recentRes, allUsersRes, groupsRes, invitesRes] = await Promise.all([
+    const [recentRes, groupsRes, invitesRes] = await Promise.all([
       api('/chat/recent'),
-      api('/users'),
       api('/chat/groups'),
       api('/chat/groups/invites'),
     ]);
 
-    if (!recentRes.ok || !allUsersRes.ok || !groupsRes.ok || !invitesRes.ok) {
+    if (!recentRes.ok || !groupsRes.ok || !invitesRes.ok) {
       throw new Error('Failed to load users');
     }
 
@@ -2330,11 +2345,6 @@ async function loadUsers() {
       recentRes,
       [],
       'Failed to load recent chats.',
-    );
-    const allUsers = await readJsonResponse(
-      allUsersRes,
-      [],
-      'Failed to load users.',
     );
     const groups = await readJsonResponse(
       groupsRes,
@@ -2347,10 +2357,6 @@ async function loadUsers() {
       'Failed to load group invites.',
     );
 
-    peopleDirectory = allUsers.map((user) =>
-      normalizeUser({ ...user, chatType: 'direct' }),
-    );
-
     const existingByKey = new Map(
       users.map((user) => [`${user.chatType || 'direct'}:${user.id}`, user]),
     );
@@ -2361,20 +2367,28 @@ async function loadUsers() {
       ]),
     );
 
-    const directUsers = peopleDirectory.map((user) => {
-      const key = `direct:${user.id}`;
-      const recent = recentByKey.get(key);
-      return normalizeUser(
-        {
-          ...user,
-          chatType: 'direct',
-          lastMessagePreview: recent?.lastMessagePreview ?? null,
-          lastMessageAt: recent?.lastMessageAt ?? null,
-          lastMessageType: recent?.lastMessageType ?? null,
-        },
-        existingByKey.get(key),
-      );
-    });
+    const directoryById = new Map(
+      peopleDirectory.map((user) => [user.id, user]),
+    );
+
+    const directUsers = recentUsers
+      .filter((user) => (user.chatType || 'direct') !== 'group')
+      .map((user) => {
+        const key = `direct:${user.id}`;
+        const recent = recentByKey.get(key) || user;
+        const directoryUser = directoryById.get(user.id);
+        return normalizeUser(
+          {
+            ...(directoryUser || {}),
+            ...user,
+            chatType: 'direct',
+            lastMessagePreview: recent?.lastMessagePreview ?? null,
+            lastMessageAt: recent?.lastMessageAt ?? null,
+            lastMessageType: recent?.lastMessageType ?? null,
+          },
+          existingByKey.get(key),
+        );
+      });
 
     const groupUsers = groups.map((group) => {
       const key = `group:${group.id}`;
@@ -2398,6 +2412,18 @@ async function loadUsers() {
     });
 
     users = [...directUsers, ...groupUsers];
+
+    if (selectedUser && !users.some((user) => user.id === selectedUser.id)) {
+      const fallbackKey = `${selectedUser.chatType || 'direct'}:${selectedUser.id}`;
+      users = [
+        normalizeUser(
+          selectedUser,
+          existingByKey.get(fallbackKey) || selectedUser,
+        ),
+        ...users,
+      ];
+    }
+
     users
       .filter((user) => !isGroupConversation(user))
       .forEach((user) => ignoredPresenceUserIds.delete(user.id));
@@ -2430,6 +2456,52 @@ async function loadUsers() {
     reloadUsersAfterCurrentLoad = false;
     return loadUsers();
   }
+}
+
+async function loadPeopleDirectory(force = false) {
+  if (peopleDirectoryLoaded && !force) {
+    return peopleDirectory;
+  }
+
+  const res = await api('/users');
+  const data = await readJsonResponse(res, [], 'Failed to load users.');
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to load users');
+  }
+
+  peopleDirectory = data.map((user) =>
+    normalizeUser({ ...user, chatType: 'direct' }),
+  );
+  peopleDirectoryLoaded = true;
+  return peopleDirectory;
+}
+
+function getSearchUserPool() {
+  const directUsers = peopleDirectoryLoaded
+    ? peopleDirectory.map((user) => {
+        const existing = users.find(
+          (entry) => !isGroupConversation(entry) && entry.id === user.id,
+        );
+        return normalizeUser(
+          {
+            ...(existing || {}),
+            ...user,
+            chatType: 'direct',
+          },
+          existing || user,
+        );
+      })
+    : users.filter((user) => !isGroupConversation(user));
+
+  const merged = new Map();
+  [
+    ...directUsers,
+    ...users.filter((user) => isGroupConversation(user)),
+  ].forEach((user) => {
+    merged.set(userListKey(user), user);
+  });
+
+  return Array.from(merged.values());
 }
 
 async function refreshUsersForPresence(ids) {
@@ -2469,7 +2541,8 @@ function getSortedUsers() {
     .getElementById('user-search')
     .value.trim()
     .toLowerCase();
-  return [...users]
+  const sourceUsers = query ? getSearchUserPool() : users;
+  return [...sourceUsers]
     .filter((user) => {
       if (!query) return true;
       return [user.name, user.email, user.nickname, user.displayName]
@@ -2868,6 +2941,7 @@ async function selectUser(userId) {
   document.getElementById('message-container').classList.add('flex');
   document.getElementById('input-area').classList.remove('hidden');
   document.body.classList.add('chat-mode-active');
+  document.getElementById('mobile-chat-topbar')?.classList.add('hidden');
   document.getElementById('messages-list').innerHTML = '';
   clearAttachmentSelection();
   clearRecordedAudio();
@@ -2888,8 +2962,7 @@ async function selectUser(userId) {
     return;
   }
 
-  const container = document.getElementById('message-container');
-  container.scrollTop = container.scrollHeight;
+  scheduleMessageContainerBottom(1200);
 
   if (!isFileOrigin) {
     history.replaceState(
@@ -2963,7 +3036,7 @@ async function loadMessageChunk(before = null, prepend = false, options = {}) {
         { scheduleRender: false },
       );
     }
-    appendMessages(messages, { stickToBottom: false });
+    appendMessages(messages, { stickToBottom: true });
     hydrateMessagesInBackground(messages);
     scheduleRenderUsers();
 
@@ -3649,7 +3722,8 @@ async function rejectIncomingRequest() {
   await loadChatPermission();
 }
 
-function openCreateGroupModal() {
+async function openCreateGroupModal() {
+  await loadPeopleDirectory();
   const container = document.getElementById('create-group-members');
   document.getElementById('create-group-name').value = '';
   document.getElementById('create-group-avatar-input').value = '';
@@ -3746,6 +3820,8 @@ async function openManageGroupModal() {
   if (!selectedUser || !isGroupConversation(selectedUser)) {
     return;
   }
+
+  await loadPeopleDirectory();
 
   const res = await api(`/chat/groups/${encodeURIComponent(selectedUser.id)}`);
   const data = await readJsonResponse(res, {}, 'Failed to load group details.');
@@ -4028,8 +4104,19 @@ function openMessageActions(x, y, message) {
         Boolean(message.deletedForEveryoneAt),
     );
   menu.classList.remove('hidden');
+
+  if (window.innerWidth < 1024) {
+    menu.style.left = '0.75rem';
+    menu.style.right = '0.75rem';
+    menu.style.bottom = 'calc(env(safe-area-inset-bottom) + 5.75rem)';
+    menu.style.top = '';
+    return;
+  }
+
   menu.style.left = '0px';
   menu.style.top = '0px';
+  menu.style.right = '';
+  menu.style.bottom = '';
 
   const rect = menu.getBoundingClientRect();
   const maxLeft = Math.max(padding, window.innerWidth - rect.width - padding);
@@ -4051,6 +4138,8 @@ function closeMessageActions() {
   menu.classList.add('hidden');
   menu.style.left = '';
   menu.style.top = '';
+  menu.style.right = '';
+  menu.style.bottom = '';
   messageActionTarget = null;
 }
 
@@ -4884,6 +4973,30 @@ function createMessageElement(message) {
           `;
   }
 
+  div.querySelectorAll('img').forEach((image) => {
+    image.addEventListener(
+      'load',
+      () => {
+        if (Date.now() <= stickToLatestUntil) {
+          scheduleMessageContainerBottom(600);
+        }
+      },
+      { once: true },
+    );
+  });
+
+  div.querySelectorAll('video').forEach((video) => {
+    video.addEventListener(
+      'loadedmetadata',
+      () => {
+        if (Date.now() <= stickToLatestUntil) {
+          scheduleMessageContainerBottom(600);
+        }
+      },
+      { once: true },
+    );
+  });
+
   div.oncontextmenu = (event) => {
     event.preventDefault();
     openMessageActions(event.clientX, event.clientY, message);
@@ -4913,6 +5026,23 @@ function isMessageContainerNearBottom(threshold = 96) {
     container.scrollHeight - container.scrollTop - container.clientHeight <=
     threshold
   );
+}
+
+function scheduleMessageContainerBottom(durationMs = 900) {
+  const container = document.getElementById('message-container');
+  if (!container) {
+    return;
+  }
+
+  stickToLatestUntil = Date.now() + durationMs;
+  window.requestAnimationFrame(() => {
+    container.scrollTop = container.scrollHeight;
+    window.setTimeout(() => {
+      if (Date.now() <= stickToLatestUntil) {
+        container.scrollTop = container.scrollHeight;
+      }
+    }, 120);
+  });
 }
 
 function appendMessages(messages, options = {}) {
@@ -4946,8 +5076,7 @@ function appendMessages(messages, options = {}) {
   list.appendChild(fragment);
 
   if (options.stickToBottom) {
-    const container = document.getElementById('message-container');
-    container.scrollTop = container.scrollHeight;
+    scheduleMessageContainerBottom();
   }
 }
 
