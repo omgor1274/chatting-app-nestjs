@@ -401,7 +401,7 @@
 
         <div
           id="chat-header"
-          class="mobile-chat-header hidden items-center gap-3 border-b border-slate-200 bg-white/85 px-3 py-3 backdrop-blur sm:px-5 lg:px-6"
+          class="mobile-chat-header hidden items-center gap-3 border-b border-slate-200 bg-white/88 px-3 py-2.5 backdrop-blur sm:px-4 lg:px-5"
         >
           <button
             onclick="openSidebar()"
@@ -412,18 +412,18 @@
           <img
             id="target-avatar"
             onclick="selectedUser && openImagePreview(userAvatar(selectedUser))"
-            class="h-11 w-11 rounded-2xl object-cover cursor-zoom-in lg:h-12 lg:w-12"
+            class="h-10 w-10 rounded-2xl object-cover cursor-zoom-in lg:h-11 lg:w-11"
           />
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">
               <h3
                 id="target-name"
-                class="display-font truncate text-lg font-bold leading-tight text-slate-900"
+                class="display-font truncate text-base font-bold leading-tight text-slate-900 lg:text-[1.05rem]"
               >
                 Select a contact
               </h3>
             </div>
-            <span id="target-status" class="text-sm font-medium text-slate-500"
+            <span id="target-status" class="text-xs font-medium text-slate-500"
               >Offline</span
             >
           </div>
@@ -567,7 +567,7 @@
 
         <div
           id="message-container"
-          class="mobile-chat-scroll hidden flex-1 overflow-y-auto chat-bg px-3 py-3 sm:px-4 lg:px-6"
+          class="mobile-chat-scroll hidden flex-1 overflow-y-auto chat-bg px-2 py-2.5 sm:px-3 lg:px-5"
           onscroll="handleMessageContainerScroll()"
         >
           <div
@@ -578,15 +578,15 @@
           </div>
           <div
             id="messages-list"
-            class="mx-auto flex w-full max-w-5xl flex-col space-y-3"
+            class="mx-auto flex w-full max-w-[46rem] flex-col space-y-2.5"
           ></div>
         </div>
 
         <div
           id="input-area"
-          class="mobile-chat-composer hidden border-t border-slate-200 bg-white/88 px-2.5 py-2.5 backdrop-blur sm:px-4 sm:py-3 lg:px-6"
+          class="mobile-chat-composer hidden border-t border-slate-200 bg-white/90 px-2 py-2 backdrop-blur sm:px-3 sm:py-2.5 lg:px-5"
         >
-          <div class="mx-auto flex w-full max-w-5xl flex-col gap-3">
+          <div class="mx-auto flex w-full max-w-[46rem] flex-col gap-2">
             <div
               id="attachment-preview"
               class="hidden rounded-[24px] border border-slate-200 bg-slate-50 p-3"
@@ -669,7 +669,7 @@
               </div>
             </div>
             <div
-              class="rounded-[28px] border border-slate-200 bg-white p-2 shadow-sm"
+              class="rounded-[24px] border border-slate-200 bg-white p-1.5 shadow-sm"
             >
               <div class="relative flex items-end gap-2">
                 <div class="relative shrink-0">
@@ -677,7 +677,7 @@
                     id="composer-actions-btn"
                     type="button"
                     onclick="toggleComposerActionsMenu()"
-                    class="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-2xl font-semibold text-slate-700 transition hover:bg-slate-100"
+                    class="flex h-11 w-11 items-center justify-center rounded-[18px] border border-slate-200 bg-slate-50 text-2xl font-semibold text-slate-700 transition hover:bg-slate-100"
                   >
                     +
                   </button>

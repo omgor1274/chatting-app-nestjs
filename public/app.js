@@ -2882,7 +2882,6 @@ async function selectUser(userId) {
     setMessageLoadingState(true);
     await loadChatPermission();
     await loadMessageChunk();
-    await ensureScrollableHistory();
   } catch (error) {
     setMessageLoadingState(false);
     alert(error.message || 'Failed to load this chat');
@@ -3033,7 +3032,6 @@ async function handleMessageContainerScroll() {
     }
 
     await loadOlderMessages();
-    await ensureScrollableHistory();
   });
 }
 
@@ -4799,15 +4797,15 @@ function createMessageElement(message) {
   div.className = `${isSent ? 'self-end' : 'self-start'} max-w-full`;
 
   const bubbleTone = isSent
-    ? `rounded-[24px] rounded-br-md text-white shadow-lg ${
+    ? `rounded-[18px] rounded-br-sm text-white shadow-sm ${
         message.isPending ? 'bg-blue-500/85' : 'bg-blue-600'
       }`
-    : 'rounded-[24px] rounded-bl-md border border-slate-200 bg-white text-slate-800 shadow-sm';
+    : 'rounded-[18px] rounded-bl-sm border border-slate-200/90 bg-white/95 text-slate-800 shadow-sm';
   const eye = isSent
     ? `<span class="inline-flex items-center gap-1 ${messageWasRead(message) ? 'text-emerald-200' : 'opacity-70'}">${messageWasRead(message) ? '&#128065;' : ''}</span>`
     : '';
   const footer = `
-          <div class="mt-3 flex items-center justify-end gap-2 text-[11px] ${metaTone}">
+          <div class="mt-2 flex items-center justify-end gap-1.5 text-[10px] ${metaTone}">
             ${message.isPending ? '<span class="font-semibold uppercase tracking-wide">Sending</span>' : ''}
             ${eye}
             <span>${escapeHtml(formatMessageTime(message.createdAt))}</span>
@@ -4816,14 +4814,14 @@ function createMessageElement(message) {
 
   if (message.deletedForEveryoneAt) {
     div.innerHTML = `
-            <div class="${bubbleTone} w-fit max-w-[min(100%,42rem)] px-4 py-3 text-sm italic opacity-80">
+            <div class="${bubbleTone} w-fit max-w-[min(100%,36rem)] px-3.5 py-2.5 text-[13px] italic opacity-80">
               ${escapeHtml(message.senderId === currentUser.id ? 'You unsent this message.' : 'This message was deleted.')}
               ${footer}
             </div>
           `;
   } else if (message.messageType === 'IMAGE' && message.fileUrl) {
     div.innerHTML = `
-            <div class="${bubbleTone} w-fit max-w-[min(100%,42rem)] overflow-hidden p-3">
+            <div class="${bubbleTone} w-fit max-w-[min(100%,36rem)] overflow-hidden p-2.5">
               <a href="${API_URL}${message.fileUrl}" target="_blank" rel="noopener noreferrer">
                 <img src="${API_URL}${message.fileUrl}" loading="lazy" decoding="async" class="mb-2 max-h-80 w-auto rounded-2xl border border-black/5">
               </a>
@@ -4836,9 +4834,9 @@ function createMessageElement(message) {
           `;
   } else if (message.messageType === 'AUDIO' && message.fileUrl) {
     div.innerHTML = `
-            <div class="${bubbleTone} w-fit max-w-[min(100%,42rem)] p-4">
+            <div class="${bubbleTone} w-fit max-w-[min(100%,36rem)] p-3">
               <div class="space-y-3">
-                <p class="font-semibold">${escapeHtml(message.fileName || 'Voice message')}</p>
+                <p class="text-sm font-semibold">${escapeHtml(message.fileName || 'Voice message')}</p>
                 <audio controls src="${API_URL}${message.fileUrl}" class="w-full max-w-md"></audio>
               </div>
               ${footer}
@@ -4849,7 +4847,7 @@ function createMessageElement(message) {
     String(message.fileMimeType || '').startsWith('video/')
   ) {
     div.innerHTML = `
-            <div class="${bubbleTone} w-fit max-w-[min(100%,42rem)] overflow-hidden p-3">
+            <div class="${bubbleTone} w-fit max-w-[min(100%,36rem)] overflow-hidden p-2.5">
               <div class="space-y-3">
                 <video controls playsinline preload="metadata" class="max-h-80 w-full rounded-2xl border border-black/5 bg-black">
                   <source src="${API_URL}${message.fileUrl}" type="${escapeHtml(message.fileMimeType || 'video/mp4')}">
@@ -4865,9 +4863,9 @@ function createMessageElement(message) {
           `;
   } else if (message.messageType === 'DOCUMENT' && message.fileUrl) {
     div.innerHTML = `
-            <div class="${bubbleTone} w-fit max-w-[min(100%,42rem)] p-4">
+            <div class="${bubbleTone} w-fit max-w-[min(100%,36rem)] p-3">
               <div class="space-y-2">
-                <p class="font-semibold">${escapeHtml(message.fileName || 'Document')}</p>
+                <p class="text-sm font-semibold">${escapeHtml(message.fileName || 'Document')}</p>
                 <p class="text-xs ${metaTone}">${formatBytes(message.fileSize)}</p>
                 <div class="flex flex-wrap items-center gap-3 text-xs ${metaTone}">
                   <a href="${API_URL}${message.fileUrl}" target="_blank" rel="noopener noreferrer" class="font-semibold underline">Open file</a>
@@ -4879,7 +4877,7 @@ function createMessageElement(message) {
           `;
   } else {
     div.innerHTML = `
-            <div class="${bubbleTone} w-fit max-w-[min(100%,42rem)] px-4 py-3 text-sm leading-7">
+            <div class="${bubbleTone} w-fit max-w-[min(100%,36rem)] px-3.5 py-2.5 text-[14px] leading-6">
               ${escapeHtml(getResolvedMessageText(message))}
               ${footer}
             </div>
