@@ -428,7 +428,7 @@
             >
           </div>
           <div
-            class="mobile-chat-header-actions relative ml-auto flex flex-wrap items-center justify-end gap-2"
+            class="mobile-chat-header-actions ml-auto flex flex-wrap items-center justify-end gap-2"
           >
             <button
               id="request-action-btn"
@@ -444,16 +444,18 @@
             >
               Reject
             </button>
+          </div>
+          <div class="chat-actions-anchor relative">
             <button
               id="chat-actions-btn"
               onclick="toggleChatActionsMenu()"
               class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-lg font-semibold leading-none text-slate-700 hover:bg-slate-50"
             >
-              ⋯
+              ...
             </button>
             <div
               id="chat-actions-menu"
-              class="floating-menu hidden fixed z-[90] w-52 rounded-[22px] border border-slate-200 bg-white p-2"
+              class="floating-menu hidden absolute right-0 top-full z-[90] mt-2 w-52 rounded-[22px] border border-slate-200 bg-white p-2"
             >
               <button
                 id="chat-theme-btn"

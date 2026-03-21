@@ -1569,19 +1569,28 @@ function closeComposerActionsMenu() {
 
 function toggleChatActionsMenu() {
   const menu = document.getElementById('chat-actions-menu');
-  const isHidden = menu.classList.contains('hidden');
-  menu.classList.toggle('hidden');
-  if (isHidden) {
-    updateChatActionsMenuPosition();
-  }
+  const isOpening = menu.classList.contains('hidden');
   closeComposerActionsMenu();
+
+  if (!isOpening) {
+    closeChatActionsMenu();
+    return;
+  }
+
+  menu.classList.remove('hidden');
+  updateChatActionsMenuPosition();
 }
 
 function closeChatActionsMenu() {
   const menu = document.getElementById('chat-actions-menu');
   menu.classList.add('hidden');
+  menu.style.position = '';
   menu.style.left = '';
   menu.style.top = '';
+  menu.style.right = '';
+  menu.style.bottom = '';
+  menu.style.width = '';
+  menu.style.maxHeight = '';
 }
 
 function updateChatActionsMenuPosition() {
@@ -1592,8 +1601,24 @@ function updateChatActionsMenuPosition() {
     return;
   }
 
+  menu.style.position = 'fixed';
+
+  if (window.innerWidth < 1024) {
+    menu.style.left = '0.75rem';
+    menu.style.right = '0.75rem';
+    menu.style.bottom = 'calc(env(safe-area-inset-bottom) + 5.75rem)';
+    menu.style.top = '';
+    menu.style.width = 'auto';
+    menu.style.maxHeight = 'min(55vh, 28rem)';
+    return;
+  }
+
   menu.style.left = '0px';
   menu.style.top = '0px';
+  menu.style.right = '';
+  menu.style.bottom = '';
+  menu.style.width = '13rem';
+  menu.style.maxHeight = 'min(70vh, 28rem)';
 
   const buttonRect = button.getBoundingClientRect();
   const menuRect = menu.getBoundingClientRect();
@@ -1606,10 +1631,11 @@ function updateChatActionsMenuPosition() {
     Math.max(padding, buttonRect.right - menuRect.width),
     maxLeft,
   );
-  const top = Math.min(
-    buttonRect.bottom + 8,
-    Math.max(padding, window.innerHeight - menuRect.height - padding),
-  );
+  const wouldOverflowBottom =
+    buttonRect.bottom + 10 + menuRect.height > window.innerHeight - padding;
+  const top = wouldOverflowBottom
+    ? Math.max(padding, buttonRect.top - menuRect.height - 10)
+    : buttonRect.bottom + 10;
 
   menu.style.left = `${left}px`;
   menu.style.top = `${top}px`;
@@ -3073,6 +3099,7 @@ function updateChatAccessUI() {
   const fileLabel = document.getElementById('share-file-label');
   const composerActionsBtn = document.getElementById('composer-actions-btn');
   const note = document.getElementById('chat-access-note');
+  const headerActions = document.querySelector('.mobile-chat-header-actions');
   const actionBtn = document.getElementById('request-action-btn');
   const rejectBtn = document.getElementById('request-reject-btn');
   const chatActionsBtn = document.getElementById('chat-actions-btn');
@@ -3119,6 +3146,14 @@ function updateChatAccessUI() {
     }
   };
 
+  const syncHeaderActionsVisibility = () => {
+    headerActions?.classList.toggle(
+      'hidden',
+      actionBtn.classList.contains('hidden') &&
+        rejectBtn.classList.contains('hidden'),
+    );
+  };
+
   actionBtn.classList.add('hidden');
   rejectBtn.classList.add('hidden');
   note.classList.add('hidden');
@@ -3136,6 +3171,7 @@ function updateChatAccessUI() {
 
   if (!selectedUser) {
     applyGatedState(false);
+    syncHeaderActionsVisibility();
     return;
   }
 
@@ -3143,6 +3179,7 @@ function updateChatAccessUI() {
     blockBtn.classList.add('hidden');
     applyGatedState(true);
     note.classList.add('hidden');
+    syncHeaderActionsVisibility();
     return;
   }
 
@@ -3159,6 +3196,7 @@ function updateChatAccessUI() {
     applyGatedState(false);
     note.classList.remove('hidden');
     note.textContent = `You blocked ${displayName(selectedUser)}. Unblock them to chat again.`;
+    syncHeaderActionsVisibility();
     return;
   }
 
@@ -3166,12 +3204,14 @@ function updateChatAccessUI() {
     applyGatedState(false);
     note.classList.remove('hidden');
     note.textContent = `${displayName(selectedUser)} has blocked you.`;
+    syncHeaderActionsVisibility();
     return;
   }
 
   if (chatPermission.canChat) {
     applyGatedState(true);
     note.classList.add('hidden');
+    syncHeaderActionsVisibility();
     return;
   }
 
@@ -3183,6 +3223,7 @@ function updateChatAccessUI() {
     actionBtn.classList.remove('hidden');
     rejectBtn.classList.remove('hidden');
     note.textContent = `${displayName(selectedUser)} sent you a chat request.`;
+    syncHeaderActionsVisibility();
     return;
   }
 
@@ -3191,6 +3232,7 @@ function updateChatAccessUI() {
     actionBtn.classList.remove('hidden');
     actionBtn.disabled = true;
     note.textContent = `Waiting for ${displayName(selectedUser)} to accept your request.`;
+    syncHeaderActionsVisibility();
     return;
   }
 
@@ -3198,6 +3240,7 @@ function updateChatAccessUI() {
   actionBtn.classList.remove('hidden');
   actionBtn.disabled = false;
   note.textContent = 'Send a request before starting this chat.';
+  syncHeaderActionsVisibility();
 }
 
 async function toggleBlockedUser() {
