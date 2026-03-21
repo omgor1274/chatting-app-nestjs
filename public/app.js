@@ -1611,21 +1611,6 @@ function closeChatActionsMenu() {
   menu.style.maxHeight = '';
 }
 
-function bindChatActionMenuButton() {
-  const button = document.getElementById('chat-actions-btn');
-  if (!button || button.dataset.bound === '1') {
-    return;
-  }
-
-  button.dataset.bound = '1';
-  button.addEventListener('click', (event) => {
-    toggleChatActionsMenu(event);
-  });
-  button.addEventListener('touchend', (event) => {
-    toggleChatActionsMenu(event);
-  });
-}
-
 function updateChatActionsMenuPosition() {
   const menu = document.getElementById('chat-actions-menu');
   const button = document.getElementById('chat-actions-btn');
@@ -2924,7 +2909,7 @@ async function handleIncomingMessage(message, isOwnMessage) {
 
   if (selectedUser && belongsToSelectedConversation(hydratedMessage)) {
     appendMessage(hydratedMessage, {
-      stickToBottom: isOwnMessage || isMessageContainerNearBottom(),
+      stickToBottom: true,
     });
     if (!isOwnMessage) {
       void markSelectedConversationRead();
@@ -5544,7 +5529,6 @@ if (window.visualViewport) {
 applyViewportHeight();
 updateInstallAppUI();
 updateVoiceComposerUI();
-bindChatActionMenuButton();
 ensureServiceWorkerReady().catch((error) => {
   console.error(error);
 });
