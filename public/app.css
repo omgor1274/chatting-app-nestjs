@@ -46,6 +46,19 @@ html,
       background-position: center;
     }
 
+    #users-list > li,
+    #messages-list > div {
+      content-visibility: auto;
+    }
+
+    #users-list > li {
+      contain-intrinsic-size: 84px;
+    }
+
+    #messages-list > div {
+      contain-intrinsic-size: 112px;
+    }
+
     .glass {
       background: #ffffff;
     }

@@ -32,6 +32,9 @@ const isFileOrigin = window.location.protocol === 'file:';
     let headerRenderFrame = 0;
     let historyScrollFrame = 0;
     let viewportHeightFrame = 0;
+    let loadUsersPromise = null;
+    let reloadUsersAfterCurrentLoad = false;
+    let renderedUserSignatures = new Map();
     let messagePagination = {
       nextBefore: null,
       hasMore: false,
@@ -1963,110 +1966,128 @@ const isFileOrigin = window.location.protocol === 'file:';
     }
 
     async function loadUsers() {
-      const [recentRes, allUsersRes, groupsRes, invitesRes] = await Promise.all([
-        api('/chat/recent'),
-        api('/users'),
-        api('/chat/groups'),
-        api('/chat/groups/invites'),
-      ]);
-
-      if (!recentRes.ok || !allUsersRes.ok || !groupsRes.ok || !invitesRes.ok) {
-        throw new Error('Failed to load users');
+      if (loadUsersPromise) {
+        reloadUsersAfterCurrentLoad = true;
+        return loadUsersPromise;
       }
 
-      const recentUsers = await readJsonResponse(
-        recentRes,
-        [],
-        'Failed to load recent chats.',
-      );
-      const allUsers = await readJsonResponse(
-        allUsersRes,
-        [],
-        'Failed to load users.',
-      );
-      const groups = await readJsonResponse(
-        groupsRes,
-        [],
-        'Failed to load groups.',
-      );
-      groupInvites = await readJsonResponse(
-        invitesRes,
-        [],
-        'Failed to load group invites.',
-      );
+      loadUsersPromise = (async () => {
+        const [recentRes, allUsersRes, groupsRes, invitesRes] = await Promise.all([
+          api('/chat/recent'),
+          api('/users'),
+          api('/chat/groups'),
+          api('/chat/groups/invites'),
+        ]);
 
-      peopleDirectory = allUsers.map((user) =>
-        normalizeUser({ ...user, chatType: 'direct' }),
-      );
-
-      const existingByKey = new Map(
-        users.map((user) => [`${user.chatType || 'direct'}:${user.id}`, user]),
-      );
-      const recentByKey = new Map(
-        recentUsers.map((user) => [
-          `${user.chatType || 'direct'}:${user.id}`,
-          user,
-        ]),
-      );
-
-      const directUsers = peopleDirectory.map((user) => {
-        const key = `direct:${user.id}`;
-        const recent = recentByKey.get(key);
-        return normalizeUser(
-          {
-            ...user,
-            chatType: 'direct',
-            lastMessagePreview: recent?.lastMessagePreview ?? null,
-            lastMessageAt: recent?.lastMessageAt ?? null,
-            lastMessageType: recent?.lastMessageType ?? null,
-          },
-          existingByKey.get(key),
-        );
-      });
-
-      const groupUsers = groups.map((group) => {
-        const key = `group:${group.id}`;
-        const recent = recentByKey.get(key);
-        return normalizeUser(
-          {
-            ...group,
-            chatType: 'group',
-            displayName: group.name,
-            nickname: null,
-            email: '',
-            chatTheme: null,
-            lastMessagePreview:
-              recent?.lastMessagePreview ?? group.lastMessagePreview ?? null,
-            lastMessageAt:
-              recent?.lastMessageAt ?? group.lastMessageAt ?? null,
-            lastMessageType:
-              recent?.lastMessageType ?? group.lastMessageType ?? null,
-          },
-          existingByKey.get(key),
-        );
-      });
-
-      users = [...directUsers, ...groupUsers];
-      users
-        .filter((user) => !isGroupConversation(user))
-        .forEach((user) => ignoredPresenceUserIds.delete(user.id));
-
-      for (const user of users) {
-        if (!recentActivity.has(user.id)) {
-          recentActivity.set(user.id, {
-            lastAt: user.lastMessageAt
-              ? new Date(user.lastMessageAt).getTime()
-              : 0,
-            preview: user.lastMessagePreview || '',
-            unread: 0,
-          });
+        if (!recentRes.ok || !allUsersRes.ok || !groupsRes.ok || !invitesRes.ok) {
+          throw new Error('Failed to load users');
         }
+
+        const recentUsers = await readJsonResponse(
+          recentRes,
+          [],
+          'Failed to load recent chats.',
+        );
+        const allUsers = await readJsonResponse(
+          allUsersRes,
+          [],
+          'Failed to load users.',
+        );
+        const groups = await readJsonResponse(
+          groupsRes,
+          [],
+          'Failed to load groups.',
+        );
+        groupInvites = await readJsonResponse(
+          invitesRes,
+          [],
+          'Failed to load group invites.',
+        );
+
+        peopleDirectory = allUsers.map((user) =>
+          normalizeUser({ ...user, chatType: 'direct' }),
+        );
+
+        const existingByKey = new Map(
+          users.map((user) => [`${user.chatType || 'direct'}:${user.id}`, user]),
+        );
+        const recentByKey = new Map(
+          recentUsers.map((user) => [
+            `${user.chatType || 'direct'}:${user.id}`,
+            user,
+          ]),
+        );
+
+        const directUsers = peopleDirectory.map((user) => {
+          const key = `direct:${user.id}`;
+          const recent = recentByKey.get(key);
+          return normalizeUser(
+            {
+              ...user,
+              chatType: 'direct',
+              lastMessagePreview: recent?.lastMessagePreview ?? null,
+              lastMessageAt: recent?.lastMessageAt ?? null,
+              lastMessageType: recent?.lastMessageType ?? null,
+            },
+            existingByKey.get(key),
+          );
+        });
+
+        const groupUsers = groups.map((group) => {
+          const key = `group:${group.id}`;
+          const recent = recentByKey.get(key);
+          return normalizeUser(
+            {
+              ...group,
+              chatType: 'group',
+              displayName: group.name,
+              nickname: null,
+              email: '',
+              chatTheme: null,
+              lastMessagePreview:
+                recent?.lastMessagePreview ?? group.lastMessagePreview ?? null,
+              lastMessageAt:
+                recent?.lastMessageAt ?? group.lastMessageAt ?? null,
+              lastMessageType:
+                recent?.lastMessageType ?? group.lastMessageType ?? null,
+            },
+            existingByKey.get(key),
+          );
+        });
+
+        users = [...directUsers, ...groupUsers];
+        users
+          .filter((user) => !isGroupConversation(user))
+          .forEach((user) => ignoredPresenceUserIds.delete(user.id));
+
+        for (const user of users) {
+          if (!recentActivity.has(user.id)) {
+            recentActivity.set(user.id, {
+              lastAt: user.lastMessageAt
+                ? new Date(user.lastMessageAt).getTime()
+                : 0,
+              preview: user.lastMessagePreview || '',
+              unread: 0,
+            });
+          }
+        }
+
+        syncSelectedUser();
+        updateChatCount();
+        renderGroupInvites();
+        renderUsers();
+      })();
+
+      try {
+        await loadUsersPromise;
+      } finally {
+        loadUsersPromise = null;
       }
 
-      syncSelectedUser();
-      updateChatCount();
-      renderGroupInvites();
-      renderUsers();
+      if (reloadUsersAfterCurrentLoad) {
+        reloadUsersAfterCurrentLoad = false;
+        return loadUsers();
+      }
     }
 
     async function refreshUsersForPresence(ids) {
@@ -2130,37 +2151,95 @@ const isFileOrigin = window.location.protocol === 'file:';
         });
     }
 
-    function renderUsers() {
-      const list = getById('users-list');
-      list.innerHTML = getSortedUsers()
-        .map((user) => {
-          const isSelected = selectedUser?.id === user.id;
-          const isOnline = !isGroupConversation(user) && onlineUserIds.has(user.id);
-          const state = recentActivity.get(user.id) || {
-            preview: '',
-            unread: 0,
-          };
-          return `
-                    <li onclick="selectUser('${user.id}')" class="cursor-pointer rounded-[26px] border p-2.5 transition-all ${isSelected ? 'border-blue-200 bg-blue-50 shadow-sm' : 'border-transparent bg-white/70 hover:border-slate-200 hover:bg-white'}">
-                        <div class="flex items-center gap-3 rounded-[22px] p-2">
-                            <div class="relative shrink-0">
-                                <img src="${userAvatar(user)}" loading="lazy" decoding="async" class="h-12 w-12 rounded-2xl object-cover shadow-sm">
-                                ${isGroupConversation(user)
+    function userListKey(user) {
+      return `${user?.chatType || 'direct'}:${user?.id}`;
+    }
+
+    function getUserRenderSignature(user) {
+      const state = recentActivity.get(user.id) || {
+        preview: '',
+        unread: 0,
+      };
+      return [
+        selectedUser?.id === user.id ? 1 : 0,
+        !isGroupConversation(user) && onlineUserIds.has(user.id) ? 1 : 0,
+        displayName(user),
+        user.avatar || '',
+        state.preview || '',
+        state.unread || 0,
+      ].join('::');
+    }
+
+    function createUserListElement(user) {
+      const item = document.createElement('li');
+      const isSelected = selectedUser?.id === user.id;
+      const isOnline = !isGroupConversation(user) && onlineUserIds.has(user.id);
+      const state = recentActivity.get(user.id) || {
+        preview: '',
+        unread: 0,
+      };
+
+      item.dataset.userKey = userListKey(user);
+      item.className =
+        `cursor-pointer rounded-[26px] border p-2.5 transition-all ${
+          isSelected
+            ? 'border-blue-200 bg-blue-50 shadow-sm'
+            : 'border-transparent bg-white/70 hover:border-slate-200 hover:bg-white'
+        }`;
+      item.onclick = () => selectUser(user.id);
+      item.innerHTML = `
+        <div class="flex items-center gap-3 rounded-[22px] p-2">
+          <div class="relative shrink-0">
+            <img src="${userAvatar(user)}" loading="lazy" decoding="async" class="h-12 w-12 rounded-2xl object-cover shadow-sm">
+            ${isGroupConversation(user)
               ? `<span class="absolute -bottom-1 -right-1 rounded-full border-2 border-white bg-slate-900 px-1.5 py-[2px] text-[10px] font-bold uppercase tracking-wide text-white">G</span>`
               : `<span class="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-white ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}"></span>`}
-                            </div>
-                            <div class="min-w-0 flex-1">
-                                <p class="truncate text-sm font-bold text-slate-900">${escapeHtml(displayName(user))}</p>
-                                <p class="mt-1 truncate text-xs ${state.unread ? 'font-semibold text-slate-700' : 'text-slate-400'}">
-                                    ${escapeHtml(state.preview || 'No recent messages yet')}
-                                </p>
-                            </div>
-                            ${state.unread ? `<span class="flex h-7 min-w-7 items-center justify-center rounded-full bg-blue-600 px-2 text-xs font-bold text-white">${state.unread}</span>` : ''}
-                        </div>
-                    </li>
-                `;
-        })
-        .join('');
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-sm font-bold text-slate-900">${escapeHtml(displayName(user))}</p>
+            <p class="mt-1 truncate text-xs ${state.unread ? 'font-semibold text-slate-700' : 'text-slate-400'}">
+              ${escapeHtml(state.preview || 'No recent messages yet')}
+            </p>
+          </div>
+          ${state.unread ? `<span class="flex h-7 min-w-7 items-center justify-center rounded-full bg-blue-600 px-2 text-xs font-bold text-white">${state.unread}</span>` : ''}
+        </div>
+      `;
+
+      return item;
+    }
+
+    function renderUsers() {
+      const list = getById('users-list');
+      const sortedUsers = getSortedUsers();
+      const existingNodes = new Map(
+        Array.from(list.children).map((child) => [child.dataset.userKey, child]),
+      );
+      const nextSignatures = new Map();
+
+      for (const user of sortedUsers) {
+        const key = userListKey(user);
+        const signature = getUserRenderSignature(user);
+        nextSignatures.set(key, signature);
+
+        const existingNode = existingNodes.get(key);
+        const nextNode =
+          existingNode && renderedUserSignatures.get(key) === signature
+            ? existingNode
+            : createUserListElement(user);
+
+        list.appendChild(nextNode);
+        if (existingNode && existingNode !== nextNode) {
+          existingNode.remove();
+        }
+        existingNodes.delete(key);
+      }
+
+      for (const [key, node] of existingNodes.entries()) {
+        renderedUserSignatures.delete(key);
+        node.remove();
+      }
+
+      renderedUserSignatures = nextSignatures;
     }
 
     function renderGroupInvites() {
@@ -2412,7 +2491,9 @@ const isFileOrigin = window.location.protocol === 'file:';
         selectedUser &&
         belongsToSelectedConversation(hydratedMessage)
       ) {
-        appendMessage(hydratedMessage);
+        appendMessage(hydratedMessage, {
+          stickToBottom: isOwnMessage || isMessageContainerNearBottom(),
+        });
         if (!isOwnMessage) {
           await markSelectedConversationRead();
         }
@@ -2528,21 +2609,23 @@ const isFileOrigin = window.location.protocol === 'file:';
         return;
       }
 
-        for (const message of messages) {
-          updateRecentActivity(
-            message.senderId === currentUser.id
-              ? message.groupId || message.receiverId
-              : message.senderId,
+      for (const message of messages) {
+        updateRecentActivity(
+          message.senderId === currentUser.id
+            ? message.groupId || message.receiverId
+            : message.senderId,
           message,
           false,
+          { scheduleRender: false },
         );
-          appendMessage(message);
-        }
-
-        if (options.markRead !== false) {
-          await markSelectedConversationRead();
-        }
       }
+      appendMessages(messages, { stickToBottom: false });
+      scheduleRenderUsers();
+
+      if (options.markRead !== false) {
+        await markSelectedConversationRead();
+      }
+    }
 
     async function loadOlderMessages() {
       if (
@@ -2978,7 +3061,12 @@ const isFileOrigin = window.location.protocol === 'file:';
       });
     }
 
-    function updateRecentActivity(userId, message, incrementUnread) {
+    function updateRecentActivity(
+      userId,
+      message,
+      incrementUnread,
+      options = {},
+    ) {
       const current = recentActivity.get(userId) || {
         lastAt: 0,
         preview: '',
@@ -2989,7 +3077,9 @@ const isFileOrigin = window.location.protocol === 'file:';
         preview: getMessagePreview(message),
         unread: incrementUnread ? current.unread + 1 : current.unread,
       });
-      scheduleRenderUsers();
+      if (options.scheduleRender !== false) {
+        scheduleRenderUsers();
+      }
     }
 
     async function sendMessage() {
@@ -4332,21 +4422,58 @@ const isFileOrigin = window.location.protocol === 'file:';
       return div;
     }
 
-    function appendMessage(message) {
-      if (!message || renderedMessageIds.has(message.id) || !selectedUser) {
-        return;
-      }
-
-      if (!belongsToSelectedConversation(message)) {
-        return;
-      }
-
-      renderedMessageIds.add(message.id);
-      conversationMessages.set(message.id, message);
-      const list = document.getElementById('messages-list');
-      list.appendChild(createMessageElement(message));
+    function isMessageContainerNearBottom(threshold = 96) {
       const container = document.getElementById('message-container');
-      container.scrollTop = container.scrollHeight;
+      if (!container) {
+        return true;
+      }
+
+      return (
+        container.scrollHeight - container.scrollTop - container.clientHeight
+        <= threshold
+      );
+    }
+
+    function appendMessages(messages, options = {}) {
+      if (!selectedUser || !Array.isArray(messages) || messages.length === 0) {
+        return;
+      }
+
+      const list = document.getElementById('messages-list');
+      const fragment = document.createDocumentFragment();
+      let appendedCount = 0;
+
+      for (const message of messages) {
+        if (!message || renderedMessageIds.has(message.id)) {
+          continue;
+        }
+
+        if (!belongsToSelectedConversation(message)) {
+          continue;
+        }
+
+        renderedMessageIds.add(message.id);
+        conversationMessages.set(message.id, message);
+        fragment.appendChild(createMessageElement(message));
+        appendedCount += 1;
+      }
+
+      if (!appendedCount) {
+        return;
+      }
+
+      list.appendChild(fragment);
+
+      if (options.stickToBottom) {
+        const container = document.getElementById('message-container');
+        container.scrollTop = container.scrollHeight;
+      }
+    }
+
+    function appendMessage(message, options = {}) {
+      appendMessages([message], {
+        stickToBottom: options.stickToBottom !== false,
+      });
     }
 
     function prependMessages(messages) {
