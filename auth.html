@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#2563eb" />
+    <title>O-chat Auth</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/public/app.css?v=20260321" />
+  </head>
+
+  <body class="min-h-screen bg-slate-100 p-4 sm:p-6">
+    <main
+      class="mx-auto flex min-h-[calc(100vh-2rem)] max-w-5xl items-center justify-center lg:min-h-[calc(100vh-3rem)]"
+    >
+      <section
+        class="glass grid w-full max-w-5xl overflow-hidden rounded-[32px] border border-white/70 bg-white shadow-[0_30px_120px_rgba(15,23,42,0.12)] lg:grid-cols-[1.05fr_0.95fr]"
+      >
+        <div class="hidden bg-slate-900 px-8 py-10 text-white lg:block">
+          <p
+            class="text-sm font-semibold uppercase tracking-[0.24em] text-blue-200"
+          >
+            Realtime
+          </p>
+          <h1 class="mt-6 text-4xl font-bold leading-tight">
+            A slimmer way into O-chat.
+          </h1>
+          <p class="mt-4 max-w-md text-sm leading-7 text-slate-300">
+            Auth now loads as its own page, so login, verification, and password
+            reset stay fast while the chat runtime waits until you actually need
+            it.
+          </p>
+          <div class="mt-10 grid gap-3 text-sm text-slate-300">
+            <div
+              class="rounded-2xl border border-white/10 bg-white/5 px-4 py-4"
+            >
+              Separate auth page
+            </div>
+            <div
+              class="rounded-2xl border border-white/10 bg-white/5 px-4 py-4"
+            >
+              Chat runtime loads later
+            </div>
+            <div
+              class="rounded-2xl border border-white/10 bg-white/5 px-4 py-4"
+            >
+              Quick jump to chats after login
+            </div>
+          </div>
+        </div>
+
+        <div class="p-6 sm:p-8">
+          <div class="mx-auto max-w-md space-y-6">
+            <div class="space-y-2">
+              <a
+                href="/chat"
+                class="text-sm font-medium text-blue-600 hover:text-blue-700"
+                >Skip to chats</a
+              >
+              <h2 id="auth-title" class="text-3xl font-bold text-slate-900">
+                Welcome Back
+              </h2>
+              <p id="auth-subtitle" class="text-sm leading-6 text-slate-500">
+                Login or create an account.
+              </p>
+            </div>
+
+            <div id="auth-form" class="space-y-4">
+              <input
+                type="text"
+                id="name-input"
+                placeholder="Your Name"
+                class="hidden w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+              />
+              <input
+                type="email"
+                id="email-input"
+                placeholder="Email Address"
+                class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+              />
+              <input
+                type="password"
+                id="password-input"
+                placeholder="Password"
+                class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+              />
+              <input
+                type="password"
+                id="confirm-password-input"
+                placeholder="Confirm Password"
+                class="hidden w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+              />
+              <div
+                id="auth-feedback"
+                class="hidden rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700"
+              ></div>
+              <button
+                id="auth-btn"
+                class="w-full rounded-2xl bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700"
+              >
+                Login
+              </button>
+              <button
+                type="button"
+                id="forgot-password-btn"
+                class="hidden w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                Forgot Password
+              </button>
+              <button
+                type="button"
+                id="auth-switch"
+                class="w-full text-center text-sm font-medium text-blue-600 transition hover:text-blue-700"
+              >
+                New here? Create an account
+              </button>
+            </div>
+
+            <div id="verification-step" class="hidden space-y-4">
+              <div
+                class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700"
+              >
+                <p id="verification-message" class="leading-6">
+                  Check your email and enter the OTP below.
+                </p>
+                <p
+                  class="mt-2 font-semibold text-slate-900"
+                  id="verification-email"
+                >
+                  your-email@example.com
+                </p>
+              </div>
+              <input
+                id="verification-otp-input"
+                type="text"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                maxlength="6"
+                placeholder="Enter 6-digit OTP"
+                class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-center text-lg font-semibold tracking-[0.3em] text-slate-900 outline-none transition placeholder:tracking-normal placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+              />
+              <div
+                id="verification-feedback"
+                class="hidden rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700"
+              ></div>
+              <button
+                type="button"
+                id="verify-email-btn"
+                class="w-full rounded-2xl bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700"
+              >
+                Verify Email
+              </button>
+              <div class="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  id="resend-verification-btn"
+                  class="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Resend Verification
+                </button>
+                <button
+                  type="button"
+                  class="return-login-btn rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Back To Login
+                </button>
+              </div>
+            </div>
+
+            <div id="forgot-password-step" class="hidden space-y-4">
+              <div
+                class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700"
+              >
+                <p class="leading-6">
+                  Enter your email and we’ll send a reset OTP.
+                </p>
+              </div>
+              <input
+                id="forgot-email-input"
+                type="email"
+                placeholder="Email Address"
+                class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+              />
+              <div
+                id="forgot-password-feedback"
+                class="hidden rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700"
+              ></div>
+              <button
+                type="button"
+                id="send-forgot-btn"
+                class="w-full rounded-2xl bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700"
+              >
+                Send Reset OTP
+              </button>
+              <button
+                type="button"
+                class="return-login-btn w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                Back To Login
+              </button>
+            </div>
+
+            <div id="reset-password-step" class="hidden space-y-4">
+              <div
+                class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700"
+              >
+                <p id="reset-password-message" class="leading-6">
+                  Use the OTP from your email and set a new password.
+                </p>
+              </div>
+              <input
+                id="reset-email-input"
+                type="email"
+                placeholder="Email Address"
+                class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+              />
+              <input
+                id="reset-otp-input"
+                type="text"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                maxlength="6"
+                placeholder="Enter 6-digit OTP"
+                class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-center text-lg font-semibold tracking-[0.3em] text-slate-900 outline-none transition placeholder:tracking-normal placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+              />
+              <input
+                id="reset-password-page-input"
+                type="password"
+                placeholder="New Password"
+                class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+              />
+              <div
+                id="reset-password-feedback"
+                class="hidden rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700"
+              ></div>
+              <button
+                type="button"
+                id="submit-reset-btn"
+                class="w-full rounded-2xl bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700"
+              >
+                Reset Password
+              </button>
+              <div class="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  id="resend-reset-btn"
+                  class="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Resend OTP
+                </button>
+                <button
+                  type="button"
+                  id="change-reset-email-btn"
+                  class="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Change Email
+                </button>
+              </div>
+              <button
+                type="button"
+                class="return-login-btn w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                Back To Login
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/public/auth.js?v=20260321"></script>
+  </body>
+</html>

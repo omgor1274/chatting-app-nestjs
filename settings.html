@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#2563eb" />
+    <title>O-chat Settings</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/public/app.css?v=20260321" />
+  </head>
+
+  <body class="min-h-screen bg-slate-100 p-4 sm:p-6">
+    <main class="mx-auto max-w-5xl space-y-6">
+      <header
+        class="glass flex flex-wrap items-center justify-between gap-3 rounded-[28px] border border-white/70 bg-white px-5 py-4 shadow-[0_30px_120px_rgba(15,23,42,0.12)] sm:px-6"
+      >
+        <div>
+          <p
+            class="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500"
+          >
+            O-chat
+          </p>
+          <h1 class="mt-1 text-2xl font-bold text-slate-900">Settings</h1>
+        </div>
+        <a
+          href="/chat"
+          class="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
+        >
+          Back to Chats
+        </a>
+      </header>
+
+      <section class="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+        <div class="space-y-6">
+          <div
+            class="glass rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_30px_120px_rgba(15,23,42,0.12)]"
+          >
+            <div class="flex items-center gap-4">
+              <img
+                id="settings-avatar"
+                alt="Your avatar"
+                src="https://ui-avatars.com/api/?name=You&background=E2E8F0&color=475569&size=256"
+                class="h-16 w-16 rounded-2xl object-cover"
+              />
+              <div>
+                <p
+                  id="settings-current-name"
+                  class="text-lg font-bold text-slate-900"
+                >
+                  Your profile
+                </p>
+                <p id="settings-current-email" class="text-sm text-slate-500">
+                  Loading...
+                </p>
+              </div>
+            </div>
+            <div
+              id="settings-feedback"
+              class="hidden mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700"
+            ></div>
+          </div>
+
+          <form
+            id="profile-form"
+            class="glass space-y-4 rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_30px_120px_rgba(15,23,42,0.12)]"
+          >
+            <div>
+              <p
+                class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400"
+              >
+                Profile
+              </p>
+              <h2 class="mt-2 text-xl font-bold text-slate-900">
+                Account details
+              </h2>
+            </div>
+            <input
+              id="profile-name-input"
+              type="text"
+              placeholder="Your name"
+              class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+            />
+            <input
+              id="profile-email-input"
+              type="email"
+              placeholder="Email address"
+              class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+            />
+            <button
+              class="w-full rounded-2xl bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700"
+            >
+              Save Profile
+            </button>
+          </form>
+        </div>
+
+        <div class="space-y-6">
+          <form
+            id="preferences-form"
+            class="glass space-y-4 rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_30px_120px_rgba(15,23,42,0.12)]"
+          >
+            <div>
+              <p
+                class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400"
+              >
+                Preferences
+              </p>
+              <h2 class="mt-2 text-xl font-bold text-slate-900">
+                App behavior
+              </h2>
+            </div>
+            <label
+              class="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+            >
+              <span>Dark mode</span>
+              <input
+                id="settings-darkmode-input"
+                type="checkbox"
+                class="h-5 w-5"
+              />
+            </label>
+            <label
+              class="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+            >
+              <span>Chat backups</span>
+              <input
+                id="settings-backup-input"
+                type="checkbox"
+                class="h-5 w-5"
+              />
+            </label>
+            <label
+              class="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+            >
+              <span>Back up images</span>
+              <input
+                id="settings-backup-images-input"
+                type="checkbox"
+                class="h-5 w-5"
+              />
+            </label>
+            <label
+              class="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+            >
+              <span>Back up videos</span>
+              <input
+                id="settings-backup-videos-input"
+                type="checkbox"
+                class="h-5 w-5"
+              />
+            </label>
+            <label
+              class="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+            >
+              <span>Back up files</span>
+              <input
+                id="settings-backup-files-input"
+                type="checkbox"
+                class="h-5 w-5"
+              />
+            </label>
+            <button
+              class="w-full rounded-2xl bg-slate-900 py-3 font-semibold text-white transition hover:bg-slate-800"
+            >
+              Save Preferences
+            </button>
+          </form>
+
+          <form
+            id="password-form"
+            class="glass space-y-4 rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_30px_120px_rgba(15,23,42,0.12)]"
+          >
+            <div>
+              <p
+                class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400"
+              >
+                Security
+              </p>
+              <h2 class="mt-2 text-xl font-bold text-slate-900">
+                Change password
+              </h2>
+            </div>
+            <input
+              id="current-password-input"
+              type="password"
+              placeholder="Current password"
+              class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+            />
+            <input
+              id="new-password-input"
+              type="password"
+              placeholder="New password"
+              class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+            />
+            <input
+              id="confirm-new-password-input"
+              type="password"
+              placeholder="Confirm new password"
+              class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+            />
+            <button
+              class="w-full rounded-2xl border border-slate-200 bg-white py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Update Password
+            </button>
+          </form>
+
+          <button
+            id="logout-btn"
+            class="glass w-full rounded-[28px] border border-rose-200 bg-rose-50 px-6 py-4 text-sm font-semibold text-rose-700 shadow-[0_30px_120px_rgba(15,23,42,0.08)] transition hover:bg-rose-100"
+          >
+            Log Out
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/public/settings.js?v=20260321"></script>
+  </body>
+</html>

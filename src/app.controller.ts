@@ -13,6 +13,24 @@ export class AppController {
     return res.sendFile(resolveAppRootPath('index.html'));
   }
 
+  @Get('chat')
+  getChat(@Res() res: Response) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.sendFile(resolveAppRootPath('chat.html'));
+  }
+
+  @Get('auth')
+  getAuth(@Res() res: Response) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.sendFile(resolveAppRootPath('auth.html'));
+  }
+
+  @Get('settings')
+  getSettings(@Res() res: Response) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.sendFile(resolveAppRootPath('settings.html'));
+  }
+
   @Get('health')
   getHealth() {
     return this.appService.getHealth();
