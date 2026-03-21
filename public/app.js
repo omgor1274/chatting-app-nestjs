@@ -306,8 +306,12 @@ async function encryptTextForConversation(plainText) {
 }
 
 async function decryptTextMessage(message) {
-  if (!message?.isEncrypted || !message?.ciphertext) {
+  if (!shouldTreatMessageAsEncrypted(message)) {
     return message?.content || message?.ciphertext || '';
+  }
+
+  if (!message?.ciphertext) {
+    return '[Encrypted message]';
   }
 
   if (
@@ -419,6 +423,30 @@ function formatTypingStatus(activeTypingUsers) {
   return `${names[0]}, ${names[1]}, and ${names.length - 2} more are typing...`;
 }
 
+function looksEncryptedPayload(value) {
+  const text = String(value || '').trim();
+  if (text.length < 24 || /\s/.test(text)) {
+    return false;
+  }
+
+  return /^[A-Za-z0-9+/=_-]+$/.test(text) && /[+/=]/.test(text);
+}
+
+function shouldTreatMessageAsEncrypted(message) {
+  if (!message) {
+    return false;
+  }
+
+  return Boolean(
+    message.isEncrypted ||
+    message.ciphertext ||
+    message.encryptedKey ||
+    message.iv ||
+    looksEncryptedPayload(message.content) ||
+    looksEncryptedPayload(message.displayText),
+  );
+}
+
 function syncGroupAvatarLabel(inputId, labelId, fallbackLabel) {
   const input = document.getElementById(inputId);
   const label = document.getElementById(labelId);
@@ -499,10 +527,9 @@ function createRenderableMessage(message) {
 
   const renderable = { ...message };
   if (renderable.messageType === 'TEXT') {
-    renderable.displayText =
-      renderable.content ||
-      renderable.displayText ||
-      (renderable.isEncrypted ? 'Decrypting message...' : '');
+    renderable.displayText = shouldTreatMessageAsEncrypted(renderable)
+      ? 'Decrypting message...'
+      : renderable.content || renderable.displayText || '';
   } else {
     renderable.displayText = renderable.content || '';
   }
@@ -516,11 +543,20 @@ function getResolvedMessageText(message) {
   }
 
   const text = String(message.displayText || message.content || '').trim();
-  if (text) {
+  if (['[Encrypted message]', '[Unable to decrypt message]'].includes(text)) {
     return text;
   }
 
-  if (message.isEncrypted && message.messageType === 'TEXT') {
+  if (text) {
+    if (!looksEncryptedPayload(text)) {
+      return text;
+    }
+  }
+
+  if (
+    shouldTreatMessageAsEncrypted(message) &&
+    message.messageType === 'TEXT'
+  ) {
     return 'Decrypting message...';
   }
 

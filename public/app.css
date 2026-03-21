@@ -199,12 +199,17 @@ img {
     z-index: 17;
     padding-top: calc(0.7rem + env(safe-area-inset-top));
     padding-bottom: 0.8rem;
+    display: grid !important;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
   }
 
-  .mobile-chat-header .ml-auto {
+  .mobile-chat-header-actions {
+    grid-column: 1 / -1;
     width: 100%;
-    margin-left: 0;
-    justify-content: flex-start;
+    margin-left: 0 !important;
+    justify-content: flex-end !important;
+    padding-top: 0.5rem;
   }
 
   .mobile-chat-scroll {
