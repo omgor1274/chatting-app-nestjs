@@ -43,12 +43,12 @@ let lastSubmittedDraftFingerprint = '';
 let lastSubmittedDraftAt = 0;
 let composerDraftVersion = 0;
 let lastSubmittedDraftVersion = -1;
-let lastChatActionsToggleAt = 0;
 let messagePagination = {
   nextBefore: null,
   hasMore: false,
   loadingOlder: false,
   loadedForUserId: null,
+  scrollReadyAt: 0,
 };
 let chatPermission = {
   canChat: false,
@@ -906,6 +906,7 @@ function resetSelectedConversation() {
     hasMore: false,
     loadingOlder: false,
     loadedForUserId: null,
+    scrollReadyAt: 0,
   };
   document.getElementById('messages-list').innerHTML = '';
   document.getElementById('empty-state').classList.remove('hidden');
@@ -1582,24 +1583,34 @@ function closeComposerActionsMenu() {
   document.getElementById('composer-actions-menu').classList.add('hidden');
 }
 
+function isChatActionsMenuOpen() {
+  const menu = document.getElementById('chat-actions-menu');
+  return Boolean(menu && !menu.classList.contains('hidden'));
+}
+
 function toggleChatActionsMenu(event) {
   event?.preventDefault?.();
   event?.stopPropagation?.();
-  const now = Date.now();
-  if (now - lastChatActionsToggleAt < 180) {
-    return;
-  }
-  lastChatActionsToggleAt = now;
-  const menu = document.getElementById('chat-actions-menu');
-  const isOpening = menu.classList.contains('hidden');
-  closeComposerActionsMenu();
-
-  if (!isOpening) {
+  if (isChatActionsMenuOpen()) {
     closeChatActionsMenu();
     return;
   }
 
+  openChatActionsMenu();
+}
+
+function openChatActionsMenu() {
+  const menu = document.getElementById('chat-actions-menu');
+  const backdrop = document.getElementById('chat-actions-backdrop');
+  const button = document.getElementById('chat-actions-btn');
+  if (!menu || !backdrop || !button) {
+    return;
+  }
+
+  closeComposerActionsMenu();
   menu.classList.remove('hidden');
+  backdrop.classList.remove('hidden');
+  button.setAttribute('aria-expanded', 'true');
   window.requestAnimationFrame(() => {
     updateChatActionsMenuPosition();
   });
@@ -1607,7 +1618,14 @@ function toggleChatActionsMenu(event) {
 
 function closeChatActionsMenu() {
   const menu = document.getElementById('chat-actions-menu');
+  const backdrop = document.getElementById('chat-actions-backdrop');
+  const button = document.getElementById('chat-actions-btn');
+  if (!menu) {
+    return;
+  }
   menu.classList.add('hidden');
+  backdrop?.classList.add('hidden');
+  button?.setAttribute('aria-expanded', 'false');
   menu.style.position = '';
   menu.style.left = '';
   menu.style.top = '';
@@ -1620,7 +1638,13 @@ function closeChatActionsMenu() {
 function bindChatActionsMenu() {
   const button = document.getElementById('chat-actions-btn');
   const menu = document.getElementById('chat-actions-menu');
-  if (!button || !menu || button.dataset.chatActionsBound === '1') {
+  const backdrop = document.getElementById('chat-actions-backdrop');
+  if (
+    !button ||
+    !menu ||
+    !backdrop ||
+    button.dataset.chatActionsBound === '1'
+  ) {
     return;
   }
 
@@ -1630,6 +1654,9 @@ function bindChatActionsMenu() {
   });
   menu.addEventListener('click', (event) => {
     event.stopPropagation();
+  });
+  backdrop.addEventListener('click', () => {
+    closeChatActionsMenu();
   });
 }
 
@@ -1642,6 +1669,7 @@ function updateChatActionsMenuPosition() {
   }
 
   menu.style.position = 'fixed';
+  menu.style.zIndex = '130';
 
   if (window.innerWidth < 1024) {
     menu.style.left = '0.75rem';
@@ -2954,6 +2982,7 @@ async function selectUser(userId) {
     hasMore: false,
     loadingOlder: false,
     loadedForUserId: selectedUser?.id ?? null,
+    scrollReadyAt: Date.now() + 700,
   };
 
   if (!selectedUser) return;
@@ -3051,6 +3080,9 @@ async function loadMessageChunk(before = null, prepend = false, options = {}) {
     messagePagination.nextBefore = data.nextBefore || null;
     messagePagination.hasMore = Boolean(data.hasMore);
     messagePagination.loadedForUserId = selectedUser.id;
+    if (!prepend) {
+      messagePagination.scrollReadyAt = Date.now() + 700;
+    }
 
     if (data.conversation?.id) {
       const merged = normalizeUser(data.conversation, selectedUser);
@@ -3139,6 +3171,9 @@ async function handleMessageContainerScroll() {
   historyScrollFrame = window.requestAnimationFrame(async () => {
     historyScrollFrame = 0;
     const container = getById('message-container');
+    if (Date.now() < (messagePagination.scrollReadyAt || 0)) {
+      return;
+    }
     if (container.scrollTop > 120) {
       return;
     }
@@ -5463,13 +5498,8 @@ document.addEventListener('keydown', (event) => {
 });
 
 document.addEventListener('click', (event) => {
-  if (Date.now() - lastChatActionsToggleAt < 180) {
-    return;
-  }
   const composerMenu = document.getElementById('composer-actions-menu');
   const composerBtn = document.getElementById('composer-actions-btn');
-  const chatMenu = document.getElementById('chat-actions-menu');
-  const chatBtn = document.getElementById('chat-actions-btn');
   const messageMenu = document.getElementById('message-actions-menu');
 
   if (
@@ -5478,14 +5508,6 @@ document.addEventListener('click', (event) => {
     !composerBtn.contains(event.target)
   ) {
     closeComposerActionsMenu();
-  }
-
-  if (
-    chatMenu &&
-    !chatMenu.contains(event.target) &&
-    !chatBtn.contains(event.target)
-  ) {
-    closeChatActionsMenu();
   }
 
   if (messageMenu && !messageMenu.contains(event.target)) {

@@ -165,6 +165,14 @@ img {
   min-height: 2.75rem;
 }
 
+#chat-actions-backdrop {
+  pointer-events: auto;
+}
+
+#chat-actions-menu {
+  overflow-y: auto;
+}
+
 #target-name {
   letter-spacing: -0.02em;
 }

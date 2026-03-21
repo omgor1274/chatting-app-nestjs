@@ -13,7 +13,7 @@ import {
 import { PushNotificationService } from '../notifications/push-notification.service';
 import { PrismaService } from '../prisma/prisma.service';
 
-const MESSAGE_PAGE_SIZE = 25;
+const MESSAGE_PAGE_SIZE = 20;
 const DELETE_FOR_EVERYONE_WINDOW_MS = 5 * 60 * 1000;
 
 @Injectable()
