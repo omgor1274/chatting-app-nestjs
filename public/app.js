@@ -43,6 +43,7 @@ let lastSubmittedDraftFingerprint = '';
 let lastSubmittedDraftAt = 0;
 let composerDraftVersion = 0;
 let lastSubmittedDraftVersion = -1;
+let lastChatActionsToggleAt = 0;
 let messagePagination = {
   nextBefore: null,
   hasMore: false,
@@ -1584,6 +1585,11 @@ function closeComposerActionsMenu() {
 function toggleChatActionsMenu(event) {
   event?.preventDefault?.();
   event?.stopPropagation?.();
+  const now = Date.now();
+  if (now - lastChatActionsToggleAt < 180) {
+    return;
+  }
+  lastChatActionsToggleAt = now;
   const menu = document.getElementById('chat-actions-menu');
   const isOpening = menu.classList.contains('hidden');
   closeComposerActionsMenu();
@@ -1609,6 +1615,22 @@ function closeChatActionsMenu() {
   menu.style.bottom = '';
   menu.style.width = '';
   menu.style.maxHeight = '';
+}
+
+function bindChatActionsMenu() {
+  const button = document.getElementById('chat-actions-btn');
+  const menu = document.getElementById('chat-actions-menu');
+  if (!button || !menu || button.dataset.chatActionsBound === '1') {
+    return;
+  }
+
+  button.dataset.chatActionsBound = '1';
+  button.addEventListener('click', (event) => {
+    toggleChatActionsMenu(event);
+  });
+  menu.addEventListener('click', (event) => {
+    event.stopPropagation();
+  });
 }
 
 function updateChatActionsMenuPosition() {
@@ -5441,6 +5463,9 @@ document.addEventListener('keydown', (event) => {
 });
 
 document.addEventListener('click', (event) => {
+  if (Date.now() - lastChatActionsToggleAt < 180) {
+    return;
+  }
   const composerMenu = document.getElementById('composer-actions-menu');
   const composerBtn = document.getElementById('composer-actions-btn');
   const chatMenu = document.getElementById('chat-actions-menu');
@@ -5529,6 +5554,7 @@ if (window.visualViewport) {
 applyViewportHeight();
 updateInstallAppUI();
 updateVoiceComposerUI();
+bindChatActionsMenu();
 ensureServiceWorkerReady().catch((error) => {
   console.error(error);
 });

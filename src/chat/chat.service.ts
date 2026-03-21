@@ -13,7 +13,7 @@ import {
 import { PushNotificationService } from '../notifications/push-notification.service';
 import { PrismaService } from '../prisma/prisma.service';
 
-const MESSAGE_PAGE_SIZE = 40;
+const MESSAGE_PAGE_SIZE = 25;
 const DELETE_FOR_EVERYONE_WINDOW_MS = 5 * 60 * 1000;
 
 @Injectable()
@@ -43,7 +43,8 @@ export class ChatService {
   }) {
     if (message.deletedForEveryoneAt) return 'Message deleted';
     if (message.messageType === MessageType.IMAGE) return 'Sent you an image';
-    if (message.messageType === MessageType.AUDIO) return 'Sent you a voice message';
+    if (message.messageType === MessageType.AUDIO)
+      return 'Sent you a voice message';
     if (message.messageType === MessageType.DOCUMENT) {
       return message.fileMimeType?.startsWith('video/')
         ? 'Sent you a video'
@@ -67,13 +68,13 @@ export class ChatService {
     return {
       blockedByMe: blocks.some(
         (block) =>
-          block.blockerId === currentUserId
-          && block.blockedUserId === otherUserId,
+          block.blockerId === currentUserId &&
+          block.blockedUserId === otherUserId,
       ),
       blockedByUser: blocks.some(
         (block) =>
-          block.blockerId === otherUserId
-          && block.blockedUserId === currentUserId,
+          block.blockerId === otherUserId &&
+          block.blockedUserId === currentUserId,
       ),
     };
   }
@@ -176,17 +177,25 @@ export class ChatService {
     }>,
   ) {
     return [...members].sort((left, right) => {
-      if (left.role === GroupMemberRole.ADMIN && right.role !== GroupMemberRole.ADMIN) {
+      if (
+        left.role === GroupMemberRole.ADMIN &&
+        right.role !== GroupMemberRole.ADMIN
+      ) {
         return -1;
       }
-      if (left.role !== GroupMemberRole.ADMIN && right.role === GroupMemberRole.ADMIN) {
+      if (
+        left.role !== GroupMemberRole.ADMIN &&
+        right.role === GroupMemberRole.ADMIN
+      ) {
         return 1;
       }
       return left.joinedAt.getTime() - right.joinedAt.getTime();
     })[0];
   }
 
-  private serializeGroup(membership: Awaited<ReturnType<ChatService['ensureGroupMember']>>) {
+  private serializeGroup(
+    membership: Awaited<ReturnType<ChatService['ensureGroupMember']>>,
+  ) {
     return {
       id: membership.group.id,
       chatType: 'group',
@@ -230,13 +239,12 @@ export class ChatService {
       const messageCreatedAt = new Date(message.createdAt).getTime();
       const others = members.filter(
         (member) =>
-          member.userId !== message.senderId
-          && new Date(member.joinedAt).getTime() <= messageCreatedAt,
+          member.userId !== message.senderId &&
+          new Date(member.joinedAt).getTime() <= messageCreatedAt,
       );
       const readByCount = others.filter(
         (member) =>
-          member.lastReadAt &&
-          member.lastReadAt.getTime() >= messageCreatedAt,
+          member.lastReadAt && member.lastReadAt.getTime() >= messageCreatedAt,
       ).length;
       return {
         ...message,
@@ -257,7 +265,10 @@ export class ChatService {
   ) {
     const beforeDate = this.normalizeBefore(options.before);
     if (options.groupId) {
-      const membership = await this.ensureGroupMember(options.groupId, currentUserId);
+      const membership = await this.ensureGroupMember(
+        options.groupId,
+        currentUserId,
+      );
       const createdAtFilter = {
         gte: membership.joinedAt,
         ...(beforeDate ? { lt: beforeDate } : {}),
@@ -272,15 +283,22 @@ export class ChatService {
         take: MESSAGE_PAGE_SIZE + 1,
       });
       const hasMore = messages.length > MESSAGE_PAGE_SIZE;
-      const trimmed = (hasMore ? messages.slice(0, MESSAGE_PAGE_SIZE) : messages).reverse();
+      const trimmed = (
+        hasMore ? messages.slice(0, MESSAGE_PAGE_SIZE) : messages
+      ).reverse();
       const group = this.serializeGroup(membership);
       return {
         conversation: group,
         group,
         otherUser: null,
-        messages: this.serializeGroupMessages(trimmed, membership.group.members),
+        messages: this.serializeGroupMessages(
+          trimmed,
+          membership.group.members,
+        ),
         hasMore,
-        nextBefore: hasMore ? trimmed[0]?.createdAt?.toISOString() ?? null : null,
+        nextBefore: hasMore
+          ? (trimmed[0]?.createdAt?.toISOString() ?? null)
+          : null,
       };
     }
 
@@ -313,7 +331,9 @@ export class ChatService {
       }),
     ]);
     const hasMore = messages.length > MESSAGE_PAGE_SIZE;
-    const trimmed = (hasMore ? messages.slice(0, MESSAGE_PAGE_SIZE) : messages).reverse();
+    const trimmed = (
+      hasMore ? messages.slice(0, MESSAGE_PAGE_SIZE) : messages
+    ).reverse();
     const conversation = {
       ...otherUser,
       chatType: 'direct',
@@ -329,7 +349,9 @@ export class ChatService {
         this.serializeDirectMessage(message, currentUserId),
       ),
       hasMore,
-      nextBefore: hasMore ? trimmed[0]?.createdAt?.toISOString() ?? null : null,
+      nextBefore: hasMore
+        ? (trimmed[0]?.createdAt?.toISOString() ?? null)
+        : null,
     };
   }
 
@@ -381,34 +403,35 @@ export class ChatService {
       };
     }
 
-    const [incomingRequest, outgoingRequest, acceptedRequest] = await Promise.all([
-      this.prisma.chatRequest.findFirst({
-        where: {
-          senderId: otherUserId,
-          receiverId: currentUserId,
-          status: 'PENDING',
-        },
-        orderBy: { createdAt: 'desc' },
-      }),
-      this.prisma.chatRequest.findFirst({
-        where: {
-          senderId: currentUserId,
-          receiverId: otherUserId,
-          status: 'PENDING',
-        },
-        orderBy: { createdAt: 'desc' },
-      }),
-      this.prisma.chatRequest.findFirst({
-        where: {
-          status: 'ACCEPTED',
-          OR: [
-            { senderId: currentUserId, receiverId: otherUserId },
-            { senderId: otherUserId, receiverId: currentUserId },
-          ],
-        },
-        orderBy: { createdAt: 'desc' },
-      }),
-    ]);
+    const [incomingRequest, outgoingRequest, acceptedRequest] =
+      await Promise.all([
+        this.prisma.chatRequest.findFirst({
+          where: {
+            senderId: otherUserId,
+            receiverId: currentUserId,
+            status: 'PENDING',
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+        this.prisma.chatRequest.findFirst({
+          where: {
+            senderId: currentUserId,
+            receiverId: otherUserId,
+            status: 'PENDING',
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+        this.prisma.chatRequest.findFirst({
+          where: {
+            status: 'ACCEPTED',
+            OR: [
+              { senderId: currentUserId, receiverId: otherUserId },
+              { senderId: otherUserId, receiverId: currentUserId },
+            ],
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+      ]);
 
     return {
       canChat: Boolean(acceptedRequest),
@@ -423,13 +446,17 @@ export class ChatService {
   async assertUsersCanChat(currentUserId: string, otherUserId: string) {
     const permission = await this.getChatPermission(currentUserId, otherUserId);
     if (permission.blockedByMe) {
-      throw new ForbiddenException('Unblock this user before using this feature');
+      throw new ForbiddenException(
+        'Unblock this user before using this feature',
+      );
     }
     if (permission.blockedByUser) {
       throw new ForbiddenException('This user has blocked you');
     }
     if (!permission.canChat) {
-      throw new ForbiddenException('Accept a chat request before using this feature');
+      throw new ForbiddenException(
+        'Accept a chat request before using this feature',
+      );
     }
     return permission;
   }
@@ -485,41 +512,42 @@ export class ChatService {
       },
     });
     const groupIds = groupMemberships.map((item) => item.groupId);
-    const [directMessages, directUsers, preferences, groupMessages] = await Promise.all([
-      this.prisma.message.findMany({
-        where: {
-          groupId: null,
-          hiddenForUsers: { none: { userId } },
-          OR: [{ senderId: userId }, { receiverId: userId }],
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 250,
-      }),
-      this.prisma.user.findMany({
-        where: {
-          id: {
-            not: userId,
-            notIn: Array.from(hiddenDirectUserIds),
+    const [directMessages, directUsers, preferences, groupMessages] =
+      await Promise.all([
+        this.prisma.message.findMany({
+          where: {
+            groupId: null,
+            hiddenForUsers: { none: { userId } },
+            OR: [{ senderId: userId }, { receiverId: userId }],
           },
-          emailVerified: true,
-        },
-        select: { id: true, email: true, name: true, avatar: true },
-      }),
-      this.prisma.contactPreference.findMany({
-        where: { ownerId: userId },
-        select: { contactUserId: true, nickname: true, chatTheme: true },
-      }),
-      groupIds.length
-        ? this.prisma.message.findMany({
-            where: {
-              groupId: { in: groupIds },
-              hiddenForUsers: { none: { userId } },
+          orderBy: { createdAt: 'desc' },
+          take: 250,
+        }),
+        this.prisma.user.findMany({
+          where: {
+            id: {
+              not: userId,
+              notIn: Array.from(hiddenDirectUserIds),
             },
-            orderBy: { createdAt: 'desc' },
-            take: 250,
-          })
-        : Promise.resolve([]),
-    ]);
+            emailVerified: true,
+          },
+          select: { id: true, email: true, name: true, avatar: true },
+        }),
+        this.prisma.contactPreference.findMany({
+          where: { ownerId: userId },
+          select: { contactUserId: true, nickname: true, chatTheme: true },
+        }),
+        groupIds.length
+          ? this.prisma.message.findMany({
+              where: {
+                groupId: { in: groupIds },
+                hiddenForUsers: { none: { userId } },
+              },
+              orderBy: { createdAt: 'desc' },
+              take: 250,
+            })
+          : Promise.resolve([]),
+      ]);
     const groupJoinedAtById = new Map(
       groupMemberships.map((membership) => [
         membership.groupId,
@@ -529,38 +557,40 @@ export class ChatService {
 
     const latestDirectByPeer = new Map();
     for (const message of directMessages) {
-      const peerId = message.senderId === userId ? message.receiverId : message.senderId;
-      if (peerId && !latestDirectByPeer.has(peerId)) latestDirectByPeer.set(peerId, message);
+      const peerId =
+        message.senderId === userId ? message.receiverId : message.senderId;
+      if (peerId && !latestDirectByPeer.has(peerId))
+        latestDirectByPeer.set(peerId, message);
     }
     const preferenceByUserId = new Map(
       preferences.map((item) => [item.contactUserId, item]),
     );
     const directEntries = directUsers.map((user) => {
-        const latest = latestDirectByPeer.get(user.id);
-        const preference = preferenceByUserId.get(user.id);
-        return {
-          id: user.id,
-          chatType: 'direct',
-          email: user.email,
-          name: user.name,
-          avatar: user.avatar,
-          nickname: preference?.nickname ?? null,
-          displayName: preference?.nickname ?? user.name,
-          chatTheme: preference?.chatTheme ?? null,
-          lastMessagePreview: latest ? this.previewForMessage(latest) : '',
-          lastMessageAt: latest?.createdAt?.toISOString() ?? null,
-          lastMessageType: latest?.messageType ?? null,
-        };
-      });
+      const latest = latestDirectByPeer.get(user.id);
+      const preference = preferenceByUserId.get(user.id);
+      return {
+        id: user.id,
+        chatType: 'direct',
+        email: user.email,
+        name: user.name,
+        avatar: user.avatar,
+        nickname: preference?.nickname ?? null,
+        displayName: preference?.nickname ?? user.name,
+        chatTheme: preference?.chatTheme ?? null,
+        lastMessagePreview: latest ? this.previewForMessage(latest) : '',
+        lastMessageAt: latest?.createdAt?.toISOString() ?? null,
+        lastMessageType: latest?.messageType ?? null,
+      };
+    });
 
     const latestGroupById = new Map();
     for (const message of groupMessages) {
       if (
-        message.groupId
-        && groupJoinedAtById.has(message.groupId)
-        && new Date(message.createdAt).getTime()
-          >= (groupJoinedAtById.get(message.groupId) ?? 0)
-        && !latestGroupById.has(message.groupId)
+        message.groupId &&
+        groupJoinedAtById.has(message.groupId) &&
+        new Date(message.createdAt).getTime() >=
+          (groupJoinedAtById.get(message.groupId) ?? 0) &&
+        !latestGroupById.has(message.groupId)
       ) {
         latestGroupById.set(message.groupId, message);
       }
@@ -575,7 +605,9 @@ export class ChatService {
         role: membership.role,
         memberCount: membership.group.members.length,
         lastReadAt: membership.lastReadAt,
-        lastMessagePreview: latest ? this.previewForMessage(latest) : 'You joined the group',
+        lastMessagePreview: latest
+          ? this.previewForMessage(latest)
+          : 'You joined the group',
         lastMessageAt:
           latest?.createdAt?.toISOString() ?? membership.joinedAt.toISOString(),
         lastMessageType: latest?.messageType ?? null,
@@ -604,7 +636,9 @@ export class ChatService {
 
     const blockState = await this.getBlockState(senderId, receiver.id);
     if (blockState.blockedByMe) {
-      throw new BadRequestException('Unblock this user before sending a request');
+      throw new BadRequestException(
+        'Unblock this user before sending a request',
+      );
     }
     if (blockState.blockedByUser) {
       throw new ForbiddenException('This user has blocked you');
@@ -652,7 +686,8 @@ export class ChatService {
       where: { id: requestId },
     });
     if (!request) throw new NotFoundException('Request not found');
-    if (request.receiverId !== userId) throw new ForbiddenException('Unauthorized');
+    if (request.receiverId !== userId)
+      throw new ForbiddenException('Unauthorized');
     if (request.status !== 'PENDING') {
       throw new BadRequestException('Only pending requests can be accepted');
     }
@@ -667,7 +702,8 @@ export class ChatService {
       where: { id: requestId },
     });
     if (!request) throw new NotFoundException('Request not found');
-    if (request.receiverId !== userId) throw new ForbiddenException('Unauthorized');
+    if (request.receiverId !== userId)
+      throw new ForbiddenException('Unauthorized');
     if (request.status !== 'PENDING') {
       throw new BadRequestException('Only pending requests can be rejected');
     }
@@ -777,7 +813,9 @@ export class ChatService {
       ...existingMembers.map((member) => member.userId),
       ...pendingInvites.map((invite) => invite.invitedUserId),
     ]);
-    const validIds = users.map((user) => user.id).filter((id) => !blocked.has(id));
+    const validIds = users
+      .map((user) => user.id)
+      .filter((id) => !blocked.has(id));
     if (!validIds.length) {
       throw new BadRequestException(
         'Everyone selected is already in the group or already invited',
@@ -801,7 +839,8 @@ export class ChatService {
       where: { id: inviteId },
     });
     if (!invite) throw new NotFoundException('Invite not found');
-    if (invite.invitedUserId !== userId) throw new ForbiddenException('Unauthorized');
+    if (invite.invitedUserId !== userId)
+      throw new ForbiddenException('Unauthorized');
     if (invite.status !== GroupJoinRequestStatus.PENDING) {
       throw new BadRequestException('Only pending invites can be accepted');
     }
@@ -833,7 +872,8 @@ export class ChatService {
       where: { id: inviteId },
     });
     if (!invite) throw new NotFoundException('Invite not found');
-    if (invite.invitedUserId !== userId) throw new ForbiddenException('Unauthorized');
+    if (invite.invitedUserId !== userId)
+      throw new ForbiddenException('Unauthorized');
     if (invite.status !== GroupJoinRequestStatus.PENDING) {
       throw new BadRequestException('Only pending invites can be rejected');
     }
@@ -846,7 +886,11 @@ export class ChatService {
     });
   }
 
-  async removeGroupMember(userId: string, groupId: string, memberUserId: string) {
+  async removeGroupMember(
+    userId: string,
+    groupId: string,
+    memberUserId: string,
+  ) {
     const membership = await this.ensureGroupMember(groupId, userId, true);
     if (memberUserId === userId) {
       throw new BadRequestException('Use leave group to remove yourself');
@@ -888,7 +932,11 @@ export class ChatService {
     return this.getGroupDetails(userId, groupId);
   }
 
-  async promoteGroupMember(userId: string, groupId: string, memberUserId: string) {
+  async promoteGroupMember(
+    userId: string,
+    groupId: string,
+    memberUserId: string,
+  ) {
     const membership = await this.ensureGroupMember(groupId, userId, true);
     const target = membership.group.members.find(
       (member) => member.userId === memberUserId,
@@ -932,7 +980,8 @@ export class ChatService {
         deletedGroup: true,
         remainingMemberIds: [] as string[],
         promotedAdminUserId: null as string | null,
-        message: 'You left the group. The group was deleted because no members remained.',
+        message:
+          'You left the group. The group was deleted because no members remained.',
       };
     }
 
@@ -943,9 +992,9 @@ export class ChatService {
     const nextGroupOwner = this.pickNextGroupOwner(remainingMembers);
     await this.prisma.$transaction(async (tx) => {
       if (
-        membership.role === GroupMemberRole.ADMIN
-        && adminCount <= 1
-        && nextGroupOwner
+        membership.role === GroupMemberRole.ADMIN &&
+        adminCount <= 1 &&
+        nextGroupOwner
       ) {
         promotedAdminUserId = nextGroupOwner.userId;
         await tx.groupMember.update({
@@ -1002,7 +1051,9 @@ export class ChatService {
       throw new BadRequestException('Receiver or group is required');
     }
     if (input.receiverId && input.groupId) {
-      throw new BadRequestException('A message can target only one conversation');
+      throw new BadRequestException(
+        'A message can target only one conversation',
+      );
     }
 
     const sender = await this.prisma.user.findUnique({
@@ -1038,7 +1089,9 @@ export class ChatService {
       input.encryptedKey?.trim() && input.iv?.trim() && input.algorithm?.trim(),
     );
     if (!hasEncryptedText && !hasPlainText && !hasAttachment) {
-      throw new BadRequestException('Message content or attachment is required');
+      throw new BadRequestException(
+        'Message content or attachment is required',
+      );
     }
     if (messageType === MessageType.TEXT && !hasEncryptedText) {
       throw new BadRequestException(
@@ -1053,7 +1106,11 @@ export class ChatService {
 
     const createdMessage = await this.prisma.message.create({
       data: {
-        content: hasEncryptedText ? null : hasPlainText ? input.plainText?.trim() : null,
+        content: hasEncryptedText
+          ? null
+          : hasPlainText
+            ? input.plainText?.trim()
+            : null,
         ciphertext: hasEncryptedText ? input.ciphertext?.trim() : null,
         senderId: input.senderId,
         receiverId,
@@ -1213,7 +1270,10 @@ export class ChatService {
 
     if (updated.groupId) {
       const membership = await this.ensureGroupMember(updated.groupId, userId);
-      return this.serializeGroupMessages([updated], membership.group.members)[0];
+      return this.serializeGroupMessages(
+        [updated],
+        membership.group.members,
+      )[0];
     }
     return this.serializeDirectMessage(updated, userId);
   }
