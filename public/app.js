@@ -310,7 +310,11 @@ async function decryptTextMessage(message) {
     return message?.content || message?.ciphertext || '';
   }
 
-  if (!message?.ciphertext) {
+  const ciphertextValue =
+    message?.ciphertext ||
+    (looksEncryptedPayload(message?.content) ? message.content.trim() : '');
+
+  if (!ciphertextValue) {
     return '[Encrypted message]';
   }
 
@@ -348,7 +352,7 @@ async function decryptTextMessage(message) {
     const decrypted = await window.crypto.subtle.decrypt(
       { name: 'AES-GCM', iv: base64ToUint8Array(message.iv) },
       aesKey,
-      base64ToUint8Array(message.ciphertext),
+      base64ToUint8Array(ciphertextValue),
     );
     message.displayText = new TextDecoder().decode(decrypted);
     return message.displayText;
