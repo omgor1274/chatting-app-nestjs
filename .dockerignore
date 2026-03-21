@@ -1,0 +1,10 @@
+node_modules
+dist
+.git
+.agents
+release
+backups
+uploads
+tmp-*.log
+npm-debug.log*
+.env
