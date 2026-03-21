@@ -15,12 +15,10 @@
     <link rel="stylesheet" href="./public/app.css?v=20260321-desktopfix2" />
   </head>
 
-  <body
-    class="mobile-page min-h-screen bg-slate-100 text-slate-900 p-3 sm:p-4 lg:p-6"
-  >
+  <body class="mobile-page min-h-screen bg-slate-100 text-slate-900 lg:p-3">
     <div
       id="app-shell"
-      class="mobile-chat-shell glass relative mx-auto flex h-[calc(100vh-1.5rem)] max-w-[1500px] overflow-hidden rounded-[32px] border border-white/70 shadow-[0_30px_120px_rgba(15,23,42,0.18)] xl:h-[calc(100vh-3rem)]"
+      class="mobile-chat-shell glass relative mx-auto flex h-[100dvh] max-w-[1560px] overflow-hidden border border-white/70 shadow-[0_30px_120px_rgba(15,23,42,0.18)] lg:h-[calc(100vh-1.5rem)] lg:rounded-[30px]"
     >
       <div
         id="auth-screen"
@@ -376,9 +374,11 @@
         ></ul>
       </aside>
 
-      <main class="mobile-chat-main flex min-w-0 flex-1 flex-col bg-white/60">
+      <main
+        class="mobile-chat-main flex min-h-0 min-w-0 flex-1 flex-col bg-white/60"
+      >
         <div
-          class="mobile-chat-topbar flex items-center justify-between border-b border-slate-200 bg-white/85 px-4 py-3 backdrop-blur lg:hidden"
+          class="mobile-chat-topbar flex items-center justify-between border-b border-slate-200 bg-white/85 px-3 py-2.5 backdrop-blur lg:hidden"
         >
           <button
             onclick="openSidebar()"
@@ -387,7 +387,7 @@
             Chats
           </button>
           <p
-            class="display-font truncate px-3 text-base font-bold text-slate-900"
+            class="display-font truncate px-3 text-[1.05rem] font-bold text-slate-900"
           >
             O-chat
           </p>
@@ -401,7 +401,7 @@
 
         <div
           id="chat-header"
-          class="mobile-chat-header hidden items-center gap-3 border-b border-slate-200 bg-white/85 px-4 py-4 backdrop-blur sm:px-6"
+          class="mobile-chat-header hidden items-center gap-3 border-b border-slate-200 bg-white/85 px-3 py-3 backdrop-blur sm:px-5 lg:px-6"
         >
           <button
             onclick="openSidebar()"
@@ -412,13 +412,13 @@
           <img
             id="target-avatar"
             onclick="selectedUser && openImagePreview(userAvatar(selectedUser))"
-            class="h-12 w-12 rounded-2xl object-cover cursor-zoom-in"
+            class="h-11 w-11 rounded-2xl object-cover cursor-zoom-in lg:h-12 lg:w-12"
           />
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">
               <h3
                 id="target-name"
-                class="display-font truncate text-lg font-bold text-slate-900"
+                class="display-font truncate text-lg font-bold leading-tight text-slate-900"
               >
                 Select a contact
               </h3>
@@ -447,11 +447,13 @@
           </div>
           <div class="chat-actions-anchor relative">
             <button
+              type="button"
               id="chat-actions-btn"
               onclick="toggleChatActionsMenu()"
-              class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-lg font-semibold leading-none text-slate-700 hover:bg-slate-50"
+              class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xl font-semibold leading-none text-slate-700 transition hover:bg-slate-50"
+              aria-label="Open chat actions"
             >
-              ...
+              &#8942;
             </button>
             <div
               id="chat-actions-menu"
@@ -565,7 +567,7 @@
 
         <div
           id="message-container"
-          class="mobile-chat-scroll hidden flex-1 overflow-y-auto chat-bg px-3 py-4 sm:px-5 lg:px-6"
+          class="mobile-chat-scroll hidden flex-1 overflow-y-auto chat-bg px-3 py-3 sm:px-4 lg:px-6"
           onscroll="handleMessageContainerScroll()"
         >
           <div
@@ -582,7 +584,7 @@
 
         <div
           id="input-area"
-          class="mobile-chat-composer hidden border-t border-slate-200 bg-white/88 px-3 py-3 backdrop-blur sm:px-5 sm:py-4 lg:px-6"
+          class="mobile-chat-composer hidden border-t border-slate-200 bg-white/88 px-2.5 py-2.5 backdrop-blur sm:px-4 sm:py-3 lg:px-6"
         >
           <div class="mx-auto flex w-full max-w-5xl flex-col gap-3">
             <div

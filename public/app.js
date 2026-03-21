@@ -911,6 +911,7 @@ function resetSelectedConversation() {
   document.getElementById('message-container').classList.add('hidden');
   document.getElementById('message-container').classList.remove('flex');
   document.getElementById('input-area').classList.add('hidden');
+  document.body.classList.remove('chat-mode-active');
   closeChatActionsMenu();
   closeComposerActionsMenu();
   if (!isFileOrigin) {
@@ -2866,6 +2867,7 @@ async function selectUser(userId) {
   document.getElementById('message-container').classList.remove('hidden');
   document.getElementById('message-container').classList.add('flex');
   document.getElementById('input-area').classList.remove('hidden');
+  document.body.classList.add('chat-mode-active');
   document.getElementById('messages-list').innerHTML = '';
   clearAttachmentSelection();
   clearRecordedAudio();
