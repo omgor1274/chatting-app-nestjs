@@ -315,7 +315,7 @@ async function logout() {
 
 async function boot() {
   await loadPublicConfig();
-  if (!(await hasValidSession())) {
+  if (!(await hasValidSession({ allowStaleToken: false }))) {
     window.location.replace('/auth');
     return;
   }

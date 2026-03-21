@@ -50,8 +50,12 @@
       } from '/public/runtime.js?v=20260321-mobileclean8';
 
       await loadPublicConfig();
-      const nextPath = (await hasValidSession()) ? '/chat' : '/auth';
-      window.location.replace(nextPath);
+      if (window.location.pathname === '/') {
+        const nextPath = (await hasValidSession({ allowStaleToken: false }))
+          ? '/chat'
+          : '/auth';
+        window.location.replace(nextPath);
+      }
     </script>
   </body>
 </html>

@@ -1,8 +1,13 @@
-const CACHE_NAME = 'ochat-shell-v9';
+const CACHE_NAME = 'ochat-shell-v10';
 const APP_SHELL = [
   '/',
+  '/auth',
+  '/chat',
+  '/settings',
   '/public/app.css',
   '/public/app.js',
+  '/public/auth.js',
+  '/public/runtime.js',
   '/manifest.webmanifest',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
@@ -45,9 +50,21 @@ self.addEventListener('fetch', (event) => {
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request).catch(() =>
-        caches.match(event.request).then((response) => {
+        caches.match(url.pathname).then((response) => {
           if (response) {
             return response;
+          }
+
+          if (url.pathname.startsWith('/chat')) {
+            return caches.match('/chat');
+          }
+
+          if (url.pathname.startsWith('/auth')) {
+            return caches.match('/auth');
+          }
+
+          if (url.pathname.startsWith('/settings')) {
+            return caches.match('/settings');
           }
 
           return caches.match('/');
