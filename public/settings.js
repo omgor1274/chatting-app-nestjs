@@ -3,6 +3,7 @@ import {
   clearToken,
   getAvatarUrl,
   getApiUrl,
+  hasValidSession,
   loadPublicConfig,
   readJsonResponse,
 } from './runtime.js';
@@ -52,6 +53,113 @@ function showFeedback(message, type = 'info') {
 function applyDarkMode(enabled) {
   document.body.classList.toggle('dark-mode', Boolean(enabled));
   localStorage.setItem('chat_dark_mode', enabled ? '1' : '0');
+}
+
+function renderBlockedUsers(blockedUsers) {
+  const container = getById('settings-blocked-users');
+  if (!container) {
+    return;
+  }
+
+  if (!blockedUsers.length) {
+    container.innerHTML = `
+      <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+        You have not blocked anyone.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = blockedUsers
+    .map(
+      (user) => `
+        <div class="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex min-w-0 items-center gap-3">
+            <img src="${
+              user.avatar
+                ? `${getApiUrl()}${user.avatar}`
+                : getAvatarUrl(user.name || user.email || 'Blocked user')
+            }" class="h-11 w-11 rounded-2xl object-cover">
+            <div class="min-w-0">
+              <p class="truncate text-sm font-semibold text-slate-900">${user.name || user.email || 'Blocked user'}</p>
+              <p class="truncate text-xs text-slate-500">${user.email || ''}</p>
+            </div>
+          </div>
+          <button type="button" data-unblock-user-id="${user.id}" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50 sm:w-auto">
+            Unblock
+          </button>
+        </div>
+      `,
+    )
+    .join('');
+}
+
+async function loadBlockedUsers() {
+  const res = await api('/users/blocks');
+  const data = await readJsonResponse(res, [], 'Failed to load blocked users.');
+
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to load blocked users');
+  }
+
+  renderBlockedUsers(Array.isArray(data) ? data : []);
+}
+
+async function unblockUser(userId) {
+  const res = await api('/users/blocks/remove', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId }),
+  });
+  const data = await readJsonResponse(res, {}, 'Failed to unblock user.');
+
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to unblock user');
+  }
+
+  showFeedback(data.message || 'User unblocked.', 'success');
+  await loadBlockedUsers();
+}
+
+async function uploadAvatar() {
+  const input = getById('avatar-input');
+  const button = getById('change-avatar-btn');
+  if (!input?.files || !input.files[0]) {
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('avatar', input.files[0]);
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Uploading...';
+    button.classList.add('opacity-70', 'cursor-wait');
+  }
+
+  try {
+    const res = await api('/users/profile/avatar', {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await readJsonResponse(res, {}, 'Failed to upload avatar.');
+
+    input.value = '';
+
+    if (!res.ok) {
+      showFeedback(data.message || 'Failed to upload avatar.', 'error');
+      return;
+    }
+
+    showFeedback(data.message || 'Profile picture updated.', 'success');
+    await loadProfile();
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = 'Change Profile Picture';
+      button.classList.remove('opacity-70', 'cursor-wait');
+    }
+  }
 }
 
 async function loadProfile() {
@@ -182,7 +290,7 @@ async function logout() {
 
 async function boot() {
   await loadPublicConfig();
-  if (!localStorage.getItem('chat_token')) {
+  if (!(await hasValidSession())) {
     window.location.replace('/auth');
     return;
   }
@@ -191,7 +299,24 @@ async function boot() {
   getById('preferences-form').addEventListener('submit', savePreferences);
   getById('password-form').addEventListener('submit', changePassword);
   getById('logout-btn').addEventListener('click', logout);
+  getById('change-avatar-btn').addEventListener('click', () =>
+    getById('avatar-input').click(),
+  );
+  getById('avatar-input').addEventListener('change', uploadAvatar);
+  getById('settings-blocked-users').addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-unblock-user-id]');
+    if (!button) {
+      return;
+    }
+
+    try {
+      await unblockUser(button.dataset.unblockUserId);
+    } catch (error) {
+      showFeedback(error?.message || 'Failed to unblock user.', 'error');
+    }
+  });
   await loadProfile();
+  await loadBlockedUsers();
 }
 
 boot().catch((error) => {

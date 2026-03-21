@@ -35,6 +35,8 @@ let viewportHeightFrame = 0;
 let loadUsersPromise = null;
 let reloadUsersAfterCurrentLoad = false;
 let renderedUserSignatures = new Map();
+let composerSendInFlight = false;
+let pendingOptimisticMessageIdsByRoom = new Map();
 let messagePagination = {
   nextBefore: null,
   hasMore: false,
@@ -429,6 +431,184 @@ function formatMessageTime(value) {
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+function selectedConversationRoomId() {
+  if (!selectedUser) {
+    return null;
+  }
+
+  return isGroupConversation(selectedUser) ? selectedUser.id : selectedUser.id;
+}
+
+function queueOptimisticMessage(message) {
+  const roomId = selectedConversationRoomId();
+  if (!roomId || !message?.id) {
+    return;
+  }
+
+  const queue = pendingOptimisticMessageIdsByRoom.get(roomId) || [];
+  queue.push(message.id);
+  pendingOptimisticMessageIdsByRoom.set(roomId, queue);
+}
+
+function removeOptimisticMessage(messageId) {
+  if (!messageId) {
+    return;
+  }
+
+  renderedMessageIds.delete(messageId);
+  conversationMessages.delete(messageId);
+  document.getElementById(`message-${messageId}`)?.remove();
+}
+
+function resolveOptimisticMessage(message, isOwnMessage) {
+  if (!isOwnMessage || message?.messageType !== 'TEXT') {
+    return;
+  }
+
+  const roomId = message.groupId || message.receiverId;
+  const queue = pendingOptimisticMessageIdsByRoom.get(roomId);
+  if (!queue?.length) {
+    return;
+  }
+
+  const pendingId = queue.shift();
+  if (!queue.length) {
+    pendingOptimisticMessageIdsByRoom.delete(roomId);
+  } else {
+    pendingOptimisticMessageIdsByRoom.set(roomId, queue);
+  }
+  removeOptimisticMessage(pendingId);
+}
+
+function createRenderableMessage(message) {
+  if (!message) {
+    return message;
+  }
+
+  const renderable = { ...message };
+  if (renderable.messageType === 'TEXT') {
+    renderable.displayText =
+      renderable.content ||
+      renderable.displayText ||
+      (renderable.isEncrypted
+        ? 'Decrypting message...'
+        : renderable.ciphertext || '');
+  } else {
+    renderable.displayText = renderable.content || '';
+  }
+
+  return renderable;
+}
+
+async function hydrateAndRefreshMessage(message) {
+  if (!message || message.messageType !== 'TEXT' || message.isPending) {
+    return message;
+  }
+
+  const hydrated = await hydrateMessage(message);
+  if (conversationMessages.has(hydrated.id)) {
+    replaceRenderedMessage(hydrated);
+  }
+  return hydrated;
+}
+
+function hydrateMessagesInBackground(messages) {
+  if (!Array.isArray(messages) || !messages.length) {
+    return;
+  }
+
+  for (const message of messages) {
+    void hydrateAndRefreshMessage(message).catch((error) => {
+      console.error('Failed to hydrate message in background', error);
+    });
+  }
+}
+
+function createOptimisticTextMessage(text) {
+  const now = new Date().toISOString();
+  return {
+    id: `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    senderId: currentUser.id,
+    receiverId: isGroupConversation(selectedUser) ? null : selectedUser.id,
+    groupId: isGroupConversation(selectedUser) ? selectedUser.id : null,
+    createdAt: now,
+    messageType: 'TEXT',
+    content: text,
+    displayText: text,
+    isPending: true,
+    isEncrypted: false,
+    recipientCount: isGroupConversation(selectedUser)
+      ? Math.max((selectedUser.members || []).length - 1, 1)
+      : 1,
+    readByCount: 0,
+  };
+}
+
+function setComposerSendingState(isSending, label = 'Send') {
+  composerSendInFlight = isSending;
+  const sendBtn = document.getElementById('send-message-btn');
+  const voiceSendBtn = document.getElementById('voice-send-btn');
+  const input = document.getElementById('msg-input');
+  const fileInput = document.getElementById('file-input');
+  const composerActionsBtn = document.getElementById('composer-actions-btn');
+  const sendLabel = sendBtn?.dataset?.idleLabel || 'Send';
+
+  if (sendBtn) {
+    if (!sendBtn.dataset.idleLabel) {
+      sendBtn.dataset.idleLabel = sendLabel;
+    }
+    sendBtn.disabled = isSending;
+    sendBtn.classList.toggle('opacity-70', isSending);
+    sendBtn.classList.toggle('cursor-wait', isSending);
+    sendBtn.innerHTML = isSending
+      ? '<span class="inline-flex items-center gap-2"><span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white"></span><span>Sending...</span></span>'
+      : sendBtn.dataset.idleLabel;
+  }
+
+  if (voiceSendBtn) {
+    voiceSendBtn.disabled = isSending;
+    voiceSendBtn.classList.toggle('opacity-70', isSending);
+    voiceSendBtn.classList.toggle('cursor-wait', isSending);
+  }
+
+  if (input) {
+    input.setAttribute('aria-busy', isSending ? 'true' : 'false');
+  }
+
+  if (fileInput) {
+    fileInput.disabled = isSending;
+  }
+
+  if (composerActionsBtn) {
+    composerActionsBtn.disabled = isSending;
+    composerActionsBtn.classList.toggle('opacity-70', isSending);
+    composerActionsBtn.classList.toggle('cursor-wait', isSending);
+  }
+}
+
+function setMessageLoadingState(isLoading, label = 'Loading messages...') {
+  const indicator = document.getElementById('message-loading-indicator');
+  if (!indicator) {
+    return;
+  }
+
+  indicator.textContent = label;
+  indicator.classList.toggle('hidden', !isLoading);
+}
+
+function handleComposerKeydown(event) {
+  if (event.key !== 'Enter' || event.shiftKey) {
+    return;
+  }
+
+  event.preventDefault();
+  if (composerSendInFlight) {
+    return;
+  }
+
+  sendMessage();
 }
 
 function messageWasRead(message) {
@@ -2391,7 +2571,8 @@ function connectSocket() {
 }
 
 async function handleIncomingMessage(message, isOwnMessage) {
-  const hydratedMessage = await hydrateMessage(message);
+  resolveOptimisticMessage(message, isOwnMessage);
+  const hydratedMessage = createRenderableMessage(message);
   const chatUserId =
     message.groupId || (isOwnMessage ? message.receiverId : message.senderId);
   updateRecentActivity(
@@ -2409,9 +2590,13 @@ async function handleIncomingMessage(message, isOwnMessage) {
       stickToBottom: isOwnMessage || isMessageContainerNearBottom(),
     });
     if (!isOwnMessage) {
-      await markSelectedConversationRead();
+      void markSelectedConversationRead();
     }
   }
+
+  void hydrateAndRefreshMessage(hydratedMessage).catch((error) => {
+    console.error('Failed to hydrate incoming message', error);
+  });
 }
 
 async function selectUser(userId) {
@@ -2455,10 +2640,12 @@ async function selectUser(userId) {
   renderUsers();
 
   try {
+    setMessageLoadingState(true);
     await loadChatPermission();
     await loadMessageChunk();
     await ensureScrollableHistory();
   } catch (error) {
+    setMessageLoadingState(false);
     alert(error.message || 'Failed to load this chat');
     return;
   }
@@ -2482,58 +2669,71 @@ async function loadMessageChunk(before = null, prepend = false, options = {}) {
     return;
   }
 
-  const url = isGroupConversation(selectedUser)
-    ? before
-      ? `/chat/messages?groupId=${encodeURIComponent(selectedUser.id)}&before=${encodeURIComponent(before)}`
-      : `/chat/messages?groupId=${encodeURIComponent(selectedUser.id)}`
-    : before
-      ? `/chat/messages?userId=${encodeURIComponent(selectedUser.id)}&before=${encodeURIComponent(before)}`
-      : `/chat/messages?userId=${encodeURIComponent(selectedUser.id)}`;
-  const res = await api(url);
-  const data = await readJsonResponse(
-    res,
-    {},
-    'Failed to load messages. The server returned an invalid response.',
-  );
-
-  if (!res.ok) {
-    throw new Error(data.message || 'Failed to load messages');
-  }
-
-  const messages = await Promise.all(
-    (data.messages || []).map((message) => hydrateMessage(message)),
-  );
-  messagePagination.nextBefore = data.nextBefore || null;
-  messagePagination.hasMore = Boolean(data.hasMore);
-  messagePagination.loadedForUserId = selectedUser.id;
-
-  if (data.conversation?.id) {
-    const merged = normalizeUser(data.conversation, selectedUser);
-    users = users.map((user) => (user.id === merged.id ? merged : user));
-    selectedUser = merged;
-    groupDetailsCache.set(merged.id, merged);
-  }
-
-  if (prepend) {
-    prependMessages(messages);
-    return;
-  }
-
-  for (const message of messages) {
-    updateRecentActivity(
-      message.senderId === currentUser.id
-        ? message.groupId || message.receiverId
-        : message.senderId,
-      message,
-      false,
-      { scheduleRender: false },
+  if (!prepend) {
+    setMessageLoadingState(
+      true,
+      before ? 'Loading more messages...' : 'Loading messages...',
     );
   }
-  appendMessages(messages, { stickToBottom: false });
-  scheduleRenderUsers();
 
-  if (options.markRead !== false) {
-    await markSelectedConversationRead();
+  try {
+    const url = isGroupConversation(selectedUser)
+      ? before
+        ? `/chat/messages?groupId=${encodeURIComponent(selectedUser.id)}&before=${encodeURIComponent(before)}`
+        : `/chat/messages?groupId=${encodeURIComponent(selectedUser.id)}`
+      : before
+        ? `/chat/messages?userId=${encodeURIComponent(selectedUser.id)}&before=${encodeURIComponent(before)}`
+        : `/chat/messages?userId=${encodeURIComponent(selectedUser.id)}`;
+    const res = await api(url);
+    const data = await readJsonResponse(
+      res,
+      {},
+      'Failed to load messages. The server returned an invalid response.',
+    );
+
+    if (!res.ok) {
+      throw new Error(data.message || 'Failed to load messages');
+    }
+
+    const messages = (data.messages || []).map((message) =>
+      createRenderableMessage(message),
+    );
+    messagePagination.nextBefore = data.nextBefore || null;
+    messagePagination.hasMore = Boolean(data.hasMore);
+    messagePagination.loadedForUserId = selectedUser.id;
+
+    if (data.conversation?.id) {
+      const merged = normalizeUser(data.conversation, selectedUser);
+      users = users.map((user) => (user.id === merged.id ? merged : user));
+      selectedUser = merged;
+      groupDetailsCache.set(merged.id, merged);
+    }
+
+    if (prepend) {
+      prependMessages(messages);
+      hydrateMessagesInBackground(messages);
+      return;
+    }
+
+    for (const message of messages) {
+      updateRecentActivity(
+        message.senderId === currentUser.id
+          ? message.groupId || message.receiverId
+          : message.senderId,
+        message,
+        false,
+        { scheduleRender: false },
+      );
+    }
+    appendMessages(messages, { stickToBottom: false });
+    hydrateMessagesInBackground(messages);
+    scheduleRenderUsers();
+
+    if (options.markRead !== false) {
+      await markSelectedConversationRead();
+    }
+  } finally {
+    setMessageLoadingState(false);
   }
 }
 
@@ -2560,6 +2760,7 @@ async function loadOlderMessages() {
     alert(error.message || 'Failed to load older messages');
   } finally {
     messagePagination.loadingOlder = false;
+    setMessageLoadingState(false);
   }
 }
 
@@ -2700,6 +2901,10 @@ function updateChatAccessUI() {
       button.disabled = !enabled;
       button.classList.toggle('opacity-50', !enabled);
       button.classList.toggle('cursor-not-allowed', !enabled);
+    }
+
+    if (composerSendInFlight) {
+      setComposerSendingState(true);
     }
   };
 
@@ -2950,6 +3155,7 @@ async function refreshSelectedConversation(options = {}) {
   renderedMessageIds = new Set();
   conversationMessages = new Map();
   document.getElementById('messages-list').innerHTML = '';
+  setMessageLoadingState(true);
   await loadMessageChunk(null, false, options);
 }
 
@@ -2988,13 +3194,35 @@ function updateRecentActivity(userId, message, incrementUnread, options = {}) {
 async function sendMessage() {
   const input = document.getElementById('msg-input');
   const text = input.value.trim();
-  if (!selectedUser || !socket) return;
+  if (!selectedUser || !socket || composerSendInFlight) return;
+
+  const fileInput = document.getElementById('file-input');
+  const attachmentFile =
+    fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+  const voiceFile = recordedAudioFile;
+  const optimisticMessage = text ? createOptimisticTextMessage(text) : null;
 
   try {
+    setComposerSendingState(true);
     const canChat = await ensureChatPermissionReady();
     if (!canChat) {
       alert('Accept a chat request before sending messages.');
       return;
+    }
+
+    if (!text && !attachmentFile && !voiceFile) {
+      return;
+    }
+
+    if (optimisticMessage) {
+      queueOptimisticMessage(optimisticMessage);
+      appendMessage(optimisticMessage, { stickToBottom: true });
+      updateRecentActivity(
+        optimisticMessage.groupId || optimisticMessage.receiverId,
+        optimisticMessage,
+        false,
+      );
+      input.value = '';
     }
 
     if (text) {
@@ -3005,31 +3233,48 @@ async function sendMessage() {
           ? { groupId: selectedUser.id }
           : { toUserId: selectedUser.id }),
       });
-      socket.emit('typing', {
-        ...(isGroupConversation(selectedUser)
-          ? { groupId: selectedUser.id }
-          : { toUserId: selectedUser.id }),
-        isTyping: false,
-      });
-      input.value = '';
     }
 
-    const fileInput = document.getElementById('file-input');
-    if (fileInput.files && fileInput.files[0]) {
-      await uploadAttachment(fileInput.files[0]);
+    socket.emit('typing', {
+      ...(isGroupConversation(selectedUser)
+        ? { groupId: selectedUser.id }
+        : { toUserId: selectedUser.id }),
+      isTyping: false,
+    });
+
+    if (attachmentFile) {
+      await uploadAttachment(attachmentFile);
       clearAttachmentSelection();
     }
 
-    if (recordedAudioFile) {
-      await uploadAttachment(recordedAudioFile);
+    if (voiceFile) {
+      await uploadAttachment(voiceFile);
       clearRecordedAudio();
     }
   } catch (error) {
+    if (optimisticMessage) {
+      removeOptimisticMessage(optimisticMessage.id);
+      const roomId = optimisticMessage.groupId || optimisticMessage.receiverId;
+      const queue = pendingOptimisticMessageIdsByRoom.get(roomId) || [];
+      pendingOptimisticMessageIdsByRoom.set(
+        roomId,
+        queue.filter((id) => id !== optimisticMessage.id),
+      );
+      if (!input.value.trim()) {
+        input.value = text;
+      }
+    }
     alert(error.message || 'Failed to send message');
+  } finally {
+    setComposerSendingState(false);
   }
 }
 
 async function uploadAttachment(file) {
+  if (!selectedUser) {
+    throw new Error('No chat selected');
+  }
+
   const canChat = await ensureChatPermissionReady();
   if (!canChat) {
     throw new Error('Accept a chat request before sharing files');
@@ -3811,15 +4056,18 @@ function stopVoiceRecording() {
 }
 
 async function sendRecordedVoiceMessage() {
-  if (!recordedAudioFile) {
+  if (!recordedAudioFile || composerSendInFlight) {
     return;
   }
 
   try {
+    setComposerSendingState(true);
     await uploadAttachment(recordedAudioFile);
     clearRecordedAudio();
   } catch (error) {
     alert(error.message || 'Failed to send voice message');
+  } finally {
+    setComposerSendingState(false);
   }
 }
 
@@ -4207,13 +4455,16 @@ function createMessageElement(message) {
   div.className = `${isSent ? 'self-end' : 'self-start'} max-w-full`;
 
   const bubbleTone = isSent
-    ? 'rounded-[24px] rounded-br-md bg-blue-600 text-white shadow-lg'
+    ? `rounded-[24px] rounded-br-md text-white shadow-lg ${
+        message.isPending ? 'bg-blue-500/85' : 'bg-blue-600'
+      }`
     : 'rounded-[24px] rounded-bl-md border border-slate-200 bg-white text-slate-800 shadow-sm';
   const eye = isSent
     ? `<span class="inline-flex items-center gap-1 ${messageWasRead(message) ? 'text-emerald-200' : 'opacity-70'}">${messageWasRead(message) ? '&#128065;' : ''}</span>`
     : '';
   const footer = `
           <div class="mt-3 flex items-center justify-end gap-2 text-[11px] ${metaTone}">
+            ${message.isPending ? '<span class="font-semibold uppercase tracking-wide">Sending</span>' : ''}
             ${eye}
             <span>${escapeHtml(formatMessageTime(message.createdAt))}</span>
           </div>
@@ -4623,15 +4874,30 @@ async function restoreSession() {
     return;
   }
   token = savedToken;
+  document.getElementById('auth-screen')?.classList.add('hidden');
   try {
     await startApp();
   } catch (error) {
     console.error(error);
-    token = null;
-    localStorage.removeItem('chat_token');
-    if (!isFileOrigin && window.location.pathname.startsWith('/chat')) {
-      window.location.replace('/auth');
+    const message = String(error?.message || '').toLowerCase();
+    const isAuthFailure =
+      message.includes('expired') ||
+      message.includes('unauthorized') ||
+      message.includes('invalid token');
+
+    if (isAuthFailure) {
+      token = null;
+      localStorage.removeItem('chat_token');
+      if (!isFileOrigin && window.location.pathname.startsWith('/chat')) {
+        window.location.replace('/auth');
+      }
+      return;
     }
+
+    alert(
+      error?.message ||
+        'We could not refresh chat right now. Please try again in a moment.',
+    );
   } finally {
     syncLayout();
   }

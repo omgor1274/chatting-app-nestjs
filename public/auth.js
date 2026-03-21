@@ -1,5 +1,6 @@
 import {
   getApiUrl,
+  hasValidSession,
   loadPublicConfig,
   readJsonResponse,
   setToken,
@@ -420,7 +421,7 @@ function bindEvents() {
 
 async function boot() {
   await loadPublicConfig();
-  if (localStorage.getItem('chat_token')) {
+  if (await hasValidSession()) {
     window.location.replace('/chat');
     return;
   }

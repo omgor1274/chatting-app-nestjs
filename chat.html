@@ -15,10 +15,12 @@
     <link rel="stylesheet" href="./public/app.css?v=20260321" />
   </head>
 
-  <body class="min-h-screen p-3 sm:p-4 lg:p-6">
+  <body
+    class="mobile-page min-h-screen bg-slate-100 text-slate-900 p-3 sm:p-4 lg:p-6"
+  >
     <div
       id="app-shell"
-      class="glass relative mx-auto flex h-[calc(100vh-1.5rem)] max-w-[1500px] overflow-hidden rounded-[32px] border border-white/70 shadow-[0_30px_120px_rgba(15,23,42,0.18)] xl:h-[calc(100vh-3rem)]"
+      class="mobile-chat-shell glass relative mx-auto flex h-[calc(100vh-1.5rem)] max-w-[1500px] overflow-hidden rounded-[32px] border border-white/70 shadow-[0_30px_120px_rgba(15,23,42,0.18)] xl:h-[calc(100vh-3rem)]"
     >
       <div
         id="auth-screen"
@@ -273,7 +275,7 @@
 
       <aside
         id="sidebar"
-        class="sidebar-panel sidebar-closed absolute inset-y-0 left-0 z-40 flex w-[92vw] max-w-[390px] flex-col border-r border-slate-200 bg-white/92 lg:static lg:z-auto lg:w-[360px] lg:max-w-none lg:translate-x-0"
+        class="mobile-chat-sidebar sidebar-panel sidebar-closed absolute inset-y-0 left-0 z-40 flex w-[92vw] max-w-[390px] flex-col border-r border-slate-200 bg-white/92 lg:static lg:z-auto lg:w-[360px] lg:max-w-none lg:translate-x-0"
       >
         <div
           class="sidebar-header border-b border-slate-200 px-5 pb-4 pt-5 sm:px-6"
@@ -374,9 +376,9 @@
         ></ul>
       </aside>
 
-      <main class="flex min-w-0 flex-1 flex-col bg-white/60">
+      <main class="mobile-chat-main flex min-w-0 flex-1 flex-col bg-white/60">
         <div
-          class="flex items-center justify-between border-b border-slate-200 bg-white/85 px-4 py-3 backdrop-blur lg:hidden"
+          class="mobile-chat-topbar flex items-center justify-between border-b border-slate-200 bg-white/85 px-4 py-3 backdrop-blur lg:hidden"
         >
           <button
             onclick="openSidebar()"
@@ -399,7 +401,7 @@
 
         <div
           id="chat-header"
-          class="hidden items-center gap-3 border-b border-slate-200 bg-white/85 px-4 py-4 backdrop-blur sm:px-6"
+          class="mobile-chat-header hidden items-center gap-3 border-b border-slate-200 bg-white/85 px-4 py-4 backdrop-blur sm:px-6"
         >
           <button
             onclick="openSidebar()"
@@ -561,9 +563,15 @@
 
         <div
           id="message-container"
-          class="hidden flex-1 overflow-y-auto chat-bg px-3 py-4 sm:px-5 lg:px-6"
+          class="mobile-chat-scroll hidden flex-1 overflow-y-auto chat-bg px-3 py-4 sm:px-5 lg:px-6"
           onscroll="handleMessageContainerScroll()"
         >
+          <div
+            id="message-loading-indicator"
+            class="hidden sticky top-0 z-10 mx-auto mb-3 w-fit rounded-full border border-slate-200 bg-white/90 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 shadow-sm backdrop-blur"
+          >
+            Loading messages...
+          </div>
           <div
             id="messages-list"
             class="mx-auto flex w-full max-w-5xl flex-col space-y-3"
@@ -572,7 +580,7 @@
 
         <div
           id="input-area"
-          class="hidden border-t border-slate-200 bg-white/88 px-3 py-3 backdrop-blur sm:px-5 sm:py-4 lg:px-6"
+          class="mobile-chat-composer hidden border-t border-slate-200 bg-white/88 px-3 py-3 backdrop-blur sm:px-5 sm:py-4 lg:px-6"
         >
           <div class="mx-auto flex w-full max-w-5xl flex-col gap-3">
             <div
@@ -701,7 +709,7 @@
                   id="msg-input"
                   placeholder="Type a message..."
                   class="min-h-[52px] flex-1 rounded-[22px] bg-slate-50 px-4 py-3 text-base text-slate-800 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
-                  onkeypress="if (event.key === 'Enter') sendMessage();"
+                  onkeydown="handleComposerKeydown(event)"
                 />
                 <button
                   id="send-message-btn"
@@ -1529,22 +1537,27 @@
       "
     />
 
-    <script>
-      const chatToken = localStorage.getItem('chat_token');
+    <script type="module">
+      import {
+        hasValidSession,
+        loadPublicConfig,
+      } from '/public/runtime.js?v=20260321';
 
-      if (!chatToken) {
+      const loadScript = (src) =>
+        new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = src;
+          script.defer = true;
+          script.onload = resolve;
+          script.onerror = reject;
+          document.body.appendChild(script);
+        });
+
+      await loadPublicConfig();
+
+      if (!(await hasValidSession())) {
         window.location.replace('/auth');
       } else {
-        const loadScript = (src) =>
-          new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = src;
-            script.defer = true;
-            script.onload = resolve;
-            script.onerror = reject;
-            document.body.appendChild(script);
-          });
-
         loadScript('https://cdn.socket.io/4.7.2/socket.io.min.js')
           .then(() => loadScript('/public/app.js?v=20260321'))
           .catch((error) =>

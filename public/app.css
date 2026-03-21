@@ -1,6 +1,7 @@
 html,
 body {
   height: 100%;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -12,10 +13,23 @@ body {
     'Segoe UI',
     sans-serif;
   background: #e2e8f0;
+  overscroll-behavior-y: contain;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .display-font {
   font-family: inherit;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+img {
+  max-width: 100%;
 }
 
 ::-webkit-scrollbar {
@@ -98,6 +112,132 @@ body {
 
 .sidebar-header-btn {
   background: rgba(255, 255, 255, 0.92);
+}
+
+.mobile-page {
+  min-height: 100dvh;
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+.mobile-page-shell {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+.mobile-sticky-header {
+  position: sticky;
+  top: max(0.75rem, env(safe-area-inset-top));
+  z-index: 20;
+}
+
+.mobile-chat-shell {
+  isolation: isolate;
+}
+
+.mobile-chat-topbar,
+.mobile-chat-header,
+.mobile-chat-composer {
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+@media (max-width: 767px) {
+  .mobile-full-btn {
+    width: 100%;
+  }
+
+  .mobile-sticky-header {
+    border-radius: 24px;
+  }
+
+  #message-container {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+
+  #input-area {
+    padding-bottom: max(0.9rem, env(safe-area-inset-bottom));
+    position: sticky;
+    bottom: 0;
+    z-index: 15;
+  }
+
+  #input-area .rounded-\[28px\] {
+    border-radius: 24px;
+  }
+
+  #send-message-btn,
+  #voice-send-btn,
+  #voice-record-btn,
+  #request-action-btn,
+  #request-reject-btn {
+    min-height: 48px;
+  }
+
+  .mobile-chat-shell {
+    box-shadow: none !important;
+  }
+
+  .mobile-chat-sidebar {
+    width: 100vw;
+    max-width: 100vw;
+    border-right: 0;
+  }
+
+  .mobile-chat-sidebar .sidebar-header {
+    padding-top: calc(0.95rem + env(safe-area-inset-top));
+  }
+
+  .mobile-chat-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 18;
+    padding-top: calc(0.8rem + env(safe-area-inset-top));
+  }
+
+  .mobile-chat-header {
+    position: sticky;
+    top: 0;
+    z-index: 17;
+    padding-top: calc(0.7rem + env(safe-area-inset-top));
+    padding-bottom: 0.8rem;
+  }
+
+  .mobile-chat-header .ml-auto {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+
+  .mobile-chat-scroll {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .mobile-chat-scroll #messages-list {
+    max-width: 100%;
+  }
+
+  .mobile-chat-composer {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    background: rgba(248, 250, 252, 0.92);
+  }
+
+  .mobile-chat-composer > .max-w-5xl {
+    gap: 0.75rem;
+  }
+
+  .mobile-chat-composer #msg-input {
+    min-height: 48px;
+    font-size: 16px;
+  }
+
+  .mobile-chat-composer #send-message-btn {
+    min-width: 96px;
+  }
+
+  .mobile-chat-composer #composer-actions-btn {
+    flex-shrink: 0;
+  }
 }
 
 @media (max-width: 1023px) {

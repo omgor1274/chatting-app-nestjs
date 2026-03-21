@@ -29,6 +29,28 @@ export function clearToken() {
   localStorage.removeItem('chat_token');
 }
 
+export async function hasValidSession() {
+  const token = getToken();
+  if (!token) {
+    return false;
+  }
+
+  try {
+    const response = await api('/users/me');
+    if (response.ok) {
+      return true;
+    }
+
+    if (response.status === 401) {
+      clearToken();
+    }
+    return false;
+  } catch (error) {
+    console.error(error);
+    return false;
+  }
+}
+
 export function getAvatarUrl(
   name = 'User',
   avatarBaseUrl = appConfig.avatarBaseUrl,
