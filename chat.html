@@ -671,6 +671,7 @@
                 <div class="relative shrink-0">
                   <button
                     id="composer-actions-btn"
+                    type="button"
                     onclick="toggleComposerActionsMenu()"
                     class="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-2xl font-semibold text-slate-700 transition hover:bg-slate-100"
                   >
@@ -694,6 +695,7 @@
                     </label>
                     <button
                       id="voice-record-btn"
+                      type="button"
                       onclick="
                         closeComposerActionsMenu();
                         toggleVoiceRecording();
@@ -713,6 +715,7 @@
                 />
                 <button
                   id="send-message-btn"
+                  type="button"
                   onclick="sendMessage()"
                   class="rounded-[22px] bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-700 sm:min-w-[112px]"
                 >
@@ -720,6 +723,10 @@
                 </button>
               </div>
             </div>
+            <p
+              id="chat-send-status"
+              class="hidden text-sm font-medium text-blue-600"
+            ></p>
             <p id="chat-access-note" class="hidden text-sm text-slate-500"></p>
           </div>
         </div>
@@ -779,6 +786,25 @@
               </button>
             </div>
             <div class="mt-4 space-y-4">
+              <div
+                class="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-4"
+              >
+                <label
+                  for="desktop-avatar-input"
+                  class="block text-sm font-semibold text-slate-900"
+                  >Choose a new profile photo</label
+                >
+                <input
+                  id="desktop-avatar-input"
+                  type="file"
+                  accept="image/*"
+                  class="mt-3 block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-blue-600 file:px-4 file:py-2.5 file:font-semibold file:text-white hover:file:bg-blue-700"
+                  onchange="uploadMyAvatar('desktop-avatar-input')"
+                />
+                <p class="mt-2 text-xs leading-5 text-slate-500">
+                  PNG, JPG, or WebP up to 5MB.
+                </p>
+              </div>
               <div>
                 <label
                   for="profile-name-input"
@@ -1505,7 +1531,7 @@
       type="file"
       accept="image/*"
       class="hidden"
-      onchange="uploadMyAvatar()"
+      onchange="uploadMyAvatar('avatar-input')"
     />
     <input
       id="chat-theme-input"

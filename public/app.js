@@ -39,6 +39,8 @@ let composerSendInFlight = false;
 let pendingOptimisticMessageIdsByRoom = new Map();
 let lastSubmittedDraftFingerprint = '';
 let lastSubmittedDraftAt = 0;
+let composerDraftVersion = 0;
+let lastSubmittedDraftVersion = -1;
 let messagePagination = {
   nextBefore: null,
   hasMore: false,
@@ -591,14 +593,25 @@ function shouldSkipDuplicateDraft(fingerprint) {
   );
 }
 
+function markComposerDraftDirty() {
+  composerDraftVersion += 1;
+  lastSubmittedDraftVersion = -1;
+}
+
 function setComposerSendingState(isSending, label = 'Send') {
   composerSendInFlight = isSending;
   const sendBtn = document.getElementById('send-message-btn');
   const voiceSendBtn = document.getElementById('voice-send-btn');
+  const voiceRecordBtn = document.getElementById('voice-record-btn');
+  const voiceStopBtn = document.getElementById('voice-stop-btn');
+  const voiceDeleteBtn = document.getElementById('voice-delete-btn');
   const input = document.getElementById('msg-input');
   const fileInput = document.getElementById('file-input');
   const composerActionsBtn = document.getElementById('composer-actions-btn');
+  const shareFileLabel = document.getElementById('share-file-label');
+  const sendStatus = document.getElementById('chat-send-status');
   const sendLabel = sendBtn?.dataset?.idleLabel || 'Send';
+  const busyLabel = label || 'Sending...';
 
   if (sendBtn) {
     if (!sendBtn.dataset.idleLabel) {
@@ -608,7 +621,7 @@ function setComposerSendingState(isSending, label = 'Send') {
     sendBtn.classList.toggle('opacity-70', isSending);
     sendBtn.classList.toggle('cursor-wait', isSending);
     sendBtn.innerHTML = isSending
-      ? '<span class="inline-flex items-center gap-2"><span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white"></span><span>Sending...</span></span>'
+      ? `<span class="inline-flex items-center gap-2"><span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white"></span><span>${busyLabel}</span></span>`
       : sendBtn.dataset.idleLabel;
   }
 
@@ -618,7 +631,18 @@ function setComposerSendingState(isSending, label = 'Send') {
     voiceSendBtn.classList.toggle('cursor-wait', isSending);
   }
 
+  [voiceRecordBtn, voiceStopBtn, voiceDeleteBtn].forEach((button) => {
+    if (!button) {
+      return;
+    }
+
+    button.disabled = isSending;
+    button.classList.toggle('opacity-70', isSending);
+    button.classList.toggle('cursor-wait', isSending);
+  });
+
   if (input) {
+    input.readOnly = isSending;
     input.setAttribute('aria-busy', isSending ? 'true' : 'false');
   }
 
@@ -630,6 +654,16 @@ function setComposerSendingState(isSending, label = 'Send') {
     composerActionsBtn.disabled = isSending;
     composerActionsBtn.classList.toggle('opacity-70', isSending);
     composerActionsBtn.classList.toggle('cursor-wait', isSending);
+  }
+
+  if (shareFileLabel) {
+    shareFileLabel.classList.toggle('pointer-events-none', isSending);
+    shareFileLabel.classList.toggle('opacity-60', isSending);
+  }
+
+  if (sendStatus) {
+    sendStatus.textContent = isSending ? `${busyLabel}...` : '';
+    sendStatus.classList.toggle('hidden', !isSending);
   }
 }
 
@@ -1452,8 +1486,9 @@ function closeImagePreview() {
   document.getElementById('image-preview-src').src = '';
 }
 
-function openMyAvatarPicker() {
-  const input = document.getElementById('avatar-input');
+function openMyAvatarPicker(inputId = 'desktop-avatar-input') {
+  const input =
+    document.getElementById(inputId) || document.getElementById('avatar-input');
   if (!input) {
     return;
   }
@@ -1516,6 +1551,7 @@ function clearAttachmentSelection() {
   const input = document.getElementById('file-input');
   const preview = document.getElementById('attachment-preview');
   const previewImage = document.getElementById('attachment-preview-image');
+  const hadDraft = Boolean(input?.files?.length || attachmentPreviewUrl);
 
   if (attachmentPreviewUrl) {
     URL.revokeObjectURL(attachmentPreviewUrl);
@@ -1535,6 +1571,10 @@ function clearAttachmentSelection() {
   previewImage.src = '';
   previewImage.onclick = null;
   closeComposerActionsMenu();
+
+  if (hadDraft) {
+    markComposerDraftDirty();
+  }
 }
 
 async function openProfileModal() {
@@ -3266,6 +3306,7 @@ async function sendMessage() {
   const input = document.getElementById('msg-input');
   const text = input.value.trim();
   if (!selectedUser || !socket || composerSendInFlight) return;
+  if (composerDraftVersion === lastSubmittedDraftVersion) return;
 
   const fileInput = document.getElementById('file-input');
   const attachmentFile =
@@ -3289,8 +3330,16 @@ async function sendMessage() {
   const optimisticMessage = text ? createOptimisticTextMessage(text) : null;
 
   try {
-    setComposerSendingState(true);
+    setComposerSendingState(
+      true,
+      attachmentFile || voiceFile
+        ? text
+          ? 'Sending'
+          : 'Uploading'
+        : 'Sending',
+    );
     markDraftSubmitted(draftFingerprint);
+    lastSubmittedDraftVersion = composerDraftVersion;
     const canChat = await ensureChatPermissionReady();
     if (!canChat) {
       alert('Accept a chat request before sending messages.');
@@ -3336,6 +3385,7 @@ async function sendMessage() {
     }
   } catch (error) {
     clearDraftSubmissionGuard(draftFingerprint);
+    lastSubmittedDraftVersion = -1;
     if (optimisticMessage) {
       removeOptimisticMessage(optimisticMessage.id);
       const roomId = optimisticMessage.groupId || optimisticMessage.receiverId;
@@ -3910,6 +3960,8 @@ function handleAttachmentSelected() {
     return;
   }
 
+  markComposerDraftDirty();
+
   document.getElementById('attachment-preview-title').innerText = file.name;
   document.getElementById('attachment-preview-meta').innerText =
     formatAttachmentMeta(file);
@@ -3931,8 +3983,15 @@ function handleAttachmentSelected() {
   }
 }
 
-async function uploadMyAvatar() {
-  const input = document.getElementById('avatar-input');
+async function uploadMyAvatar(inputId = 'desktop-avatar-input') {
+  const preferredInput = inputId ? document.getElementById(inputId) : null;
+  const fallbackInput = document.getElementById('avatar-input');
+  const input =
+    preferredInput && preferredInput.files && preferredInput.files[0]
+      ? preferredInput
+      : fallbackInput && fallbackInput.files && fallbackInput.files[0]
+        ? fallbackInput
+        : preferredInput || fallbackInput;
   const button = document.getElementById('profile-avatar-btn');
   if (!input.files || !input.files[0]) return;
 
@@ -4136,6 +4195,9 @@ function updateVoiceComposerUI() {
 }
 
 function clearRecordedAudio(options = {}) {
+  const hadDraft = Boolean(
+    recordedAudioFile || recordedAudioUrl || recordedChunks.length,
+  );
   if (mediaRecorder && mediaRecorder.state === 'recording') {
     discardRecordedAudioOnStop = true;
     mediaRecorder.stop();
@@ -4157,6 +4219,10 @@ function clearRecordedAudio(options = {}) {
   }
 
   updateVoiceComposerUI();
+
+  if (hadDraft) {
+    markComposerDraftDirty();
+  }
 }
 
 function stopVoiceRecording() {
@@ -4167,6 +4233,9 @@ function stopVoiceRecording() {
 
 async function sendRecordedVoiceMessage() {
   if (!recordedAudioFile || composerSendInFlight) {
+    return;
+  }
+  if (composerDraftVersion === lastSubmittedDraftVersion) {
     return;
   }
 
@@ -4181,12 +4250,14 @@ async function sendRecordedVoiceMessage() {
   }
 
   try {
-    setComposerSendingState(true);
+    setComposerSendingState(true, 'Uploading');
     markDraftSubmitted(draftFingerprint);
+    lastSubmittedDraftVersion = composerDraftVersion;
     await uploadAttachment(recordedAudioFile);
     clearRecordedAudio();
   } catch (error) {
     clearDraftSubmissionGuard(draftFingerprint);
+    lastSubmittedDraftVersion = -1;
     alert(error.message || 'Failed to send voice message');
   } finally {
     setComposerSendingState(false);
@@ -4250,6 +4321,7 @@ async function toggleVoiceRecording() {
         { type: mimeType },
       );
       recordedAudioUrl = URL.createObjectURL(blob);
+      markComposerDraftDirty();
       updateVoiceComposerUI();
     });
 
@@ -5029,6 +5101,8 @@ document.addEventListener('input', (event) => {
   if (event.target?.id !== 'msg-input' || !selectedUser || !socket) {
     return;
   }
+
+  markComposerDraftDirty();
 
   socket.emit('typing', {
     ...(isGroupConversation(selectedUser)
