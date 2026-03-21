@@ -195,7 +195,10 @@ export class ChatController {
       avatar: file ? `/uploads/groups/${file.filename}` : null,
     });
     this.chatGateway.emitConversationRefresh(
-      [req.user.userId, ...group.pendingInvites.map((invite) => invite.invitedUserId)],
+      [
+        req.user.userId,
+        ...group.pendingInvites.map((invite) => invite.invitedUserId),
+      ],
       { groupId: group.id },
     );
     return group;
@@ -258,7 +261,10 @@ export class ChatController {
       parseIds(body.userIds),
     );
     this.chatGateway.emitConversationRefresh(
-      [req.user.userId, ...group.pendingInvites.map((invite) => invite.invitedUserId)],
+      [
+        req.user.userId,
+        ...group.pendingInvites.map((invite) => invite.invitedUserId),
+      ],
       { groupId },
     );
     return group;
@@ -302,7 +308,9 @@ export class ChatController {
       body.userId,
     );
     this.chatGateway.emitConversationRefresh(
-      Array.from(new Set([body.userId, ...group.members.map((member) => member.userId)])),
+      Array.from(
+        new Set([body.userId, ...group.members.map((member) => member.userId)]),
+      ),
       { groupId },
     );
     return group;
@@ -350,7 +358,10 @@ export class ChatController {
     @Req() req,
     @Body() body: { otherUserId?: string; groupId?: string },
   ) {
-    const result = await this.chatService.markConversationRead(req.user.userId, body);
+    const result = await this.chatService.markConversationRead(
+      req.user.userId,
+      body,
+    );
     this.chatGateway.emitReadReceipt({
       ...(result as {
         conversationType: 'direct' | 'group';
@@ -393,9 +404,6 @@ export class ChatController {
         destination: resolveWritableDataPath('uploads', 'chat'),
         filename: attachmentFileName,
       }),
-      limits: {
-        fileSize: 20 * 1024 * 1024,
-      },
       fileFilter: (req, file, callback) => {
         const allowedMimeTypes = [
           'image/jpeg',

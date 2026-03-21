@@ -502,8 +502,7 @@ function createRenderableMessage(message) {
     renderable.displayText =
       renderable.content ||
       renderable.displayText ||
-      renderable.ciphertext ||
-      '';
+      (renderable.isEncrypted ? 'Decrypting message...' : '');
   } else {
     renderable.displayText = renderable.content || '';
   }
@@ -3436,12 +3435,14 @@ async function sendMessage() {
     });
 
     if (attachmentFile) {
-      await uploadAttachment(attachmentFile);
+      const uploadedAttachment = await uploadAttachment(attachmentFile);
+      await handleIncomingMessage(uploadedAttachment, true);
       clearAttachmentSelection();
     }
 
     if (voiceFile) {
-      await uploadAttachment(voiceFile);
+      const uploadedVoiceMessage = await uploadAttachment(voiceFile);
+      await handleIncomingMessage(uploadedVoiceMessage, true);
       clearRecordedAudio();
     }
   } catch (error) {
@@ -3496,6 +3497,8 @@ async function uploadAttachment(file) {
   if (!res.ok) {
     throw new Error(data.message || 'Failed to upload attachment');
   }
+
+  return createRenderableMessage(data);
 }
 
 async function handleRequestAction() {
@@ -4314,7 +4317,8 @@ async function sendRecordedVoiceMessage() {
     setComposerSendingState(true, 'Uploading');
     markDraftSubmitted(draftFingerprint);
     lastSubmittedDraftVersion = composerDraftVersion;
-    await uploadAttachment(recordedAudioFile);
+    const uploadedVoiceMessage = await uploadAttachment(recordedAudioFile);
+    await handleIncomingMessage(uploadedVoiceMessage, true);
     clearRecordedAudio();
   } catch (error) {
     clearDraftSubmissionGuard(draftFingerprint);
