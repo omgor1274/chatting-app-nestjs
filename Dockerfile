@@ -40,4 +40,4 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 
 EXPOSE 8080
 
-CMD ["sh", "-c", "npm run prisma:migrate:deploy && npm run start:prod"]
+CMD ["sh", "-c", "npm run prisma:migrate:deploy:retry && npm run start:prod"]
