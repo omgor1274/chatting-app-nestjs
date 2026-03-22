@@ -200,4 +200,86 @@ describe('ChatService', () => {
       }),
     ]);
   });
+
+  it('treats only the latest pending request as authoritative', async () => {
+    prisma.userBlock.findMany.mockResolvedValue([]);
+    prisma.chatRequest.findFirst
+      .mockResolvedValueOnce({
+        id: 'pending-from-user-2',
+        senderId: 'user-2',
+        receiverId: 'user-1',
+        status: 'PENDING',
+        createdAt: new Date('2026-03-23T00:00:00.000Z'),
+      })
+      .mockResolvedValueOnce(null);
+
+    const result = await service.getChatPermission('user-1', 'user-2');
+
+    expect(result).toEqual({
+      canChat: false,
+      acceptedRequestId: null,
+      incomingRequestId: 'pending-from-user-2',
+      outgoingRequestId: null,
+      blockedByMe: false,
+      blockedByUser: false,
+    });
+  });
+
+  it('does not expose pending state once an accepted request exists', async () => {
+    prisma.userBlock.findMany.mockResolvedValue([]);
+    prisma.chatRequest.findFirst
+      .mockResolvedValueOnce({
+        id: 'stale-pending',
+        senderId: 'user-2',
+        receiverId: 'user-1',
+        status: 'PENDING',
+        createdAt: new Date('2026-03-22T00:00:00.000Z'),
+      })
+      .mockResolvedValueOnce({
+        id: 'accepted-request',
+        senderId: 'user-1',
+        receiverId: 'user-2',
+        status: 'ACCEPTED',
+        createdAt: new Date('2026-03-23T00:00:00.000Z'),
+      });
+
+    const result = await service.getChatPermission('user-1', 'user-2');
+
+    expect(result).toEqual({
+      canChat: true,
+      acceptedRequestId: 'accepted-request',
+      incomingRequestId: null,
+      outgoingRequestId: null,
+      blockedByMe: false,
+      blockedByUser: false,
+    });
+  });
+
+  it('allows the sender to withdraw a pending request', async () => {
+    prisma.chatRequest.findUnique.mockResolvedValue({
+      id: 'request-1',
+      senderId: 'user-1',
+      receiverId: 'user-2',
+      status: 'PENDING',
+    });
+    prisma.chatRequest.update.mockResolvedValue({
+      id: 'request-1',
+      senderId: 'user-1',
+      receiverId: 'user-2',
+      status: 'REJECTED',
+    });
+
+    const result = await service.withdrawRequest('request-1', 'user-1');
+
+    expect(prisma.chatRequest.update).toHaveBeenCalledWith({
+      where: { id: 'request-1' },
+      data: { status: 'REJECTED' },
+    });
+    expect(result).toEqual({
+      id: 'request-1',
+      senderId: 'user-1',
+      receiverId: 'user-2',
+      status: 'REJECTED',
+    });
+  });
 });

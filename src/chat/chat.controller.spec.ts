@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChatController } from './chat.controller';
 import { ChatGateway } from './chat.gateway';
+import { ChatUploadService } from './chat-upload.service';
 import { ChatService } from './chat.service';
 
 describe('ChatController', () => {
@@ -26,7 +27,17 @@ describe('ChatController', () => {
         {
           provide: ChatGateway,
           useValue: {
-            emitMessageToUser: jest.fn(),
+            emitMessageToConversation: jest.fn(),
+          },
+        },
+        {
+          provide: ChatUploadService,
+          useValue: {
+            createSession: jest.fn(),
+            getSessionStatus: jest.fn(),
+            uploadChunk: jest.fn(),
+            finalizeSession: jest.fn(),
+            cancelSession: jest.fn(),
           },
         },
         {

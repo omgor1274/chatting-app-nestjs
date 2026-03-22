@@ -5,6 +5,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ChatBackupService } from './chat-backup.service';
 import { ChatController } from './chat.controller';
+import { ChatUploadService } from './chat-upload.service';
 import { ChatService } from './chat.service';
 
 @Module({
@@ -16,7 +17,7 @@ import { ChatService } from './chat.service';
             signOptions: { expiresIn: '1d' },
         }),
     ],
-    providers: [ChatGateway, ChatService, ChatBackupService],
+    providers: [ChatGateway, ChatService, ChatBackupService, ChatUploadService],
     controllers: [ChatController],
     exports: [ChatGateway],
 })

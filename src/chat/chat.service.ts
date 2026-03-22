@@ -403,39 +403,54 @@ export class ChatService {
       };
     }
 
-    const [incomingRequest, outgoingRequest, acceptedRequest] =
-      await Promise.all([
-        this.prisma.chatRequest.findFirst({
-          where: {
-            senderId: otherUserId,
-            receiverId: currentUserId,
-            status: 'PENDING',
-          },
-          orderBy: { createdAt: 'desc' },
-        }),
-        this.prisma.chatRequest.findFirst({
-          where: {
-            senderId: currentUserId,
-            receiverId: otherUserId,
-            status: 'PENDING',
-          },
-          orderBy: { createdAt: 'desc' },
-        }),
-        this.prisma.chatRequest.findFirst({
-          where: {
-            status: 'ACCEPTED',
-            OR: [
-              { senderId: currentUserId, receiverId: otherUserId },
-              { senderId: otherUserId, receiverId: currentUserId },
-            ],
-          },
-          orderBy: { createdAt: 'desc' },
-        }),
-      ]);
+    const [latestPendingRequest, acceptedRequest] = await Promise.all([
+      this.prisma.chatRequest.findFirst({
+        where: {
+          status: 'PENDING',
+          OR: [
+            { senderId: currentUserId, receiverId: otherUserId },
+            { senderId: otherUserId, receiverId: currentUserId },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.chatRequest.findFirst({
+        where: {
+          status: 'ACCEPTED',
+          OR: [
+            { senderId: currentUserId, receiverId: otherUserId },
+            { senderId: otherUserId, receiverId: currentUserId },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    if (acceptedRequest) {
+      return {
+        canChat: true,
+        acceptedRequestId: acceptedRequest.id,
+        incomingRequestId: null,
+        outgoingRequestId: null,
+        blockedByMe: false,
+        blockedByUser: false,
+      };
+    }
+
+    const incomingRequest =
+      latestPendingRequest?.senderId === otherUserId &&
+      latestPendingRequest?.receiverId === currentUserId
+        ? latestPendingRequest
+        : null;
+    const outgoingRequest =
+      latestPendingRequest?.senderId === currentUserId &&
+      latestPendingRequest?.receiverId === otherUserId
+        ? latestPendingRequest
+        : null;
 
     return {
-      canChat: Boolean(acceptedRequest),
-      acceptedRequestId: acceptedRequest?.id ?? null,
+      canChat: false,
+      acceptedRequestId: null,
       incomingRequestId: incomingRequest?.id ?? null,
       outgoingRequestId: outgoingRequest?.id ?? null,
       blockedByMe: false,
@@ -842,6 +857,22 @@ export class ChatService {
       throw new ForbiddenException('Unauthorized');
     if (request.status !== 'PENDING') {
       throw new BadRequestException('Only pending requests can be rejected');
+    }
+    return this.prisma.chatRequest.update({
+      where: { id: requestId },
+      data: { status: 'REJECTED' },
+    });
+  }
+
+  async withdrawRequest(requestId: string, userId: string) {
+    const request = await this.prisma.chatRequest.findUnique({
+      where: { id: requestId },
+    });
+    if (!request) throw new NotFoundException('Request not found');
+    if (request.senderId !== userId)
+      throw new ForbiddenException('Unauthorized');
+    if (request.status !== 'PENDING') {
+      throw new BadRequestException('Only pending requests can be withdrawn');
     }
     return this.prisma.chatRequest.update({
       where: { id: requestId },

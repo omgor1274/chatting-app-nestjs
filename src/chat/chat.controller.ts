@@ -12,12 +12,17 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
+import { diskStorage, memoryStorage } from 'multer';
 import { extname } from 'path';
-import { MessageType } from '@prisma/client';
 import { JwtGuard } from '../auth/jwt/jwt.guard';
 import { resolveWritableDataPath } from '../common/app-paths';
 import { ChatGateway } from './chat.gateway';
+import {
+  CHAT_ATTACHMENT_ALLOWED_MIME_TYPES,
+  CHAT_UPLOAD_CHUNK_SIZE_BYTES,
+  resolveAttachmentMessageType,
+} from './chat-upload.constants';
+import { ChatUploadService } from './chat-upload.service';
 import { ChatService } from './chat.service';
 
 function attachmentFileName(
@@ -80,6 +85,7 @@ export class ChatController {
   constructor(
     private chatService: ChatService,
     private chatGateway: ChatGateway,
+    private chatUploadService: ChatUploadService,
   ) {}
 
   @UseGuards(JwtGuard)
@@ -125,6 +131,17 @@ export class ChatController {
   @UseGuards(JwtGuard)
   async reject(@Body() body: { requestId: string }, @Req() req) {
     const request = await this.chatService.rejectRequest(
+      body.requestId,
+      req.user.userId,
+    );
+    this.chatGateway.emitRequestUpdate(request);
+    return request;
+  }
+
+  @Post('withdraw')
+  @UseGuards(JwtGuard)
+  async withdraw(@Body() body: { requestId: string }, @Req() req) {
+    const request = await this.chatService.withdrawRequest(
       body.requestId,
       req.user.userId,
     );
@@ -426,6 +443,77 @@ export class ChatController {
     return result;
   }
 
+  @Post('uploads/sessions')
+  @UseGuards(JwtGuard)
+  createUploadSession(
+    @Req() req,
+    @Body()
+    body: {
+      receiverId?: string;
+      groupId?: string;
+      fileName?: string;
+      fileMimeType?: string;
+      fileSize?: number;
+    },
+  ) {
+    return this.chatUploadService.createSession(req.user.userId, body);
+  }
+
+  @Get('uploads/sessions/:sessionId')
+  @UseGuards(JwtGuard)
+  getUploadSessionStatus(@Req() req, @Param('sessionId') sessionId: string) {
+    return this.chatUploadService.getSessionStatus(sessionId, req.user.userId);
+  }
+
+  @Post('uploads/sessions/:sessionId/chunks')
+  @UseGuards(JwtGuard)
+  @UseInterceptors(
+    FileInterceptor('chunk', {
+      storage: memoryStorage(),
+      limits: {
+        fileSize: CHAT_UPLOAD_CHUNK_SIZE_BYTES + 1024,
+      },
+    }),
+  )
+  uploadAttachmentChunk(
+    @Req() req,
+    @Param('sessionId') sessionId: string,
+    @Body() body: { chunkIndex?: string | number },
+    @UploadedFile() file?: { buffer: Buffer; size: number },
+  ) {
+    return this.chatUploadService.uploadChunk(
+      sessionId,
+      req.user.userId,
+      body.chunkIndex,
+      file
+        ? {
+            buffer: file.buffer,
+            size: file.size,
+          }
+        : undefined,
+    );
+  }
+
+  @Post('uploads/sessions/:sessionId/finalize')
+  @UseGuards(JwtGuard)
+  async finalizeUploadSession(
+    @Req() req,
+    @Param('sessionId') sessionId: string,
+  ) {
+    const message = await this.chatUploadService.finalizeSession(
+      sessionId,
+      req.user.userId,
+    );
+    await this.chatGateway.emitMessageToConversation(message);
+    return message;
+  }
+
+  @Post('uploads/sessions/:sessionId/cancel')
+  @UseGuards(JwtGuard)
+  cancelUploadSession(@Req() req, @Param('sessionId') sessionId: string) {
+    return this.chatUploadService.cancelSession(sessionId, req.user.userId);
+  }
+
   @Post('attachments')
   @UseGuards(JwtGuard)
   @UseInterceptors(
@@ -435,27 +523,7 @@ export class ChatController {
         filename: attachmentFileName,
       }),
       fileFilter: (req, file, callback) => {
-        const allowedMimeTypes = [
-          'image/jpeg',
-          'image/png',
-          'image/webp',
-          'video/mp4',
-          'video/webm',
-          'video/ogg',
-          'video/quicktime',
-          'video/x-m4v',
-          'audio/webm',
-          'audio/mpeg',
-          'audio/mp4',
-          'audio/ogg',
-          'audio/wav',
-          'application/pdf',
-          'application/msword',
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'text/plain',
-        ];
-
-        if (!allowedMimeTypes.includes(file.mimetype)) {
+        if (!CHAT_ATTACHMENT_ALLOWED_MIME_TYPES.includes(file.mimetype)) {
           return callback(
             new BadRequestException('Unsupported file type'),
             false,
@@ -488,12 +556,6 @@ export class ChatController {
       throw new BadRequestException('Attachment file is required');
     }
 
-    const messageType = file.mimetype.startsWith('image/')
-      ? MessageType.IMAGE
-      : file.mimetype.startsWith('audio/')
-        ? MessageType.AUDIO
-        : MessageType.DOCUMENT;
-
     const message = await this.chatService.createEncryptedMessage({
       senderId: req.user.userId,
       receiverId: body.receiverId,
@@ -506,7 +568,7 @@ export class ChatController {
       fileName: file.originalname,
       fileMimeType: file.mimetype,
       fileSize: file.size,
-      messageType,
+      messageType: resolveAttachmentMessageType(file.mimetype),
     });
 
     await this.chatGateway.emitMessageToConversation(message);

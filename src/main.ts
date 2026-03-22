@@ -64,6 +64,12 @@ function setStaticAssetHeaders(
 async function bootstrap() {
   mkdirSync(resolveWritableDataPath('uploads', 'avatars'), { recursive: true });
   mkdirSync(resolveWritableDataPath('uploads', 'chat'), { recursive: true });
+  mkdirSync(resolveWritableDataPath('uploads', 'chat-sessions', 'meta'), {
+    recursive: true,
+  });
+  mkdirSync(resolveWritableDataPath('uploads', 'chat-sessions', 'chunks'), {
+    recursive: true,
+  });
   mkdirSync(resolveWritableDataPath('uploads', 'groups'), { recursive: true });
   mkdirSync(resolveWritableDataPath('uploads', 'chat-themes'), {
     recursive: true,
