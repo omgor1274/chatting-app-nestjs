@@ -71,3 +71,17 @@ export function resolveDefaultAppOrigin() {
     `http://localhost:${process.env.PORT ?? 8080}`
   );
 }
+
+export function resolveRequestOrigin(params: {
+  protocol?: string | null;
+  host?: string | null;
+}) {
+  const protocol = params.protocol?.trim();
+  const host = params.host?.trim();
+
+  if (!protocol || !host) {
+    return null;
+  }
+
+  return normalizeOrigin(`${protocol}://${host}`);
+}

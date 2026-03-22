@@ -11,6 +11,14 @@ let appConfig = {
 let API_URL = appConfig.apiUrl;
 let configLoadPromise = null;
 
+function resolveHostedApiUrl(candidate, data) {
+  if (isHostedOrigin) {
+    return window.location.origin;
+  }
+
+  return data?.apiUrl || candidate;
+}
+
 export function getApiUrl() {
   return API_URL;
 }
@@ -99,7 +107,7 @@ export async function loadPublicConfig() {
         appConfig = {
           ...appConfig,
           ...data,
-          apiUrl: data.apiUrl || candidate,
+          apiUrl: resolveHostedApiUrl(candidate, data),
         };
         API_URL = appConfig.apiUrl || candidate;
         return appConfig;

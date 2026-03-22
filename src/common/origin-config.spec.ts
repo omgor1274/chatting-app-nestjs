@@ -3,6 +3,7 @@ import {
   isAllowedRequestOrigin,
   normalizeOrigin,
   resolveDefaultAppOrigin,
+  resolveRequestOrigin,
 } from './origin-config';
 
 describe('origin-config', () => {
@@ -64,5 +65,14 @@ describe('origin-config', () => {
   it('normalizes origin values safely', () => {
     expect(normalizeOrigin('https://Example.com/')).toBe('https://example.com');
     expect(normalizeOrigin('not-a-url')).toBeNull();
+  });
+
+  it('resolves request origin from protocol and host', () => {
+    expect(
+      resolveRequestOrigin({
+        protocol: 'https',
+        host: 'chatting-app-nestjs-production.up.railway.app',
+      }),
+    ).toBe('https://chatting-app-nestjs-production.up.railway.app');
   });
 });

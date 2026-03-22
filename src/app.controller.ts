@@ -1,5 +1,5 @@
-import { Controller, Get, Res } from '@nestjs/common';
-import type { Response } from 'express';
+import { Controller, Get, Req, Res } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { AppService } from './app.service';
 import { resolveAppRootPath } from './common/app-paths';
 
@@ -37,7 +37,7 @@ export class AppController {
   }
 
   @Get('config')
-  getConfig() {
-    return this.appService.getPublicConfig();
+  getConfig(@Req() req: Request) {
+    return this.appService.getPublicConfig(req);
   }
 }

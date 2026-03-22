@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { resolveDefaultAppOrigin } from './common/origin-config';
+import type { Request } from 'express';
+import {
+  resolveDefaultAppOrigin,
+  resolveRequestOrigin,
+} from './common/origin-config';
 
 @Injectable()
 export class AppService {
@@ -10,12 +14,20 @@ export class AppService {
     };
   }
 
-  getPublicConfig() {
-    const appOrigin = resolveDefaultAppOrigin();
+  getPublicConfig(request?: Request) {
+    const requestOrigin = resolveRequestOrigin({
+      protocol:
+        request?.headers['x-forwarded-proto']?.toString().split(',')[0] ??
+        request?.protocol,
+      host:
+        request?.headers['x-forwarded-host']?.toString().split(',')[0] ??
+        request?.headers.host,
+    });
+    const appOrigin = requestOrigin || resolveDefaultAppOrigin();
 
     return {
       appOrigin,
-      apiUrl: process.env.PUBLIC_API_URL || appOrigin,
+      apiUrl: requestOrigin || process.env.PUBLIC_API_URL || appOrigin,
       avatarBaseUrl:
         process.env.UI_AVATAR_BASE_URL || 'https://ui-avatars.com/api/',
       stunServers: (process.env.STUN_SERVER_URLS || 'stun:stun.l.google.com:19302')
