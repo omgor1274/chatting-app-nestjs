@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { appendFileSync, mkdirSync } from 'fs';
 import nodemailer, { Transporter } from 'nodemailer';
 import { resolveWritableDataPath } from '../common/app-paths';
+import { resolveDefaultAppOrigin } from '../common/origin-config';
 
 type MailPayload = {
   to: string;
@@ -48,9 +49,7 @@ export class MailService {
   }
 
   get appOrigin() {
-    return (
-      process.env.APP_ORIGIN || `http://localhost:${process.env.PORT ?? 8080}`
-    );
+    return resolveDefaultAppOrigin();
   }
 
   isPreviewMailboxEnabled() {

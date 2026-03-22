@@ -15,20 +15,19 @@ import Redis from 'ioredis';
 import { Server, Socket } from 'socket.io';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import {
+  collectConfiguredOrigins,
+  isAllowedRequestOrigin,
+} from '../common/origin-config';
 import { ChatService } from './chat.service';
 
-const socketAllowedOrigins = (
-  process.env.ALLOWED_ORIGINS ||
-  process.env.APP_ORIGIN ||
-  `http://localhost:${process.env.PORT ?? 8080}`
-)
-  .split(',')
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+const socketAllowedOrigins = collectConfiguredOrigins();
 
 @WebSocketGateway({
   cors: {
-    origin: socketAllowedOrigins,
+    origin: (origin, callback) => {
+      callback(null, isAllowedRequestOrigin(origin, socketAllowedOrigins));
+    },
   },
 })
 export class ChatGateway

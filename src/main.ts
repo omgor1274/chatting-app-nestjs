@@ -11,6 +11,10 @@ import {
   resolveAppRootPath,
   resolveWritableDataPath,
 } from './common/app-paths';
+import {
+  collectConfiguredOrigins,
+  isAllowedRequestOrigin,
+} from './common/origin-config';
 
 loadEnv({ path: getEnvFilePath(), override: false });
 
@@ -39,22 +43,6 @@ function resolveTrustProxy(value?: string) {
 
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? numericValue : value;
-}
-
-function isAllowedLocalDevOrigin(origin: string) {
-  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin.trim());
-}
-
-function collectConfiguredOrigins() {
-  return Array.from(
-    new Set(
-      [process.env.ALLOWED_ORIGINS, process.env.APP_ORIGIN, process.env.PUBLIC_API_URL]
-        .filter(Boolean)
-        .flatMap((value) => String(value).split(','))
-        .map((origin) => origin.trim())
-        .filter(Boolean),
-    ),
-  );
 }
 
 function setStaticAssetHeaders(
@@ -100,22 +88,12 @@ async function bootstrap() {
 
   app.enableCors({
     origin: (origin, callback) => {
-      if (!origin || origin === 'null') {
+      if (isAllowedRequestOrigin(origin, allowedOrigins)) {
         callback(null, true);
         return;
       }
 
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-        return;
-      }
-
-      if (isAllowedLocalDevOrigin(origin)) {
-        callback(null, true);
-        return;
-      }
-
-      callback(new Error('Origin not allowed by CORS'), false);
+      callback(null, false);
     },
     credentials: true,
   });

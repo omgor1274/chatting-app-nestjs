@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { resolveDefaultAppOrigin } from './common/origin-config';
 
 @Injectable()
 export class AppService {
@@ -10,8 +11,7 @@ export class AppService {
   }
 
   getPublicConfig() {
-    const appOrigin =
-      process.env.APP_ORIGIN || `http://localhost:${process.env.PORT ?? 8080}`;
+    const appOrigin = resolveDefaultAppOrigin();
 
     return {
       appOrigin,
