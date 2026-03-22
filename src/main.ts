@@ -75,7 +75,7 @@ async function bootstrap() {
   const allowedOrigins = (
     process.env.ALLOWED_ORIGINS ||
     process.env.APP_ORIGIN ||
-    `http://localhost:${process.env.PORT ?? 3000}`
+    `http://localhost:${process.env.PORT ?? 8080}`
   )
     .split(',')
     .map((origin) => origin.trim())
