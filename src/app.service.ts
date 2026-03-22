@@ -29,7 +29,7 @@ export class AppService {
       appOrigin,
       apiUrl: requestOrigin || process.env.PUBLIC_API_URL || appOrigin,
       avatarBaseUrl:
-        process.env.UI_AVATAR_BASE_URL || 'https://ui-avatars.com/api/',
+        process.env.UI_AVATAR_BASE_URL || '/icons/default-avatar.svg',
       stunServers: (process.env.STUN_SERVER_URLS || 'stun:stun.l.google.com:19302')
         .split(',')
         .map((value) => value.trim())

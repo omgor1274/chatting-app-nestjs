@@ -10,6 +10,7 @@ let appConfig = {
 };
 let API_URL = appConfig.apiUrl;
 let configLoadPromise = null;
+const DEFAULT_AVATAR_URL = '/icons/default-avatar.svg';
 
 function resolveHostedApiUrl(candidate, data) {
   if (isHostedOrigin) {
@@ -68,8 +69,15 @@ export function getAvatarUrl(
   name = 'User',
   avatarBaseUrl = appConfig.avatarBaseUrl,
 ) {
-  const label = encodeURIComponent(name || 'User');
-  return `${avatarBaseUrl}?name=${label}&background=0F62FE&color=fff&size=256`;
+  if (
+    avatarBaseUrl &&
+    !String(avatarBaseUrl).includes('ui-avatars.com') &&
+    !String(avatarBaseUrl).includes('?name=')
+  ) {
+    return avatarBaseUrl;
+  }
+
+  return DEFAULT_AVATAR_URL;
 }
 
 export async function loadPublicConfig() {

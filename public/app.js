@@ -87,6 +87,14 @@ let rtcConfig = {
   iceServers: appConfig.stunServers.map((urls) => ({ urls })),
 };
 
+function resolveHostedApiUrl(candidate, data) {
+  if (isHostedOrigin) {
+    return window.location.origin;
+  }
+
+  return data?.apiUrl || candidate;
+}
+
 function getById(id) {
   return document.getElementById(id);
 }
@@ -764,48 +772,59 @@ function messageWasRead(message) {
 }
 
 async function loadPublicConfig() {
-  const candidates = isHostedOrigin
-    ? [window.location.origin]
-    : Array.from(
-        new Set(
-          [
-            !isFileOrigin && window.location.origin ? window.location.origin : null,
-            localBackendOrigin,
-            'http://127.0.0.1:8080',
-          ].filter(Boolean),
-        ),
-      );
-
-  for (const candidate of candidates) {
-    try {
-      const response = await fetch(`${candidate}/config`);
-      if (!response.ok) {
-        continue;
-      }
-
-      const data = await readJsonResponse(response, null);
-      if (!data || typeof data !== 'object') {
-        continue;
-      }
-
-      appConfig = {
-        ...appConfig,
-        ...data,
-        apiUrl: data.apiUrl || candidate,
-      };
-      API_URL = appConfig.apiUrl || candidate;
-      rtcConfig = {
-        iceServers: (appConfig.stunServers || [])
-          .filter(Boolean)
-          .map((urls) => ({ urls })),
-      };
-      return;
-    } catch (error) {
-      console.error(error);
-    }
+  if (configLoadPromise) {
+    return configLoadPromise;
   }
 
-  API_URL = isHostedOrigin ? window.location.origin : localBackendOrigin;
+  configLoadPromise = (async () => {
+    const candidates = isHostedOrigin
+      ? [window.location.origin]
+      : Array.from(
+          new Set(
+            [
+              !isFileOrigin && window.location.origin
+                ? window.location.origin
+                : null,
+              localBackendOrigin,
+              'http://127.0.0.1:8080',
+            ].filter(Boolean),
+          ),
+        );
+
+    for (const candidate of candidates) {
+      try {
+        const response = await fetch(`${candidate}/config`);
+        if (!response.ok) {
+          continue;
+        }
+
+        const data = await readJsonResponse(response, null);
+        if (!data || typeof data !== 'object') {
+          continue;
+        }
+
+        appConfig = {
+          ...appConfig,
+          ...data,
+          apiUrl: resolveHostedApiUrl(candidate, data),
+        };
+        API_URL = appConfig.apiUrl || candidate;
+        rtcConfig = {
+          iceServers: (appConfig.stunServers || [])
+            .filter(Boolean)
+            .map((urls) => ({ urls })),
+        };
+        return appConfig;
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    API_URL = isHostedOrigin ? window.location.origin : localBackendOrigin;
+    return appConfig;
+  })();
+
+  return configLoadPromise;
 }
 
 async function readJsonResponse(
@@ -1681,6 +1700,7 @@ function openChatContactPanel() {
 
   panel.classList.remove('hidden');
   panel.classList.add('flex');
+  document.body.classList.add('chat-contact-panel-open');
 }
 
 function closeChatContactPanel(event) {
@@ -1695,6 +1715,7 @@ function closeChatContactPanel(event) {
 
   panel.classList.add('hidden');
   panel.classList.remove('flex');
+  document.body.classList.remove('chat-contact-panel-open');
 }
 
 function getSelectedUserStatusMeta(user = selectedUser) {
