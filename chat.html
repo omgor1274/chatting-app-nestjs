@@ -8,11 +8,26 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="O-chat" />
     <title>O-chat</title>
-    <link rel="manifest" href="/manifest.webmanifest?v=20260323-mobilefix2" />
+    <script>
+      if (localStorage.getItem('chat_token')) {
+        document.documentElement.classList.add('has-session-token');
+      }
+      if (localStorage.getItem('chat_dark_mode') === '1') {
+        document.documentElement.classList.add('prefers-dark-mode');
+      }
+    </script>
+    <style>
+      html.has-session-token #auth-screen {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+    </style>
+    <link rel="manifest" href="/manifest.webmanifest?v=20260323-chatcache1" />
     <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="./public/app.css?v=20260323-mobilefix2" />
+    <link rel="stylesheet" href="./public/app.css?v=20260323-speedpass1" />
   </head>
 
   <body class="chat-page mobile-page min-h-screen bg-slate-100 text-slate-900 lg:p-3">
@@ -524,8 +539,10 @@
             <p
               class="mx-auto mt-3 max-w-md text-sm leading-7 text-slate-500 sm:text-base"
             >
-              Your workspace is ready for mobile, tablet, and desktop. Pick a
-              contact and start messaging.
+              This is a demo prototype built to stay usable with minimal cost.
+              It can become much stronger with real production services, but
+              this version is meant to showcase the core chat experience
+              without expensive infrastructure.
             </p>
             <button
               onclick="openSidebar()"
@@ -1794,7 +1811,7 @@
       import {
         hasValidSession,
         loadPublicConfig,
-      } from '/public/runtime.js?v=20260323-mobilefix2';
+      } from '/public/runtime.js?v=20260323-speedpass1';
 
       const loadScript = (src) =>
         new Promise((resolve, reject) => {
@@ -1812,7 +1829,7 @@
         window.location.replace('/auth');
       } else {
         loadScript('https://cdn.socket.io/4.7.2/socket.io.min.js')
-          .then(() => loadScript('/public/app.js?v=20260323-mobilefix2'))
+          .then(() => loadScript('/public/app.js?v=20260323-speedpass1'))
           .catch((error) =>
             console.error('Failed to load chat runtime', error),
           );

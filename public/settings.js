@@ -3,10 +3,13 @@ import {
   clearToken,
   getAvatarUrl,
   getApiUrl,
+  getToken,
   hasValidSession,
   loadPublicConfig,
   readJsonResponse,
 } from './runtime.js';
+
+const LAST_CHAT_ROUTE_KEY = 'chat_last_route';
 
 function getById(id) {
   return document.getElementById(id);
@@ -71,6 +74,36 @@ function showFeedback(message, type = 'info') {
 function applyDarkMode(enabled) {
   document.body.classList.toggle('dark-mode', Boolean(enabled));
   localStorage.setItem('chat_dark_mode', enabled ? '1' : '0');
+}
+
+function getLastChatRoute() {
+  const candidate = sessionStorage.getItem(LAST_CHAT_ROUTE_KEY) || '/chat';
+  return candidate.startsWith('/chat') ? candidate : '/chat';
+}
+
+function updateCloseLink() {
+  const link = getById('settings-close-link');
+  if (!link) {
+    return;
+  }
+
+  link.href = getLastChatRoute();
+}
+
+function prefetchChatShell() {
+  const hrefs = [
+    getLastChatRoute(),
+    '/public/app.js?v=20260323-chatcache1',
+    '/public/runtime.js?v=20260323-chatcache1',
+    '/public/app.css?v=20260323-chatcache1',
+  ];
+
+  hrefs.forEach((href) => {
+    const link = document.createElement('link');
+    link.rel = 'prefetch';
+    link.href = href;
+    document.head.appendChild(link);
+  });
 }
 
 function renderBlockedUsers(blockedUsers) {
@@ -348,8 +381,16 @@ async function logout() {
 }
 
 async function boot() {
+  applyDarkMode(localStorage.getItem('chat_dark_mode') === '1');
+  updateCloseLink();
+  prefetchChatShell();
   await loadPublicConfig();
-  if (!(await hasValidSession({ allowStaleToken: false }))) {
+  if (!getToken()) {
+    window.location.replace('/auth');
+    return;
+  }
+
+  if (!(await hasValidSession({ allowStaleToken: true }))) {
     window.location.replace('/auth');
     return;
   }
@@ -361,6 +402,9 @@ async function boot() {
   getById('change-avatar-btn').addEventListener('click', openAvatarPicker);
   getById('remove-avatar-btn').addEventListener('click', removeAvatar);
   getById('avatar-input').addEventListener('change', uploadAvatar);
+  getById('settings-darkmode-input').addEventListener('change', (event) => {
+    applyDarkMode(Boolean(event.target?.checked));
+  });
   getById('settings-blocked-users').addEventListener('click', async (event) => {
     const button = event.target.closest('[data-unblock-user-id]');
     if (!button) {
@@ -373,14 +417,20 @@ async function boot() {
       showFeedback(error?.message || 'Failed to unblock user.', 'error');
     }
   });
-  await loadProfile();
   setBlockedUsersState('Loading blocked users...');
-  try {
-    await loadBlockedUsers();
-  } catch (error) {
-    console.error(error);
+  const [profileResult, blockedUsersResult] = await Promise.allSettled([
+    loadProfile(),
+    loadBlockedUsers(),
+  ]);
+
+  if (profileResult.status === 'rejected') {
+    throw profileResult.reason;
+  }
+
+  if (blockedUsersResult.status === 'rejected') {
+    console.error(blockedUsersResult.reason);
     setBlockedUsersState(
-      error?.message || 'Failed to load blocked users.',
+      blockedUsersResult.reason?.message || 'Failed to load blocked users.',
       'error',
     );
   }

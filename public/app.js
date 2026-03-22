@@ -46,6 +46,9 @@ let lastSubmittedDraftFingerprint = '';
 let lastSubmittedDraftAt = 0;
 let composerDraftVersion = 0;
 let lastSubmittedDraftVersion = -1;
+let activeConversationCacheKey = null;
+const conversationHistoryCache = new Map();
+const LAST_CHAT_ROUTE_KEY = 'chat_last_route';
 let messagePagination = {
   nextBefore: null,
   hasMore: false,
@@ -412,6 +415,219 @@ function conversationRoomId(user) {
   return user?.id || null;
 }
 
+function createMessagePaginationState(loadedForUserId = null) {
+  return {
+    nextBefore: null,
+    hasMore: false,
+    loadingOlder: false,
+    loadedForUserId,
+    scrollReadyAt: 0,
+  };
+}
+
+function getConversationCacheKey(user) {
+  if (!user?.id) {
+    return null;
+  }
+
+  return `${isGroupConversation(user) ? 'group' : 'direct'}:${user.id}`;
+}
+
+function createConversationHistoryState(user = null, overrides = {}) {
+  return {
+    renderedMessageIds: new Set(),
+    conversationMessages: new Map(),
+    pagination: createMessagePaginationState(user?.id ?? null),
+    initialized: false,
+    scrollTop: null,
+    ...overrides,
+  };
+}
+
+function getConversationHistoryState(user, createIfMissing = true) {
+  const key = getConversationCacheKey(user);
+  if (!key) {
+    return null;
+  }
+
+  let state = conversationHistoryCache.get(key);
+  if (!state && createIfMissing) {
+    state = createConversationHistoryState(user);
+    conversationHistoryCache.set(key, state);
+  }
+
+  return state;
+}
+
+function activateConversationHistory(user) {
+  const key = getConversationCacheKey(user);
+  const state =
+    (key && getConversationHistoryState(user, true)) ||
+    createConversationHistoryState(user);
+
+  activeConversationCacheKey = key;
+  renderedMessageIds = state.renderedMessageIds;
+  conversationMessages = state.conversationMessages;
+  messagePagination = state.pagination;
+
+  if (!messagePagination.loadedForUserId) {
+    messagePagination.loadedForUserId = user?.id ?? null;
+  }
+
+  return state;
+}
+
+function rememberActiveConversationScroll() {
+  if (!activeConversationCacheKey) {
+    return;
+  }
+
+  const state = conversationHistoryCache.get(activeConversationCacheKey);
+  const container = document.getElementById('message-container');
+  if (!state || !container) {
+    return;
+  }
+
+  state.scrollTop = container.scrollTop;
+}
+
+function replaceConversationHistoryState(user, overrides = {}) {
+  const key = getConversationCacheKey(user);
+  if (!key) {
+    return createConversationHistoryState(user, overrides);
+  }
+
+  const nextState = createConversationHistoryState(user, overrides);
+  conversationHistoryCache.set(key, nextState);
+
+  if (key === activeConversationCacheKey) {
+    renderedMessageIds = nextState.renderedMessageIds;
+    conversationMessages = nextState.conversationMessages;
+    messagePagination = nextState.pagination;
+  }
+
+  return nextState;
+}
+
+function sortMessagesChronologically(messages) {
+  return [...messages].sort((left, right) => {
+    const leftTime = new Date(left?.createdAt || 0).getTime();
+    const rightTime = new Date(right?.createdAt || 0).getTime();
+    if (leftTime !== rightTime) {
+      return leftTime - rightTime;
+    }
+
+    return String(left?.id || '').localeCompare(String(right?.id || ''));
+  });
+}
+
+function renderActiveConversationFromCache(options = {}) {
+  const list = document.getElementById('messages-list');
+  const container = document.getElementById('message-container');
+  if (!list || !container) {
+    return;
+  }
+
+  const messages = sortMessagesChronologically(conversationMessages.values());
+  renderedMessageIds.clear();
+  const fragment = document.createDocumentFragment();
+  for (const message of messages) {
+    if (message?.id) {
+      renderedMessageIds.add(message.id);
+    }
+    fragment.appendChild(createMessageElement(message));
+  }
+
+  list.innerHTML = '';
+  list.appendChild(fragment);
+
+  window.requestAnimationFrame(() => {
+    const state = activeConversationCacheKey
+      ? conversationHistoryCache.get(activeConversationCacheKey)
+      : null;
+    if (!state) {
+      return;
+    }
+
+    if (options.restoreScroll !== false && typeof state.scrollTop === 'number') {
+      const maxScrollTop = Math.max(
+        0,
+        container.scrollHeight - container.clientHeight,
+      );
+      container.scrollTop = Math.min(state.scrollTop, maxScrollTop);
+      return;
+    }
+
+    if (messages.length) {
+      scheduleMessageContainerBottom(400);
+    } else {
+      container.scrollTop = 0;
+    }
+  });
+}
+
+function cacheMessageForConversation(message) {
+  if (!message?.id) {
+    return;
+  }
+
+  const conversationId = message.groupId
+    ? message.groupId
+    : message.senderId === currentUser?.id
+      ? message.receiverId
+      : message.senderId;
+
+  if (!conversationId) {
+    return;
+  }
+
+  const cacheKey = `${message.groupId ? 'group' : 'direct'}:${conversationId}`;
+  const state = conversationHistoryCache.get(cacheKey);
+  if (!state) {
+    return;
+  }
+
+  state.conversationMessages.set(message.id, message);
+}
+
+function updateCachedMessageEverywhere(message) {
+  if (!message?.id) {
+    return;
+  }
+
+  for (const state of conversationHistoryCache.values()) {
+    if (state.conversationMessages.has(message.id)) {
+      state.conversationMessages.set(message.id, message);
+    }
+  }
+}
+
+function removeCachedMessageEverywhere(messageId) {
+  if (!messageId) {
+    return;
+  }
+
+  for (const state of conversationHistoryCache.values()) {
+    state.renderedMessageIds.delete(messageId);
+    state.conversationMessages.delete(messageId);
+  }
+}
+
+function prefetchSettingsShell() {
+  const hrefs = ['/settings', '/public/settings.js?v=20260323-speedpass1'];
+
+  hrefs.forEach((href) => {
+    if (document.head.querySelector(`link[rel="prefetch"][href="${href}"]`)) {
+      return;
+    }
+
+    const link = document.createElement('link');
+    link.rel = 'prefetch';
+    link.href = href;
+    document.head.appendChild(link);
+  });
+}
+
 function currentTypingUsers() {
   if (!selectedUser) {
     return [];
@@ -600,6 +816,7 @@ async function hydrateAndRefreshMessage(message) {
   }
 
   const hydrated = await hydrateMessage(message);
+  updateCachedMessageEverywhere(hydrated);
   if (conversationMessages.has(hydrated.id)) {
     replaceRenderedMessage(hydrated);
   }
@@ -935,16 +1152,12 @@ function normalizeUser(user, existingUser = null) {
 }
 
 function resetSelectedConversation() {
+  rememberActiveConversationScroll();
   selectedUser = null;
   renderedMessageIds = new Set();
   conversationMessages = new Map();
-  messagePagination = {
-    nextBefore: null,
-    hasMore: false,
-    loadingOlder: false,
-    loadedForUserId: null,
-    scrollReadyAt: 0,
-  };
+  messagePagination = createMessagePaginationState();
+  activeConversationCacheKey = null;
   document.getElementById('messages-list').innerHTML = '';
   document.getElementById('empty-state').classList.remove('hidden');
   document.getElementById('chat-header').classList.add('hidden');
@@ -957,6 +1170,7 @@ function resetSelectedConversation() {
   closeChatActionsMenu();
   closeComposerActionsMenu();
   if (!isFileOrigin) {
+    sessionStorage.setItem(LAST_CHAT_ROUTE_KEY, '/chat');
     history.replaceState(null, '', '/chat');
   }
 }
@@ -1524,12 +1738,12 @@ function applyChatTheme() {
   }
 
   const overlay = isDarkMode
-    ? `linear-gradient(rgba(2,6,23,0.48), rgba(15,23,42,0.62)), url("${themeUrl}")`
+    ? `linear-gradient(rgba(2,6,23,0.18), rgba(15,23,42,0.34)), url("${themeUrl}")`
     : `linear-gradient(rgba(248,250,252,0.18), rgba(241,245,249,0.34)), url("${themeUrl}")`;
 
   container.style.setProperty(
     '--chat-theme-base-color',
-    isDarkMode ? '#020617' : '#e2e8f0',
+    isDarkMode ? '#0f172a' : '#e2e8f0',
   );
   container.style.setProperty('--chat-theme-background', overlay);
 }
@@ -1848,8 +2062,7 @@ async function clearSelectedConversation() {
     return;
   }
 
-  renderedMessageIds = new Set();
-  conversationMessages = new Map();
+  replaceConversationHistoryState(selectedUser, { initialized: true });
   document.getElementById('messages-list').innerHTML = '';
   recentActivity.set(selectedUser.id, {
     ...(recentActivity.get(selectedUser.id) || {}),
@@ -2484,6 +2697,7 @@ async function startApp() {
   await loadProfile();
   await ensureEncryptionKeys(true);
   await loadUsers();
+  prefetchSettingsShell();
   connectSocket();
   try {
     await setupNotifications();
@@ -3263,26 +3477,22 @@ async function handleIncomingMessage(message, isOwnMessage) {
     }
   }
 
+  cacheMessageForConversation(hydratedMessage);
+
   void hydrateAndRefreshMessage(hydratedMessage).catch((error) => {
     console.error('Failed to hydrate incoming message', error);
   });
 }
 
 async function selectUser(userId) {
+  rememberActiveConversationScroll();
   const fallbackUser = getSearchUserPool().find((user) => user.id === userId);
   selectedUser =
     users.find((user) => user.id === userId) || fallbackUser || null;
-  renderedMessageIds = new Set();
-  conversationMessages = new Map();
-  messagePagination = {
-    nextBefore: null,
-    hasMore: false,
-    loadingOlder: false,
-    loadedForUserId: selectedUser?.id ?? null,
-    scrollReadyAt: Date.now() + 700,
-  };
 
   if (!selectedUser) return;
+
+  const conversationState = activateConversationHistory(selectedUser);
 
   if (!users.some((user) => user.id === selectedUser.id)) {
     users = [selectedUser, ...users];
@@ -3297,6 +3507,7 @@ async function selectUser(userId) {
     preview: '',
     unread: 0,
   };
+  const hadUnread = Boolean(state.unread);
   recentActivity.set(userId, { ...state, unread: 0 });
 
   document.getElementById('empty-state').classList.add('hidden');
@@ -3319,24 +3530,34 @@ async function selectUser(userId) {
   renderUsers();
 
   try {
-    setMessageLoadingState(true);
     await loadChatPermission();
-    await loadMessageChunk();
+    if (conversationState.initialized) {
+      setMessageLoadingState(false);
+      renderActiveConversationFromCache();
+      await ensureScrollableHistory();
+      if (hadUnread) {
+        void markSelectedConversationRead();
+      }
+    } else {
+      setMessageLoadingState(true);
+      await loadMessageChunk();
+      await ensureScrollableHistory();
+    }
   } catch (error) {
     setMessageLoadingState(false);
     alert(error.message || 'Failed to load this chat');
     return;
   }
 
-  scheduleMessageContainerBottom(1200);
-
   if (!isFileOrigin) {
+    const nextRoute = isGroupConversation(selectedUser)
+      ? `/chat?group=${selectedUser.id}`
+      : `/chat?chat=${selectedUser.id}`;
+    sessionStorage.setItem(LAST_CHAT_ROUTE_KEY, nextRoute);
     history.replaceState(
       null,
       '',
-      isGroupConversation(selectedUser)
-        ? `/chat?group=${selectedUser.id}`
-        : `/chat?chat=${selectedUser.id}`,
+      nextRoute,
     );
   }
 }
@@ -3375,6 +3596,10 @@ async function loadMessageChunk(before = null, prepend = false, options = {}) {
     const messages = (data.messages || []).map((message) =>
       createRenderableMessage(message),
     );
+    const state =
+      selectedUser && activeConversationCacheKey
+        ? conversationHistoryCache.get(activeConversationCacheKey)
+        : null;
     messagePagination.nextBefore = data.nextBefore || null;
     messagePagination.hasMore = Boolean(data.hasMore);
     messagePagination.loadedForUserId = selectedUser.id;
@@ -3392,6 +3617,9 @@ async function loadMessageChunk(before = null, prepend = false, options = {}) {
     if (prepend) {
       prependMessages(messages);
       hydrateMessagesInBackground(messages);
+      if (state) {
+        state.initialized = true;
+      }
       return;
     }
 
@@ -3408,6 +3636,10 @@ async function loadMessageChunk(before = null, prepend = false, options = {}) {
     appendMessages(messages, { stickToBottom: true });
     hydrateMessagesInBackground(messages);
     scheduleRenderUsers();
+    if (state) {
+      state.initialized = true;
+      state.scrollTop = null;
+    }
 
     if (options.markRead !== false) {
       await markSelectedConversationRead();
@@ -3469,6 +3701,7 @@ async function handleMessageContainerScroll() {
   historyScrollFrame = window.requestAnimationFrame(async () => {
     historyScrollFrame = 0;
     const container = getById('message-container');
+    rememberActiveConversationScroll();
     if (Date.now() < (messagePagination.scrollReadyAt || 0)) {
       return;
     }
@@ -3831,6 +4064,7 @@ function replaceRenderedMessage(message) {
     return;
   }
 
+  updateCachedMessageEverywhere(message);
   conversationMessages.set(message.id, message);
   const existing = document.getElementById(`message-${message.id}`);
   if (!existing) {
@@ -3849,6 +4083,7 @@ function hideMessageLocally(messageId) {
     return;
   }
 
+  removeCachedMessageEverywhere(messageId);
   renderedMessageIds.delete(messageId);
   conversationMessages.delete(messageId);
   document.getElementById(`message-${messageId}`)?.remove();
@@ -3859,6 +4094,7 @@ function handleMessageUpdated(message) {
     return;
   }
 
+  updateCachedMessageEverywhere(message);
   if (!belongsToSelectedConversation(message)) {
     updateRecentActivity(
       message.groupId ||
@@ -3887,8 +4123,7 @@ async function refreshSelectedConversation(options = {}) {
     return;
   }
 
-  renderedMessageIds = new Set();
-  conversationMessages = new Map();
+  replaceConversationHistoryState(selectedUser);
   document.getElementById('messages-list').innerHTML = '';
   setMessageLoadingState(true);
   await loadMessageChunk(null, false, options);
@@ -5746,6 +5981,7 @@ function forceSessionLogout(message = '') {
   }
 
   localStorage.removeItem('chat_token');
+  document.documentElement.classList.remove('has-session-token');
 
   if (message) {
     alert(message);
@@ -5787,6 +6023,7 @@ async function logout() {
 async function restoreSession() {
   const savedToken = localStorage.getItem('chat_token');
   if (!savedToken) {
+    document.documentElement.classList.remove('has-session-token');
     applyDarkMode(localStorage.getItem('chat_dark_mode') === '1');
     syncLayout();
     if (!isFileOrigin && window.location.pathname.startsWith('/chat')) {
@@ -5795,6 +6032,7 @@ async function restoreSession() {
     return;
   }
   token = savedToken;
+  document.documentElement.classList.add('has-session-token');
   document.getElementById('auth-screen')?.classList.add('hidden');
   try {
     await startApp();

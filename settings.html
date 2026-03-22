@@ -5,8 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#2563eb" />
     <title>O-chat Settings</title>
+    <script>
+      if (localStorage.getItem('chat_dark_mode') === '1') {
+        document.documentElement.classList.add('prefers-dark-mode');
+      }
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="/public/app.css?v=20260323-mobilefix2" />
+    <link rel="stylesheet" href="/public/app.css?v=20260323-speedpass1" />
   </head>
 
   <body class="settings-page mobile-page min-h-screen bg-slate-100 p-4 sm:p-6">
@@ -23,10 +28,11 @@
           <h1 class="mt-1 text-2xl font-bold text-slate-900">Settings</h1>
         </div>
         <a
+          id="settings-close-link"
           href="/chat"
           class="mobile-full-btn rounded-2xl bg-blue-600 px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-blue-700"
         >
-          Back to Chats
+          Close Settings
         </a>
       </header>
 
@@ -270,7 +276,7 @@
 
     <script
       type="module"
-      src="/public/settings.js?v=20260323-mobilefix2"
+      src="/public/settings.js?v=20260323-speedpass1"
     ></script>
   </body>
 </html>
