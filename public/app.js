@@ -5,11 +5,12 @@ const isHostedOrigin =
   !isFileOrigin && !/^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
 let appConfig = {
   apiUrl: localBackendOrigin,
-  avatarBaseUrl: 'https://ui-avatars.com/api/',
+  avatarBaseUrl: '/icons/default-avatar.svg',
   stunServers: ['stun:stun.l.google.com:19302'],
 };
 let API_URL = appConfig.apiUrl;
 let configLoadPromise = null;
+const DEFAULT_AVATAR_URL = '/icons/default-avatar.svg';
 let socket = null;
 let token = null;
 let isLogin = true;
@@ -86,6 +87,7 @@ let activeCall = {
 let rtcConfig = {
   iceServers: appConfig.stunServers.map((urls) => ({ urls })),
 };
+let sharedMediaItems = [];
 
 function resolveHostedApiUrl(candidate, data) {
   if (isHostedOrigin) {
@@ -97,6 +99,18 @@ function resolveHostedApiUrl(candidate, data) {
 
 function getById(id) {
   return document.getElementById(id);
+}
+
+function getFileUrl(path) {
+  if (!path) {
+    return '';
+  }
+
+  if (String(path).startsWith('http://') || String(path).startsWith('https://')) {
+    return path;
+  }
+
+  return `${API_URL}${path}`;
 }
 
 function canUseWebPush() {
@@ -1530,8 +1544,7 @@ function updateSidebarCurrentUser() {
   }
 
   if (!currentUser) {
-    avatar.src =
-      'https://ui-avatars.com/api/?name=You&background=E2E8F0&color=475569&size=256';
+    avatar.src = DEFAULT_AVATAR_URL;
     avatar.alt = 'Your profile photo';
     name.innerText = 'Your profile';
     email.innerText = 'Open Settings to manage your account.';
@@ -1588,10 +1601,15 @@ function userAvatar(user) {
     ) {
       return user.avatar;
     }
-    return `${API_URL}${user.avatar}`;
+    return getFileUrl(user.avatar);
   }
-  const label = encodeURIComponent(displayName(user));
-  return `${appConfig.avatarBaseUrl}?name=${label}&background=0F62FE&color=fff&size=256`;
+  if (
+    appConfig.avatarBaseUrl &&
+    !String(appConfig.avatarBaseUrl).includes('ui-avatars.com')
+  ) {
+    return appConfig.avatarBaseUrl;
+  }
+  return DEFAULT_AVATAR_URL;
 }
 
 function openImagePreview(src) {
@@ -1701,6 +1719,7 @@ function openChatContactPanel() {
   panel.classList.remove('hidden');
   panel.classList.add('flex');
   document.body.classList.add('chat-contact-panel-open');
+  void loadSharedMediaForSelectedConversation();
 }
 
 function closeChatContactPanel(event) {
@@ -1716,6 +1735,131 @@ function closeChatContactPanel(event) {
   panel.classList.add('hidden');
   panel.classList.remove('flex');
   document.body.classList.remove('chat-contact-panel-open');
+}
+
+function renderSharedMedia() {
+  const grid = document.getElementById('chat-contact-panel-media-grid');
+  const count = document.getElementById('chat-contact-panel-media-count');
+  if (!grid || !count) {
+    return;
+  }
+
+  if (!selectedUser) {
+    count.textContent = 'No chat selected.';
+    grid.innerHTML = '';
+    return;
+  }
+
+  if (!sharedMediaItems.length) {
+    count.textContent = 'No shared photos or videos yet.';
+    grid.innerHTML = '';
+    return;
+  }
+
+  count.textContent = `${sharedMediaItems.length} shared item${
+    sharedMediaItems.length === 1 ? '' : 's'
+  }`;
+  grid.innerHTML = sharedMediaItems
+    .map((item) => {
+      const fileUrl = getFileUrl(item.fileUrl);
+      const label = escapeHtml(item.fileName || item.kind || 'media');
+
+      if (item.kind === 'video') {
+        return `
+          <button type="button" onclick="window.open('${fileUrl}', '_blank', 'noopener')" class="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 text-left">
+            <div class="flex h-24 items-center justify-center bg-slate-950 text-xs font-semibold uppercase tracking-wide text-white">Video</div>
+            <div class="px-2 py-2 text-[11px] font-medium text-slate-600">${label}</div>
+          </button>
+        `;
+      }
+
+      return `
+        <button type="button" onclick="openImagePreview('${fileUrl}')" class="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 text-left">
+          <img src="${fileUrl}" alt="${label}" loading="lazy" decoding="async" class="h-24 w-full object-cover">
+          <div class="px-2 py-2 text-[11px] font-medium text-slate-600">${label}</div>
+        </button>
+      `;
+    })
+    .join('');
+}
+
+async function loadSharedMediaForSelectedConversation() {
+  const count = document.getElementById('chat-contact-panel-media-count');
+  const grid = document.getElementById('chat-contact-panel-media-grid');
+  if (!count || !grid) {
+    return;
+  }
+
+  if (!selectedUser) {
+    sharedMediaItems = [];
+    renderSharedMedia();
+    return;
+  }
+
+  count.textContent = 'Loading shared media...';
+  grid.innerHTML = '';
+
+  try {
+    const query = isGroupConversation(selectedUser)
+      ? `groupId=${encodeURIComponent(selectedUser.id)}`
+      : `userId=${encodeURIComponent(selectedUser.id)}`;
+    const res = await api(`/chat/media?${query}`);
+    const data = await readJsonResponse(res, [], 'Failed to load shared media.');
+
+    if (!res.ok) {
+      throw new Error(data.message || 'Failed to load shared media');
+    }
+
+    sharedMediaItems = Array.isArray(data) ? data : [];
+    renderSharedMedia();
+  } catch (error) {
+    console.error(error);
+    sharedMediaItems = [];
+    count.textContent =
+      error?.message || 'Failed to load shared media right now.';
+    grid.innerHTML = '';
+  }
+}
+
+async function clearSelectedConversation() {
+  if (!selectedUser) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Clear this chat on this device for ${displayName(selectedUser)}?`,
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  const body = isGroupConversation(selectedUser)
+    ? { groupId: selectedUser.id }
+    : { otherUserId: selectedUser.id };
+  const res = await api('/chat/clear', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await readJsonResponse(res, {}, 'Failed to clear chat.');
+
+  if (!res.ok) {
+    alert(data.message || 'Failed to clear chat');
+    return;
+  }
+
+  renderedMessageIds = new Set();
+  conversationMessages = new Map();
+  document.getElementById('messages-list').innerHTML = '';
+  recentActivity.set(selectedUser.id, {
+    ...(recentActivity.get(selectedUser.id) || {}),
+    preview: '',
+    unread: 0,
+  });
+  sharedMediaItems = [];
+  renderSharedMedia();
+  renderUsers();
+  alert(data.message || 'Chat cleared.');
 }
 
 function getSelectedUserStatusMeta(user = selectedUser) {
@@ -1752,23 +1896,23 @@ function updateChatContactPanel() {
   const avatar = document.getElementById('chat-contact-panel-avatar');
   const name = document.getElementById('chat-contact-panel-name');
   const status = document.getElementById('chat-contact-panel-status');
-  const infoLabel = document.getElementById('chat-open-info-label');
   const themeBtn = document.getElementById('contact-theme-btn');
   const clearThemeBtn = document.getElementById('contact-theme-clear-btn');
   const renameBtn = document.getElementById('contact-rename-btn');
   const blockBtn = document.getElementById('contact-block-btn');
   const manageGroupBtn = document.getElementById('contact-manage-group-btn');
 
-  if (!panelTitle || !avatar || !name || !status || !infoLabel) {
+  if (!panelTitle || !avatar || !name || !status) {
     return;
   }
 
   if (!selectedUser) {
     panelTitle.innerText = 'Contact info';
-    infoLabel.innerText = 'Chat Info';
     name.innerText = 'Contact';
     status.innerText = 'Offline';
     status.className = 'mt-1 text-sm font-medium text-slate-500';
+    sharedMediaItems = [];
+    renderSharedMedia();
     return;
   }
 
@@ -1776,7 +1920,6 @@ function updateChatContactPanel() {
   const statusMeta = getSelectedUserStatusMeta(selectedUser);
 
   panelTitle.innerText = isGroup ? 'Group info' : 'Contact info';
-  infoLabel.innerText = isGroup ? 'Group Info' : 'Chat Info';
   avatar.src = userAvatar(selectedUser);
   avatar.alt = `${displayName(selectedUser)} profile photo`;
   name.innerText = displayName(selectedUser);
@@ -3497,14 +3640,18 @@ function updateChatAccessUI() {
 
   if (!selectedUser) {
     applyGatedState(false);
-    chatActionsBtn.disabled = true;
-    chatActionsBtn.classList.add('opacity-50', 'cursor-not-allowed');
+    chatActionsBtn?.classList.add('opacity-50', 'cursor-not-allowed');
+    if (chatActionsBtn) {
+      chatActionsBtn.disabled = true;
+    }
     finalizeAccessUI();
     return;
   }
 
-  chatActionsBtn.disabled = false;
-  chatActionsBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+  chatActionsBtn?.classList.remove('opacity-50', 'cursor-not-allowed');
+  if (chatActionsBtn) {
+    chatActionsBtn.disabled = false;
+  }
 
   if (isGroup) {
     blockBtn?.classList.add('hidden');
@@ -4531,6 +4678,48 @@ async function uploadMyAvatar(inputId = 'desktop-avatar-input') {
       button.disabled = false;
       button.classList.remove('opacity-70', 'cursor-wait');
       button.textContent = 'Update Photo';
+    }
+  }
+}
+
+async function removeMyAvatar() {
+  const button = document.getElementById('profile-remove-avatar-btn');
+
+  if (button) {
+    button.disabled = true;
+    button.classList.add('opacity-70', 'cursor-wait');
+    button.textContent = 'Removing...';
+  }
+
+  try {
+    const res = await api('/users/profile/avatar/remove', {
+      method: 'POST',
+    });
+    const data = await readJsonResponse(
+      res,
+      {},
+      'Failed to remove your avatar.',
+    );
+
+    if (!res.ok) {
+      alert(data.message || 'Failed to remove avatar');
+      return;
+    }
+
+    applyCurrentUser(data);
+    users = users.map((user) =>
+      user.id === data.id ? normalizeUser({ ...user, ...data }, user) : user,
+    );
+    syncSelectedUser();
+    renderUsers();
+    updateSelectedUserHeader();
+    updateChatContactPanel();
+    alert('Profile photo removed');
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.classList.remove('opacity-70', 'cursor-wait');
+      button.textContent = 'Remove Photo';
     }
   }
 }

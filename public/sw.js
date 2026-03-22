@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ochat-shell-v12';
+const CACHE_NAME = 'ochat-shell-v13';
 const APP_SHELL = [
   '/',
   '/auth',

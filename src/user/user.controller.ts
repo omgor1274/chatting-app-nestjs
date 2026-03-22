@@ -287,4 +287,10 @@ export class UserController {
       `/uploads/avatars/${file.filename}`,
     );
   }
+
+  @UseGuards(JwtGuard)
+  @Post('profile/avatar/remove')
+  removeAvatar(@Req() req) {
+    return this.userService.removeAvatar(req.user.userId);
+  }
 }

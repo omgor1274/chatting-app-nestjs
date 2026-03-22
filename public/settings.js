@@ -177,6 +177,40 @@ async function uploadAvatar() {
   }
 }
 
+async function removeAvatar() {
+  const button = getById('remove-avatar-btn');
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Removing...';
+    button.classList.add('opacity-70', 'cursor-wait');
+  }
+
+  try {
+    const res = await api('/users/profile/avatar/remove', {
+      method: 'POST',
+    });
+    const data = await readJsonResponse(
+      res,
+      {},
+      'Failed to remove avatar.',
+    );
+
+    if (!res.ok) {
+      showFeedback(data.message || 'Failed to remove avatar.', 'error');
+      return;
+    }
+
+    showFeedback('Profile picture removed.', 'success');
+    await loadProfile();
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = 'Remove Profile Picture';
+      button.classList.remove('opacity-70', 'cursor-wait');
+    }
+  }
+}
+
 function openAvatarPicker() {
   const input = getById('avatar-input');
   if (!input) {
@@ -325,6 +359,7 @@ async function boot() {
   getById('password-form').addEventListener('submit', changePassword);
   getById('logout-btn').addEventListener('click', logout);
   getById('change-avatar-btn').addEventListener('click', openAvatarPicker);
+  getById('remove-avatar-btn').addEventListener('click', removeAvatar);
   getById('avatar-input').addEventListener('change', uploadAvatar);
   getById('settings-blocked-users').addEventListener('click', async (event) => {
     const button = event.target.closest('[data-unblock-user-id]');

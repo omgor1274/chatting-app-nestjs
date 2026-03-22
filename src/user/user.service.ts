@@ -561,6 +561,30 @@ export class UserService {
     return this.serializeProfile(user);
   }
 
+  async removeAvatar(userId: string) {
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { avatar: null },
+      select: {
+        id: true,
+        email: true,
+        pendingEmail: true,
+        name: true,
+        avatar: true,
+        emailVerified: true,
+        backupEnabled: true,
+        backupImages: true,
+        backupVideos: true,
+        backupFiles: true,
+        darkMode: true,
+        publicKey: true,
+        publicKeyUpdatedAt: true,
+      },
+    });
+
+    return this.serializeProfile(user);
+  }
+
   async updateProfile(userId: string, data: { name?: string; email?: string }) {
     const name = data.name?.trim();
     const email = data.email?.trim()

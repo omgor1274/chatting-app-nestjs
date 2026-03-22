@@ -621,6 +621,142 @@ export class ChatService {
     });
   }
 
+  async getConversationMedia(
+    userId: string,
+    input: { otherUserId?: string; groupId?: string },
+  ) {
+    if (!input.otherUserId && !input.groupId) {
+      throw new BadRequestException('Conversation target is required');
+    }
+    if (input.otherUserId && input.groupId) {
+      throw new BadRequestException('Only one conversation target is allowed');
+    }
+
+    if (input.groupId) {
+      const membership = await this.ensureGroupMember(input.groupId, userId);
+      const media = await this.prisma.message.findMany({
+        where: {
+          groupId: input.groupId,
+          fileUrl: { not: null },
+          OR: [
+            { messageType: MessageType.IMAGE },
+            { fileMimeType: { startsWith: 'video/' } },
+          ],
+          hiddenForUsers: { none: { userId } },
+          createdAt: { gte: membership.joinedAt },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 120,
+      });
+
+      return media.map((message) => ({
+        id: message.id,
+        fileUrl: message.fileUrl,
+        fileName: message.fileName,
+        fileMimeType: message.fileMimeType,
+        createdAt: message.createdAt,
+        kind:
+          message.messageType === MessageType.IMAGE ||
+          message.fileMimeType?.startsWith('image/')
+            ? 'image'
+            : 'video',
+      }));
+    }
+
+    await this.ensureDirectPeer(userId, undefined, input.otherUserId);
+    const media = await this.prisma.message.findMany({
+      where: {
+        groupId: null,
+        fileUrl: { not: null },
+        OR: [
+          { messageType: MessageType.IMAGE },
+          { fileMimeType: { startsWith: 'video/' } },
+        ],
+        hiddenForUsers: { none: { userId } },
+        AND: [
+          {
+            OR: [
+              { senderId: userId, receiverId: input.otherUserId },
+              { senderId: input.otherUserId, receiverId: userId },
+            ],
+          },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 120,
+    });
+
+    return media.map((message) => ({
+      id: message.id,
+      fileUrl: message.fileUrl,
+      fileName: message.fileName,
+      fileMimeType: message.fileMimeType,
+      createdAt: message.createdAt,
+      kind:
+        message.messageType === MessageType.IMAGE ||
+        message.fileMimeType?.startsWith('image/')
+          ? 'image'
+          : 'video',
+    }));
+  }
+
+  async clearConversationForUser(
+    userId: string,
+    input: { otherUserId?: string; groupId?: string },
+  ) {
+    if (!input.otherUserId && !input.groupId) {
+      throw new BadRequestException('Conversation target is required');
+    }
+    if (input.otherUserId && input.groupId) {
+      throw new BadRequestException('Only one conversation target is allowed');
+    }
+
+    let messageIds: string[] = [];
+
+    if (input.groupId) {
+      const membership = await this.ensureGroupMember(input.groupId, userId);
+      const messages = await this.prisma.message.findMany({
+        where: {
+          groupId: input.groupId,
+          hiddenForUsers: { none: { userId } },
+          createdAt: { gte: membership.joinedAt },
+        },
+        select: { id: true },
+      });
+      messageIds = messages.map((message) => message.id);
+    } else {
+      await this.ensureDirectPeer(userId, undefined, input.otherUserId);
+      const messages = await this.prisma.message.findMany({
+        where: {
+          groupId: null,
+          hiddenForUsers: { none: { userId } },
+          OR: [
+            { senderId: userId, receiverId: input.otherUserId },
+            { senderId: input.otherUserId, receiverId: userId },
+          ],
+        },
+        select: { id: true },
+      });
+      messageIds = messages.map((message) => message.id);
+    }
+
+    if (messageIds.length) {
+      await this.prisma.messageHidden.createMany({
+        data: messageIds.map((messageId) => ({ messageId, userId })),
+        skipDuplicates: true,
+      });
+    }
+
+    return {
+      success: true,
+      hiddenCount: messageIds.length,
+      message:
+        messageIds.length > 0
+          ? 'Chat cleared for this device.'
+          : 'Nothing to clear.',
+    };
+  }
+
   async sendRequest(senderId: string, receiverEmail: string) {
     if (!receiverEmail) {
       throw new BadRequestException('Receiver email is required');

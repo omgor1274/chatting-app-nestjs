@@ -352,6 +352,36 @@ export class ChatController {
     return this.chatService.getChatPermission(req.user.userId, otherUserId);
   }
 
+  @Get('media')
+  @UseGuards(JwtGuard)
+  getConversationMedia(
+    @Req() req,
+    @Query('userId') otherUserId: string | undefined,
+    @Query('groupId') groupId: string | undefined,
+  ) {
+    return this.chatService.getConversationMedia(req.user.userId, {
+      otherUserId,
+      groupId,
+    });
+  }
+
+  @Post('clear')
+  @UseGuards(JwtGuard)
+  async clearConversation(
+    @Req() req,
+    @Body() body: { otherUserId?: string; groupId?: string },
+  ) {
+    const result = await this.chatService.clearConversationForUser(
+      req.user.userId,
+      body,
+    );
+    this.chatGateway.emitConversationRefresh([req.user.userId], {
+      otherUserId: body.otherUserId,
+      groupId: body.groupId,
+    });
+    return result;
+  }
+
   @Post('messages/read')
   @UseGuards(JwtGuard)
   async markRead(
