@@ -1,5 +1,7 @@
 const isFileOrigin = window.location.protocol === 'file:';
-const localBackendOrigin = 'http://localhost:3000';
+const localBackendOrigin = 'http://localhost:8080';
+const isHostedOrigin =
+  !isFileOrigin && !/^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
 
 let appConfig = {
   apiUrl: localBackendOrigin,
@@ -68,17 +70,19 @@ export async function loadPublicConfig() {
   }
 
   configLoadPromise = (async () => {
-    const candidates = Array.from(
-      new Set(
-        [
-          !isFileOrigin && window.location.origin
-            ? window.location.origin
-            : null,
-          localBackendOrigin,
-          'http://127.0.0.1:3000',
-        ].filter(Boolean),
-      ),
-    );
+    const candidates = isHostedOrigin
+      ? [window.location.origin]
+      : Array.from(
+          new Set(
+            [
+              !isFileOrigin && window.location.origin
+                ? window.location.origin
+                : null,
+              localBackendOrigin,
+              'http://127.0.0.1:8080',
+            ].filter(Boolean),
+          ),
+        );
 
     for (const candidate of candidates) {
       try {
@@ -104,7 +108,7 @@ export async function loadPublicConfig() {
       }
     }
 
-    API_URL = localBackendOrigin;
+    API_URL = isHostedOrigin ? window.location.origin : localBackendOrigin;
     return appConfig;
   })();
 

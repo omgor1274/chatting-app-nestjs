@@ -49,7 +49,7 @@ export class MailService {
 
   get appOrigin() {
     return (
-      process.env.APP_ORIGIN || `http://localhost:${process.env.PORT ?? 3000}`
+      process.env.APP_ORIGIN || `http://localhost:${process.env.PORT ?? 8080}`
     );
   }
 

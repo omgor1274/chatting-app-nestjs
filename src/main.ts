@@ -45,6 +45,18 @@ function isAllowedLocalDevOrigin(origin: string) {
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin.trim());
 }
 
+function collectConfiguredOrigins() {
+  return Array.from(
+    new Set(
+      [process.env.ALLOWED_ORIGINS, process.env.APP_ORIGIN, process.env.PUBLIC_API_URL]
+        .filter(Boolean)
+        .flatMap((value) => String(value).split(','))
+        .map((origin) => origin.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
 function setStaticAssetHeaders(
   res: express.Response,
   filePath: string,
@@ -72,15 +84,14 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule);
   const expressApp = app.getHttpAdapter().getInstance();
-  const allowedOrigins = (
-    process.env.ALLOWED_ORIGINS ||
-    process.env.APP_ORIGIN ||
-    `http://localhost:${process.env.PORT ?? 3000}`
-  )
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+  const configuredOrigins = collectConfiguredOrigins();
+  const allowedOrigins = configuredOrigins.length
+    ? configuredOrigins
+    : [`http://localhost:${process.env.PORT ?? 8080}`];
   const trustProxy = resolveTrustProxy(process.env.TRUST_PROXY);
+  const connectSrc = Array.from(
+    new Set(["'self'", 'https:', 'ws:', 'wss:', ...configuredOrigins]),
+  );
 
   expressApp.disable('x-powered-by');
   if (trustProxy !== undefined) {
@@ -114,7 +125,7 @@ async function bootstrap() {
         directives: {
           defaultSrc: ["'self'"],
           baseUri: ["'self'"],
-          connectSrc: ["'self'", 'https:', 'ws:', 'wss:'],
+          connectSrc,
           fontSrc: ["'self'", 'https:', 'data:'],
           formAction: ["'self'"],
           frameAncestors: ["'none'"],
@@ -200,7 +211,7 @@ async function bootstrap() {
       },
     }),
   );
-  const port = Number(process.env.PORT) || 3000;
+  const port = Number(process.env.PORT) || 8080;
   await app.listen(port, '0.0.0.0');
   console.log(`O-chat server listening on 0.0.0.0:${port}`);
 }

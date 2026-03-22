@@ -8,11 +8,11 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="O-chat" />
     <title>O-chat</title>
-    <link rel="manifest" href="/manifest.webmanifest?v=20260321-mobileclean8" />
+    <link rel="manifest" href="/manifest.webmanifest?v=20260322-railwayfix1" />
     <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="./public/app.css?v=20260321-mobileclean8" />
+    <link rel="stylesheet" href="./public/app.css?v=20260322-railwayfix1" />
   </head>
 
   <body class="mobile-page min-h-screen bg-slate-100 text-slate-900 lg:p-3">
@@ -1787,7 +1787,7 @@
       import {
         hasValidSession,
         loadPublicConfig,
-      } from '/public/runtime.js?v=20260321-mobileclean8';
+      } from '/public/runtime.js?v=20260322-railwayfix1';
 
       const loadScript = (src) =>
         new Promise((resolve, reject) => {
@@ -1805,7 +1805,7 @@
         window.location.replace('/auth');
       } else {
         loadScript('https://cdn.socket.io/4.7.2/socket.io.min.js')
-          .then(() => loadScript('/public/app.js?v=20260321-mobileclean8'))
+          .then(() => loadScript('/public/app.js?v=20260322-railwayfix1'))
           .catch((error) =>
             console.error('Failed to load chat runtime', error),
           );

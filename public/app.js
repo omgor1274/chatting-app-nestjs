@@ -1,6 +1,8 @@
 const isFileOrigin = window.location.protocol === 'file:';
 const isDesktopRuntime = Boolean(window.desktopApp?.isDesktop);
-const localBackendOrigin = 'http://localhost:3000';
+const localBackendOrigin = 'http://localhost:8080';
+const isHostedOrigin =
+  !isFileOrigin && !/^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
 let appConfig = {
   apiUrl: localBackendOrigin,
   avatarBaseUrl: 'https://ui-avatars.com/api/',
@@ -762,15 +764,17 @@ function messageWasRead(message) {
 }
 
 async function loadPublicConfig() {
-  const candidates = Array.from(
-    new Set(
-      [
-        !isFileOrigin && window.location.origin ? window.location.origin : null,
-        localBackendOrigin,
-        'http://127.0.0.1:3000',
-      ].filter(Boolean),
-    ),
-  );
+  const candidates = isHostedOrigin
+    ? [window.location.origin]
+    : Array.from(
+        new Set(
+          [
+            !isFileOrigin && window.location.origin ? window.location.origin : null,
+            localBackendOrigin,
+            'http://127.0.0.1:8080',
+          ].filter(Boolean),
+        ),
+      );
 
   for (const candidate of candidates) {
     try {
@@ -801,7 +805,7 @@ async function loadPublicConfig() {
     }
   }
 
-  API_URL = localBackendOrigin;
+  API_URL = isHostedOrigin ? window.location.origin : localBackendOrigin;
 }
 
 async function readJsonResponse(
@@ -2302,7 +2306,7 @@ async function handleAuth() {
   } catch (error) {
     if (error instanceof TypeError) {
       showAuthFeedback(
-        `Cannot reach the backend at ${API_URL}. Start Nest on http://localhost:3000 or serve this page from the backend.`,
+        `Cannot reach the backend at ${API_URL}. Start Nest on http://localhost:8080 or serve this page from the backend.`,
         'error',
       );
       return;

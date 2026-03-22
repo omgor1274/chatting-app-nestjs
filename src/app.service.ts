@@ -11,7 +11,7 @@ export class AppService {
 
   getPublicConfig() {
     const appOrigin =
-      process.env.APP_ORIGIN || `http://localhost:${process.env.PORT ?? 3000}`;
+      process.env.APP_ORIGIN || `http://localhost:${process.env.PORT ?? 8080}`;
 
     return {
       appOrigin,
