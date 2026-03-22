@@ -49,6 +49,12 @@ let lastSubmittedDraftVersion = -1;
 let activeConversationCacheKey = null;
 const conversationHistoryCache = new Map();
 const LAST_CHAT_ROUTE_KEY = 'chat_last_route';
+let pinnedConversationKeys = new Set();
+let archivedConversationKeys = new Set();
+let mutedConversationKeys = new Set();
+let starredMessagesById = new Map();
+let conversationDrafts = new Map();
+let showArchivedChats = false;
 let messagePagination = {
   nextBefore: null,
   hasMore: false,
@@ -102,6 +108,92 @@ function resolveHostedApiUrl(candidate, data) {
 
 function getById(id) {
   return document.getElementById(id);
+}
+
+function readStoredJson(key, fallbackValue) {
+  if (!key) {
+    return fallbackValue;
+  }
+
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) {
+      return fallbackValue;
+    }
+
+    const parsed = JSON.parse(raw);
+    return parsed ?? fallbackValue;
+  } catch (error) {
+    console.error('Failed to read stored JSON', error);
+    return fallbackValue;
+  }
+}
+
+function writeStoredJson(key, value) {
+  if (!key) {
+    return;
+  }
+
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function getScopedPreferenceKey(suffix) {
+  return currentUser?.id ? `ochat_${suffix}_${currentUser.id}` : null;
+}
+
+function loadLocalConversationPreferences() {
+  pinnedConversationKeys = new Set(
+    readStoredJson(getScopedPreferenceKey('pinned_conversations'), []),
+  );
+  archivedConversationKeys = new Set(
+    readStoredJson(getScopedPreferenceKey('archived_conversations'), []),
+  );
+  mutedConversationKeys = new Set(
+    readStoredJson(getScopedPreferenceKey('muted_conversations'), []),
+  );
+  starredMessagesById = new Map(
+    Object.entries(
+      readStoredJson(getScopedPreferenceKey('starred_messages'), {}),
+    ),
+  );
+  conversationDrafts = new Map(
+    Object.entries(readStoredJson(getScopedPreferenceKey('chat_drafts'), {})),
+  );
+}
+
+function persistPinnedConversations() {
+  writeStoredJson(
+    getScopedPreferenceKey('pinned_conversations'),
+    Array.from(pinnedConversationKeys),
+  );
+}
+
+function persistArchivedConversations() {
+  writeStoredJson(
+    getScopedPreferenceKey('archived_conversations'),
+    Array.from(archivedConversationKeys),
+  );
+}
+
+function persistMutedConversations() {
+  writeStoredJson(
+    getScopedPreferenceKey('muted_conversations'),
+    Array.from(mutedConversationKeys),
+  );
+}
+
+function persistStarredMessages() {
+  writeStoredJson(
+    getScopedPreferenceKey('starred_messages'),
+    Object.fromEntries(starredMessagesById),
+  );
+}
+
+function persistConversationDrafts() {
+  writeStoredJson(
+    getScopedPreferenceKey('chat_drafts'),
+    Object.fromEntries(conversationDrafts),
+  );
 }
 
 function getFileUrl(path) {
@@ -433,6 +525,105 @@ function getConversationCacheKey(user) {
   return `${isGroupConversation(user) ? 'group' : 'direct'}:${user.id}`;
 }
 
+function isConversationPinned(user) {
+  const key = getConversationCacheKey(user);
+  return Boolean(key && pinnedConversationKeys.has(key));
+}
+
+function isConversationArchived(user) {
+  const key = getConversationCacheKey(user);
+  return Boolean(key && archivedConversationKeys.has(key));
+}
+
+function isConversationMuted(user) {
+  const key = getConversationCacheKey(user);
+  return Boolean(key && mutedConversationKeys.has(key));
+}
+
+function getConversationDraft(user = selectedUser) {
+  const key = getConversationCacheKey(user);
+  if (!key) {
+    return '';
+  }
+
+  return String(conversationDrafts.get(key) || '');
+}
+
+function saveConversationDraft(user = selectedUser, text = '') {
+  const key = getConversationCacheKey(user);
+  if (!key) {
+    return;
+  }
+
+  const trimmed = String(text || '').trim();
+  if (trimmed) {
+    conversationDrafts.set(key, text);
+  } else {
+    conversationDrafts.delete(key);
+  }
+  persistConversationDrafts();
+}
+
+function restoreComposerDraft(user = selectedUser) {
+  const input = getById('msg-input');
+  if (!input) {
+    return;
+  }
+
+  input.value = getConversationDraft(user);
+}
+
+function clearConversationDraft(user = selectedUser) {
+  saveConversationDraft(user, '');
+  const input = getById('msg-input');
+  if (input && user?.id === selectedUser?.id) {
+    input.value = '';
+  }
+}
+
+function isMessageStarred(messageId) {
+  return Boolean(messageId && starredMessagesById.has(messageId));
+}
+
+function buildStarredMessageEntry(message) {
+  const sender =
+    message.senderId === currentUser?.id
+      ? { name: 'You' }
+      : peopleDirectory.find((user) => user.id === message.senderId) ||
+        users.find((user) => user.id === message.senderId) ||
+        null;
+
+  return {
+    id: message.id,
+    conversationKey: message.groupId
+      ? `group:${message.groupId}`
+      : `direct:${
+          message.senderId === currentUser?.id
+            ? message.receiverId
+            : message.senderId
+        }`,
+    preview: getMessagePreview(message),
+    createdAt: message.createdAt,
+    senderName: sender ? displayName(sender) : 'Someone',
+    messageType: message.messageType,
+  };
+}
+
+function getStarredMessagesForConversation(user = selectedUser) {
+  const conversationKey = getConversationCacheKey(user);
+  if (!conversationKey) {
+    return [];
+  }
+
+  return Array.from(starredMessagesById.values())
+    .filter((entry) => entry.conversationKey === conversationKey)
+    .sort(
+      (left, right) =>
+        new Date(right.createdAt || 0).getTime() -
+        new Date(left.createdAt || 0).getTime(),
+    );
+}
+
 function createConversationHistoryState(user = null, overrides = {}) {
   return {
     renderedMessageIds: new Set(),
@@ -614,7 +805,7 @@ function removeCachedMessageEverywhere(messageId) {
 }
 
 function prefetchSettingsShell() {
-  const hrefs = ['/settings', '/public/settings.js?v=20260323-speedpass1'];
+  const hrefs = ['/settings', '/public/settings.js?v=20260323-featurebatch1'];
 
   hrefs.forEach((href) => {
     if (document.head.querySelector(`link[rel="prefetch"][href="${href}"]`)) {
@@ -1997,6 +2188,93 @@ function renderSharedMedia() {
     .join('');
 }
 
+function togglePinnedConversation() {
+  if (!selectedUser) {
+    return;
+  }
+
+  const key = getConversationCacheKey(selectedUser);
+  if (!key) {
+    return;
+  }
+
+  if (pinnedConversationKeys.has(key)) {
+    pinnedConversationKeys.delete(key);
+  } else {
+    pinnedConversationKeys.add(key);
+  }
+
+  persistPinnedConversations();
+  updateChatContactPanel();
+  renderUsers();
+}
+
+function toggleMutedConversation() {
+  if (!selectedUser) {
+    return;
+  }
+
+  const key = getConversationCacheKey(selectedUser);
+  if (!key) {
+    return;
+  }
+
+  if (mutedConversationKeys.has(key)) {
+    mutedConversationKeys.delete(key);
+  } else {
+    mutedConversationKeys.add(key);
+  }
+
+  persistMutedConversations();
+  updateChatContactPanel();
+  renderUsers();
+}
+
+function toggleArchivedConversation() {
+  if (!selectedUser) {
+    return;
+  }
+
+  const key = getConversationCacheKey(selectedUser);
+  if (!key) {
+    return;
+  }
+
+  if (archivedConversationKeys.has(key)) {
+    archivedConversationKeys.delete(key);
+  } else {
+    archivedConversationKeys.add(key);
+  }
+
+  persistArchivedConversations();
+  updateChatContactPanel();
+  renderUsers();
+}
+
+function toggleSelectedMessageStar() {
+  if (!messageActionTarget?.id) {
+    return;
+  }
+
+  if (isMessageStarred(messageActionTarget.id)) {
+    starredMessagesById.delete(messageActionTarget.id);
+  } else {
+    starredMessagesById.set(
+      messageActionTarget.id,
+      buildStarredMessageEntry(messageActionTarget),
+    );
+  }
+
+  persistStarredMessages();
+  if (conversationMessages.has(messageActionTarget.id)) {
+    replaceRenderedMessage(
+      conversationMessages.get(messageActionTarget.id) || messageActionTarget,
+    );
+  }
+  renderStarredMessages();
+  closeMessageActions();
+}
+
 async function loadSharedMediaForSelectedConversation() {
   const count = document.getElementById('chat-contact-panel-media-count');
   const grid = document.getElementById('chat-contact-panel-media-grid');
@@ -2109,6 +2387,15 @@ function updateChatContactPanel() {
   const avatar = document.getElementById('chat-contact-panel-avatar');
   const name = document.getElementById('chat-contact-panel-name');
   const status = document.getElementById('chat-contact-panel-status');
+  const pinBtn = document.getElementById('contact-pin-btn');
+  const pinLabel = document.getElementById('contact-pin-btn-label');
+  const pinCopy = document.getElementById('contact-pin-btn-copy');
+  const muteBtn = document.getElementById('contact-mute-btn');
+  const muteLabel = document.getElementById('contact-mute-btn-label');
+  const muteCopy = document.getElementById('contact-mute-btn-copy');
+  const archiveBtn = document.getElementById('contact-archive-btn');
+  const archiveLabel = document.getElementById('contact-archive-btn-label');
+  const archiveCopy = document.getElementById('contact-archive-btn-copy');
   const themeBtn = document.getElementById('contact-theme-btn');
   const clearThemeBtn = document.getElementById('contact-theme-clear-btn');
   const renameBtn = document.getElementById('contact-rename-btn');
@@ -2126,11 +2413,15 @@ function updateChatContactPanel() {
     status.className = 'mt-1 text-sm font-medium text-slate-500';
     sharedMediaItems = [];
     renderSharedMedia();
+    renderStarredMessages();
     return;
   }
 
   const isGroup = isGroupConversation(selectedUser);
   const statusMeta = getSelectedUserStatusMeta(selectedUser);
+  const pinned = isConversationPinned(selectedUser);
+  const muted = isConversationMuted(selectedUser);
+  const archived = isConversationArchived(selectedUser);
 
   panelTitle.innerText = isGroup ? 'Group info' : 'Contact info';
   avatar.src = userAvatar(selectedUser);
@@ -2138,11 +2429,30 @@ function updateChatContactPanel() {
   name.innerText = displayName(selectedUser);
   status.innerText = statusMeta.text;
   status.className = `mt-1 ${statusMeta.className}`;
+  if (pinBtn && pinLabel && pinCopy) {
+    pinLabel.innerText = pinned ? 'Unpin chat' : 'Pin chat';
+    pinCopy.innerText = pinned
+      ? 'Move this conversation back into the normal chat order.'
+      : 'Keep this conversation at the top of your chat list.';
+  }
+  if (muteBtn && muteLabel && muteCopy) {
+    muteLabel.innerText = muted ? 'Unmute notifications' : 'Mute notifications';
+    muteCopy.innerText = muted
+      ? 'Allow foreground notifications for this conversation again.'
+      : 'Silence foreground notifications for this conversation on this device.';
+  }
+  if (archiveBtn && archiveLabel && archiveCopy) {
+    archiveLabel.innerText = archived ? 'Unarchive chat' : 'Archive chat';
+    archiveCopy.innerText = archived
+      ? 'Bring this conversation back into your active chat list.'
+      : 'Hide this conversation from the active list without deleting it.';
+  }
   themeBtn?.classList.toggle('hidden', isGroup);
   clearThemeBtn?.classList.toggle('hidden', isGroup || !selectedUser.chatTheme);
   renameBtn?.classList.toggle('hidden', isGroup);
   blockBtn?.classList.toggle('hidden', isGroup);
   manageGroupBtn?.classList.toggle('hidden', !isGroup);
+  renderStarredMessages();
 }
 
 function bindChatActionsMenu() {
@@ -2695,6 +3005,7 @@ async function handleAuth() {
 
 async function startApp() {
   await loadProfile();
+  loadLocalConversationPreferences();
   await ensureEncryptionKeys(true);
   await loadUsers();
   prefetchSettingsShell();
@@ -3106,12 +3417,30 @@ function getSortedUsers() {
   const sourceUsers = query ? getSearchUserPool() : users;
   return [...sourceUsers]
     .filter((user) => {
+      if (query) {
+        return true;
+      }
+
+      const archived = isConversationArchived(user);
+      if (showArchivedChats) {
+        return archived;
+      }
+
+      return !archived || selectedUser?.id === user.id;
+    })
+    .filter((user) => {
       if (!query) return true;
       return [user.name, user.email, user.nickname, user.displayName]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query));
     })
     .sort((a, b) => {
+      const pinnedA = isConversationPinned(a) ? 1 : 0;
+      const pinnedB = isConversationPinned(b) ? 1 : 0;
+      if (pinnedA !== pinnedB) {
+        return pinnedB - pinnedA;
+      }
+
       const recentA = recentActivity.get(a.id)?.lastAt || 0;
       const recentB = recentActivity.get(b.id)?.lastAt || 0;
       if (recentA !== recentB) {
@@ -3135,6 +3464,7 @@ function getUserRenderSignature(user) {
     preview: '',
     unread: 0,
   };
+  const draft = getConversationDraft(user);
   return [
     selectedUser?.id === user.id ? 1 : 0,
     !isGroupConversation(user) && onlineUserIds.has(user.id) ? 1 : 0,
@@ -3142,6 +3472,10 @@ function getUserRenderSignature(user) {
     user.avatar || '',
     state.preview || '',
     state.unread || 0,
+    draft,
+    isConversationPinned(user) ? 1 : 0,
+    isConversationMuted(user) ? 1 : 0,
+    isConversationArchived(user) ? 1 : 0,
   ].join('::');
 }
 
@@ -3153,6 +3487,28 @@ function createUserListElement(user) {
     preview: '',
     unread: 0,
   };
+  const draft = getConversationDraft(user);
+  const previewText = draft
+    ? `Draft: ${draft}`
+    : state.preview || 'No recent messages yet';
+  const previewTone = draft
+    ? 'font-semibold text-amber-600'
+    : state.unread
+      ? 'font-semibold text-slate-700'
+      : 'text-slate-400';
+  const badges = [
+    isConversationPinned(user)
+      ? '<span class="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700">Pinned</span>'
+      : '',
+    isConversationMuted(user)
+      ? '<span class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">Muted</span>'
+      : '',
+    isConversationArchived(user)
+      ? '<span class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">Archived</span>'
+      : '',
+  ]
+    .filter(Boolean)
+    .join('');
 
   item.dataset.userKey = userListKey(user);
   item.className = `cursor-pointer rounded-[26px] border p-2.5 transition-all ${
@@ -3172,9 +3528,12 @@ function createUserListElement(user) {
             }
           </div>
           <div class="min-w-0 flex-1">
-            <p class="truncate text-sm font-bold text-slate-900">${escapeHtml(displayName(user))}</p>
-            <p class="mt-1 truncate text-xs ${state.unread ? 'font-semibold text-slate-700' : 'text-slate-400'}">
-              ${escapeHtml(state.preview || 'No recent messages yet')}
+            <div class="flex items-center gap-2">
+              <p class="min-w-0 flex-1 truncate text-sm font-bold text-slate-900">${escapeHtml(displayName(user))}</p>
+              ${badges}
+            </div>
+            <p class="mt-1 truncate text-xs ${previewTone}">
+              ${escapeHtml(previewText)}
             </p>
           </div>
           ${state.unread ? `<span class="flex h-7 min-w-7 items-center justify-center rounded-full bg-blue-600 px-2 text-xs font-bold text-white">${state.unread}</span>` : ''}
@@ -3216,6 +3575,82 @@ function renderUsers() {
   }
 
   renderedUserSignatures = nextSignatures;
+  updateArchivedChatsToggle();
+}
+
+function updateArchivedChatsToggle() {
+  const button = getById('archived-chats-toggle');
+  if (!button) {
+    return;
+  }
+
+  const archivedCount = users.filter((user) => isConversationArchived(user)).length;
+  button.classList.toggle('hidden', archivedCount === 0 && !showArchivedChats);
+  button.textContent = showArchivedChats
+    ? 'Back to Active Chats'
+    : `Show Archived${archivedCount ? ` (${archivedCount})` : ''}`;
+}
+
+function toggleArchivedChatsView() {
+  showArchivedChats = !showArchivedChats;
+  renderUsers();
+}
+
+function scrollToMessageInConversation(messageId) {
+  const element = document.getElementById(`message-${messageId}`);
+  if (!element) {
+    alert('That starred message is not loaded yet. Scroll up to load older messages.');
+    return;
+  }
+
+  element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  element.classList.add('ring-2', 'ring-amber-300', 'ring-offset-2');
+  window.setTimeout(() => {
+    element.classList.remove('ring-2', 'ring-amber-300', 'ring-offset-2');
+  }, 1800);
+}
+
+function renderStarredMessages() {
+  const count = getById('chat-contact-panel-starred-count');
+  const list = getById('chat-contact-panel-starred-list');
+  if (!count || !list) {
+    return;
+  }
+
+  if (!selectedUser) {
+    count.textContent = 'No chat selected.';
+    list.innerHTML = '';
+    return;
+  }
+
+  const starred = getStarredMessagesForConversation(selectedUser);
+  if (!starred.length) {
+    count.textContent = 'No starred messages yet.';
+    list.innerHTML = '';
+    return;
+  }
+
+  count.textContent = `${starred.length} starred message${
+    starred.length === 1 ? '' : 's'
+  }`;
+  list.innerHTML = starred
+    .slice(0, 8)
+    .map(
+      (entry) => `
+        <button
+          type="button"
+          onclick="scrollToMessageInConversation('${entry.id}')"
+          class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-left transition hover:bg-white"
+        >
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-xs font-bold uppercase tracking-wide text-amber-600">${escapeHtml(entry.senderName || 'Message')}</span>
+            <span class="text-[11px] text-slate-400">${escapeHtml(formatMessageTime(entry.createdAt))}</span>
+          </div>
+          <p class="mt-2 text-sm text-slate-700">${escapeHtml(entry.preview || 'Starred message')}</p>
+        </button>
+      `,
+    )
+    .join('');
 }
 
 function renderGroupInvites() {
@@ -3521,6 +3956,7 @@ async function selectUser(userId) {
   document.getElementById('messages-list').innerHTML = '';
   clearAttachmentSelection();
   clearRecordedAudio();
+  restoreComposerDraft(selectedUser);
   closeChatContactPanel();
   closeChatActionsMenu();
   closeComposerActionsMenu();
@@ -4083,10 +4519,14 @@ function hideMessageLocally(messageId) {
     return;
   }
 
+  if (starredMessagesById.delete(messageId)) {
+    persistStarredMessages();
+  }
   removeCachedMessageEverywhere(messageId);
   renderedMessageIds.delete(messageId);
   conversationMessages.delete(messageId);
   document.getElementById(`message-${messageId}`)?.remove();
+  renderStarredMessages();
 }
 
 function handleMessageUpdated(message) {
@@ -4095,6 +4535,10 @@ function handleMessageUpdated(message) {
   }
 
   updateCachedMessageEverywhere(message);
+  if (isMessageStarred(message.id)) {
+    starredMessagesById.set(message.id, buildStarredMessageEntry(message));
+    persistStarredMessages();
+  }
   if (!belongsToSelectedConversation(message)) {
     updateRecentActivity(
       message.groupId ||
@@ -4214,6 +4658,7 @@ async function sendMessage() {
         false,
       );
       input.value = '';
+      clearConversationDraft(selectedUser);
     }
 
     if (text) {
@@ -4737,7 +5182,13 @@ async function leaveCurrentGroup() {
 function openMessageActions(x, y, message) {
   const menu = document.getElementById('message-actions-menu');
   const padding = 12;
+  const starButton = document.getElementById('message-action-star');
   messageActionTarget = message;
+  if (starButton) {
+    starButton.querySelector('span').textContent = isMessageStarred(message.id)
+      ? 'Remove star'
+      : 'Star message';
+  }
   document
     .getElementById('message-action-delete-all')
     .classList.toggle(
@@ -5567,6 +6018,9 @@ function createMessageElement(message) {
   const div = document.createElement('div');
   const isSent = message.senderId === currentUser.id;
   const metaTone = isSent ? 'text-blue-100/90' : 'text-slate-500';
+  const starredBadge = isMessageStarred(message.id)
+    ? '<span class="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">Starred</span>'
+    : '';
   div.id = `message-${message.id}`;
   div.className = `${isSent ? 'self-end' : 'self-start'} max-w-full`;
 
@@ -5580,6 +6034,7 @@ function createMessageElement(message) {
     : '';
   const footer = `
           <div class="mt-2 flex items-center justify-end gap-1.5 text-[10px] ${metaTone}">
+            ${starredBadge}
             ${message.isPending ? '<span class="font-semibold uppercase tracking-wide">Sending</span>' : ''}
             ${eye}
             <span>${escapeHtml(formatMessageTime(message.createdAt))}</span>
@@ -5891,6 +6346,17 @@ function maybeShowForegroundNotification(message) {
     return;
   }
 
+  const conversationKey = message.groupId
+    ? `group:${message.groupId}`
+    : `direct:${
+        message.senderId === currentUser?.id
+          ? message.receiverId
+          : message.senderId
+      }`;
+  if (mutedConversationKeys.has(conversationKey)) {
+    return;
+  }
+
   if (!document.hidden && document.hasFocus()) {
     return;
   }
@@ -6063,11 +6529,17 @@ async function restoreSession() {
 }
 
 document.addEventListener('input', (event) => {
-  if (event.target?.id !== 'msg-input' || !selectedUser || !socket) {
+  if (event.target?.id !== 'msg-input' || !selectedUser) {
     return;
   }
 
   markComposerDraftDirty();
+  saveConversationDraft(selectedUser, event.target.value);
+  scheduleRenderUsers();
+
+  if (!socket) {
+    return;
+  }
 
   socket.emit('typing', {
     ...(isGroupConversation(selectedUser)

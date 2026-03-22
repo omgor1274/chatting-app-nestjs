@@ -23,11 +23,11 @@
         pointer-events: none;
       }
     </style>
-    <link rel="manifest" href="/manifest.webmanifest?v=20260323-chatcache1" />
+    <link rel="manifest" href="/manifest.webmanifest?v=20260323-featurebatch1" />
     <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="./public/app.css?v=20260323-speedpass1" />
+    <link rel="stylesheet" href="./public/app.css?v=20260323-featurebatch1" />
   </head>
 
   <body class="chat-page mobile-page min-h-screen bg-slate-100 text-slate-900 lg:p-3">
@@ -343,9 +343,9 @@
         <div
           class="space-y-4 border-b border-slate-200 bg-white/70 px-5 py-4 sm:px-6"
         >
-          <div
-            class="rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm"
-          >
+            <div
+              class="rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm"
+            >
             <label
               for="user-search"
               class="mb-2 block px-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400"
@@ -356,13 +356,21 @@
               type="text"
               placeholder="Search by name, nickname, or email"
               oninput="handleUserSearchInput()"
-              class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
-            />
-          </div>
-          <button
-            onclick="openCreateGroupModal()"
-            class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
+                class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              />
+            </div>
+            <button
+              id="archived-chats-toggle"
+              type="button"
+              onclick="toggleArchivedChatsView()"
+              class="hidden w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Show Archived
+            </button>
+            <button
+              onclick="openCreateGroupModal()"
+              class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
             New Group
           </button>
           <div id="group-invites" class="hidden space-y-2"></div>
@@ -848,7 +856,90 @@
             ></div>
           </section>
 
+          <section class="mt-4 rounded-[24px] border border-slate-200 bg-white px-4 py-4">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="text-sm font-semibold text-slate-900">
+                  Starred messages
+                </p>
+                <p
+                  id="chat-contact-panel-starred-count"
+                  class="mt-1 text-sm text-slate-500"
+                >
+                  No starred messages yet.
+                </p>
+              </div>
+            </div>
+            <div
+              id="chat-contact-panel-starred-list"
+              class="mt-4 space-y-3"
+            ></div>
+          </section>
+
           <section class="mt-4 space-y-3">
+            <button
+              id="contact-pin-btn"
+              type="button"
+              onclick="togglePinnedConversation()"
+              class="contact-panel-action flex w-full items-center justify-between rounded-[24px] border border-slate-200 bg-white px-4 py-4 text-left transition hover:bg-slate-50"
+            >
+              <span>
+                <span
+                  id="contact-pin-btn-label"
+                  class="block text-sm font-semibold text-slate-900"
+                  >Pin chat</span
+                >
+                <span
+                  id="contact-pin-btn-copy"
+                  class="mt-1 block text-sm text-slate-500"
+                  >Keep this conversation at the top of your chat list.</span
+                >
+              </span>
+              <span class="text-slate-400">&rsaquo;</span>
+            </button>
+
+            <button
+              id="contact-mute-btn"
+              type="button"
+              onclick="toggleMutedConversation()"
+              class="contact-panel-action flex w-full items-center justify-between rounded-[24px] border border-slate-200 bg-white px-4 py-4 text-left transition hover:bg-slate-50"
+            >
+              <span>
+                <span
+                  id="contact-mute-btn-label"
+                  class="block text-sm font-semibold text-slate-900"
+                  >Mute notifications</span
+                >
+                <span
+                  id="contact-mute-btn-copy"
+                  class="mt-1 block text-sm text-slate-500"
+                  >Silence foreground notifications for this conversation.</span
+                >
+              </span>
+              <span class="text-slate-400">&rsaquo;</span>
+            </button>
+
+            <button
+              id="contact-archive-btn"
+              type="button"
+              onclick="toggleArchivedConversation()"
+              class="contact-panel-action flex w-full items-center justify-between rounded-[24px] border border-slate-200 bg-white px-4 py-4 text-left transition hover:bg-slate-50"
+            >
+              <span>
+                <span
+                  id="contact-archive-btn-label"
+                  class="block text-sm font-semibold text-slate-900"
+                  >Archive chat</span
+                >
+                <span
+                  id="contact-archive-btn-copy"
+                  class="mt-1 block text-sm text-slate-500"
+                  >Hide this conversation from the active list without deleting it.</span
+                >
+              </span>
+              <span class="text-slate-400">&rsaquo;</span>
+            </button>
+
             <button
               id="contact-theme-btn"
               type="button"
@@ -1601,6 +1692,13 @@
       class="floating-menu fixed z-[72] hidden min-w-[220px] max-w-[calc(100vw-24px)] rounded-[22px] border border-slate-200 bg-white p-2 shadow-xl"
     >
       <button
+        id="message-action-star"
+        onclick="toggleSelectedMessageStar()"
+        class="flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+      >
+        <span>Star message</span>
+      </button>
+      <button
         id="message-action-delete-me"
         onclick="deleteSelectedMessageForMe()"
         class="flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
@@ -1811,7 +1909,7 @@
       import {
         hasValidSession,
         loadPublicConfig,
-      } from '/public/runtime.js?v=20260323-speedpass1';
+      } from '/public/runtime.js?v=20260323-featurebatch1';
 
       const loadScript = (src) =>
         new Promise((resolve, reject) => {
@@ -1829,7 +1927,7 @@
         window.location.replace('/auth');
       } else {
         loadScript('https://cdn.socket.io/4.7.2/socket.io.min.js')
-          .then(() => loadScript('/public/app.js?v=20260323-speedpass1'))
+          .then(() => loadScript('/public/app.js?v=20260323-featurebatch1'))
           .catch((error) =>
             console.error('Failed to load chat runtime', error),
           );
