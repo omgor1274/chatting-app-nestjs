@@ -776,10 +776,18 @@ export class ChatService {
     if (!receiverEmail) {
       throw new BadRequestException('Receiver email is required');
     }
-    const receiver = await this.prisma.user.findUnique({
-      where: { email: receiverEmail.trim().toLowerCase() },
-      select: { id: true },
-    });
+    const [sender, receiver] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: senderId },
+        select: { id: true, name: true, email: true },
+      }),
+      this.prisma.user.findUnique({
+        where: { email: receiverEmail.trim().toLowerCase() },
+        select: { id: true },
+      }),
+    ]);
+
+    if (!sender) throw new NotFoundException('Sender not found');
     if (!receiver) throw new NotFoundException('User not found');
     if (receiver.id === senderId) {
       throw new BadRequestException('Cannot send request to yourself');
@@ -813,8 +821,10 @@ export class ChatService {
     if (existing?.status === 'ACCEPTED') {
       throw new BadRequestException('Chat request already accepted');
     }
+    let request;
+
     if (existing) {
-      return this.prisma.chatRequest.update({
+      request = await this.prisma.chatRequest.update({
         where: { id: existing.id },
         data: {
           senderId,
@@ -822,14 +832,24 @@ export class ChatService {
           status: 'PENDING',
         },
       });
+    } else {
+      request = await this.prisma.chatRequest.create({
+        data: {
+          senderId,
+          receiverId: receiver.id,
+          status: 'PENDING',
+        },
+      });
     }
-    return this.prisma.chatRequest.create({
-      data: {
-        senderId,
-        receiverId: receiver.id,
-        status: 'PENDING',
-      },
+
+    await this.pushNotifications.notifyUser(receiver.id, {
+      title: 'New chat request',
+      body: `${sender.name || sender.email} sent you a chat request`,
+      tag: `chat-request-${request.id}`,
+      url: `/?chat=${sender.id}`,
     });
+
+    return request;
   }
 
   async acceptRequest(requestId: string, userId: string) {

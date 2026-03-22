@@ -89,6 +89,7 @@ let messageActionTarget = null;
 let manageGroupAvatarShouldClear = false;
 let presenceRefreshPromise = null;
 let groupDetailsCache = new Map();
+const NOTIFICATION_PERMISSION_KEY = 'ochat_notification_permission_requested';
 let activeCall = {
   peer: null,
   localStream: null,
@@ -819,7 +820,7 @@ function removeCachedMessageEverywhere(messageId) {
 }
 
 function prefetchSettingsShell() {
-  const hrefs = ['/settings', '/public/settings.js?v=20260323-featurebatch1'];
+  const hrefs = ['/settings', '/public/settings.js?v=20260323-speed1'];
 
   hrefs.forEach((href) => {
     if (document.head.querySelector(`link[rel="prefetch"][href="${href}"]`)) {
@@ -1529,7 +1530,7 @@ function createAttachmentUploadTask(file, conversation) {
     file,
     conversation,
     sessionId: null,
-    status: 'queued',
+    status: 'pending-send',
     progressBytes: 0,
     uploadedBytes: 0,
     nextChunkIndex: 0,
@@ -1540,6 +1541,19 @@ function createAttachmentUploadTask(file, conversation) {
     previewUrl,
     completedMessageId: null,
   };
+}
+
+function getAttachmentTaskConversationKey(task) {
+  if (!task?.conversation?.id) {
+    return null;
+  }
+
+  return `${task.conversation.chatType}:${task.conversation.id}`;
+}
+
+function getSelectedConversationTaskKey() {
+  const conversation = buildUploadConversationTarget(selectedUser);
+  return conversation ? `${conversation.chatType}:${conversation.id}` : null;
 }
 
 function cleanupAttachmentUploadTask(task) {
@@ -1555,6 +1569,9 @@ function getAttachmentQueueCounts() {
       if (['queued', 'uploading', 'retrying', 'finalizing'].includes(task.status)) {
         summary.active += 1;
       }
+      if (task.status === 'pending-send') {
+        summary.pending += 1;
+      }
       if (task.status === 'failed') {
         summary.failed += 1;
       }
@@ -1563,7 +1580,7 @@ function getAttachmentQueueCounts() {
       }
       return summary;
     },
-    { active: 0, failed: 0, completed: 0 },
+    { active: 0, pending: 0, failed: 0, completed: 0 },
   );
 }
 
@@ -1573,7 +1590,16 @@ function syncChatSendStatus() {
     return;
   }
 
-  const { active, failed } = getAttachmentQueueCounts();
+  const { active, pending, failed } = getAttachmentQueueCounts();
+  if (pending > 0) {
+    sendStatus.textContent =
+      pending === 1
+        ? '1 file is ready. Press Send to start it.'
+        : `${pending} files are ready. Press Send to start them.`;
+    sendStatus.classList.remove('hidden');
+    return;
+  }
+
   if (active > 0) {
     sendStatus.textContent =
       active === 1
@@ -1619,16 +1645,20 @@ function renderAttachmentUploadQueue() {
     return;
   }
 
-  const { active, failed, completed } = getAttachmentQueueCounts();
+  const { active, pending, failed, completed } = getAttachmentQueueCounts();
   preview.classList.remove('hidden');
   queueSummary.textContent =
-    active > 0
+    pending > 0
+      ? `${pending} ${pending === 1 ? 'file is' : 'files are'} ready to send`
+      : active > 0
       ? `Uploading ${active} ${active === 1 ? 'file' : 'files'}`
       : failed > 0
         ? `${failed} ${failed === 1 ? 'upload needs' : 'uploads need'} attention`
         : `${completed} ${completed === 1 ? 'file is' : 'files are'} ready`;
   queueNote.textContent =
-    active > 0
+    pending > 0
+      ? 'Selected files stay here until you press Send. After that, they upload in the background.'
+      : active > 0
       ? 'Uploads keep running in the background, so you can still send normal messages.'
       : failed > 0
         ? 'Retry any failed upload without losing the rest of the queue.'
@@ -1652,12 +1682,16 @@ function renderAttachmentUploadQueue() {
         ? 'Ready in chat'
         : isFailed
           ? task.errorMessage || 'Upload paused'
+          : task.status === 'pending-send'
+            ? 'Ready to send'
           : task.status === 'queued'
             ? 'Waiting in queue'
             : task.status === 'finalizing'
               ? 'Finalizing file...'
               : formatUploadProgress(task.progressBytes, task.file.size);
-      const actionButton = isFailed
+      const actionButton = task.status === 'pending-send'
+        ? `<button type="button" onclick="removeAttachmentUploadTask('${escapeHtml(task.id)}')" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">Remove</button>`
+        : isFailed
         ? `<button type="button" onclick="retryAttachmentUpload('${escapeHtml(task.id)}')" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">Retry</button>`
         : isDone
           ? `<button type="button" onclick="removeAttachmentUploadTask('${escapeHtml(task.id)}')" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">Remove</button>`
@@ -1685,7 +1719,7 @@ function renderAttachmentUploadQueue() {
                 </div>
                 <div class="flex items-center justify-between gap-3 text-xs text-slate-500">
                   <span>${escapeHtml(progressText)}</span>
-                  <span>${isDone ? '100%' : `${percentage}%`}</span>
+                  <span>${task.status === 'pending-send' ? 'Ready' : isDone ? '100%' : `${percentage}%`}</span>
                 </div>
               </div>
             </div>
@@ -1924,6 +1958,27 @@ async function processAttachmentUploadQueue() {
   }
 }
 
+function queuePendingAttachmentUploads(conversationKey = getSelectedConversationTaskKey()) {
+  let queuedCount = 0;
+
+  attachmentUploadTasks.forEach((task) => {
+    if (
+      task.status === 'pending-send' &&
+      getAttachmentTaskConversationKey(task) === conversationKey
+    ) {
+      task.status = 'queued';
+      task.errorMessage = '';
+      queuedCount += 1;
+    }
+  });
+
+  if (queuedCount > 0) {
+    renderAttachmentUploadQueue();
+  }
+
+  return queuedCount;
+}
+
 async function startAttachmentUploads(files, conversation) {
   const acceptedFiles = Array.from(files || []).filter((file) => file && file.size);
   if (!acceptedFiles.length) {
@@ -1934,7 +1989,6 @@ async function startAttachmentUploads(files, conversation) {
     attachmentUploadTasks.push(createAttachmentUploadTask(file, conversation));
   });
   renderAttachmentUploadQueue();
-  await processAttachmentUploadQueue();
 }
 
 async function retryAttachmentUpload(taskId) {
@@ -3671,16 +3725,16 @@ async function handleAuth() {
 async function startApp() {
   await loadProfile();
   loadLocalConversationPreferences();
-  await ensureEncryptionKeys(true);
-  await loadUsers();
+  document.getElementById('auth-screen').classList.add('hidden');
+  await Promise.all([
+    ensureEncryptionKeys(true),
+    loadUsers(),
+  ]);
   prefetchSettingsShell();
   connectSocket();
-  try {
-    await setupNotifications();
-  } catch (error) {
+  void setupNotifications().catch((error) => {
     console.warn('Push notification setup skipped', error);
-  }
-  document.getElementById('auth-screen').classList.add('hidden');
+  });
 
   const chatId = new URLSearchParams(window.location.search).get('chat');
   const groupId = new URLSearchParams(window.location.search).get('group');
@@ -3869,13 +3923,12 @@ async function loadUsers() {
   }
 
   loadUsersPromise = (async () => {
-    const [recentRes, groupsRes, invitesRes] = await Promise.all([
+    const [recentRes, invitesRes] = await Promise.all([
       api('/chat/recent'),
-      api('/chat/groups'),
       api('/chat/groups/invites'),
     ]);
 
-    if (!recentRes.ok || !groupsRes.ok || !invitesRes.ok) {
+    if (!recentRes.ok || !invitesRes.ok) {
       throw new Error('Failed to load users');
     }
 
@@ -3883,11 +3936,6 @@ async function loadUsers() {
       recentRes,
       [],
       'Failed to load recent chats.',
-    );
-    const groups = await readJsonResponse(
-      groupsRes,
-      [],
-      'Failed to load groups.',
     );
     groupInvites = await readJsonResponse(
       invitesRes,
@@ -3928,7 +3976,9 @@ async function loadUsers() {
         );
       });
 
-    const groupUsers = groups.map((group) => {
+    const groupUsers = recentUsers
+      .filter((user) => (user.chatType || 'direct') === 'group')
+      .map((group) => {
       const key = `group:${group.id}`;
       const recent = recentByKey.get(key);
       return normalizeUser(
@@ -4388,13 +4438,47 @@ function connectSocket() {
   });
 
   socket.on('request:update', async (payload) => {
-    if (!selectedUser || !payload || isGroupConversation(selectedUser)) {
+    if (!payload || !currentUser?.id) {
       return;
     }
 
+    const isIncomingPending =
+      payload.status === 'PENDING' && payload.receiverId === currentUser.id;
+    const otherUserId =
+      payload.senderId === currentUser.id ? payload.receiverId : payload.senderId;
+
+    if (isIncomingPending && otherUserId) {
+      let otherUser =
+        users.find((user) => !isGroupConversation(user) && user.id === otherUserId) ||
+        peopleDirectory.find((user) => user.id === otherUserId) ||
+        null;
+
+      if (!otherUser) {
+        try {
+          await loadUsers();
+          otherUser =
+            users.find(
+              (user) => !isGroupConversation(user) && user.id === otherUserId,
+            ) ||
+            peopleDirectory.find((user) => user.id === otherUserId) ||
+            null;
+        } catch (error) {
+          console.error('Failed to refresh users after chat request', error);
+        }
+      }
+
+      bumpConversationForRequest(
+        otherUserId,
+        'Sent you a chat request',
+        !selectedUser || selectedUser.id !== otherUserId,
+      );
+      maybeShowRequestNotification(payload, otherUser);
+    }
+
     if (
-      payload.senderId === selectedUser.id ||
-      payload.receiverId === selectedUser.id
+      selectedUser &&
+      !isGroupConversation(selectedUser) &&
+      (payload.senderId === selectedUser.id || payload.receiverId === selectedUser.id)
     ) {
       await loadChatPermission();
     }
@@ -4630,18 +4714,22 @@ async function selectUser(userId) {
   renderUsers();
 
   try {
-    await loadChatPermission();
     if (conversationState.initialized) {
       setMessageLoadingState(false);
       renderActiveConversationFromCache();
+      const permissionPromise = loadChatPermission();
       await ensureScrollableHistory();
       retryConversationDecryption();
       if (hadUnread) {
         void markSelectedConversationRead();
       }
+      await permissionPromise;
     } else {
       setMessageLoadingState(true);
-      await loadMessageChunk();
+      await Promise.all([
+        loadChatPermission(),
+        loadMessageChunk(),
+      ]);
       await ensureScrollableHistory();
       retryConversationDecryption();
     }
@@ -5274,25 +5362,58 @@ function updateRecentActivity(userId, message, incrementUnread, options = {}) {
   }
 }
 
+function bumpConversationForRequest(userId, preview, incrementUnread = false) {
+  if (!userId) {
+    return;
+  }
+
+  const current = recentActivity.get(userId) || {
+    lastAt: 0,
+    preview: '',
+    unread: 0,
+  };
+
+  recentActivity.set(userId, {
+    lastAt: Date.now(),
+    preview: preview || current.preview || 'Sent you a chat request',
+    unread: incrementUnread ? current.unread + 1 : current.unread,
+  });
+  scheduleRenderUsers();
+}
+
 async function sendMessage() {
   const input = document.getElementById('msg-input');
   const text = input.value.trim();
   if (!selectedUser || !socket || composerSendInFlight) return;
-  if (composerDraftVersion === lastSubmittedDraftVersion) return;
-
+  const selectedConversationKey = getSelectedConversationTaskKey();
+  const pendingAttachmentCount = attachmentUploadTasks.filter(
+    (task) =>
+      task.status === 'pending-send' &&
+      getAttachmentTaskConversationKey(task) === selectedConversationKey,
+  ).length;
   const voiceFile = recordedAudioFile;
-  const draftFingerprint = buildDraftFingerprint({
-    roomId: selectedConversationRoomId(),
-    text,
-    attachmentFile: null,
-    voiceFile,
-  });
+  const shouldTrackDraftSubmission = Boolean(text || voiceFile);
+  const draftFingerprint = shouldTrackDraftSubmission
+    ? buildDraftFingerprint({
+        roomId: selectedConversationRoomId(),
+        text,
+        attachmentFile: null,
+        voiceFile,
+      })
+    : '';
 
-  if (!text && !voiceFile) {
+  if (!text && !voiceFile && !pendingAttachmentCount) {
     return;
   }
 
-  if (shouldSkipDuplicateDraft(draftFingerprint)) {
+  if (
+    shouldTrackDraftSubmission &&
+    composerDraftVersion === lastSubmittedDraftVersion
+  ) {
+    return;
+  }
+
+  if (shouldTrackDraftSubmission && shouldSkipDuplicateDraft(draftFingerprint)) {
     return;
   }
 
@@ -5301,10 +5422,18 @@ async function sendMessage() {
   try {
     setComposerSendingState(
       true,
-      voiceFile ? (text ? 'Sending' : 'Uploading') : 'Sending',
+      pendingAttachmentCount && !text && !voiceFile
+        ? 'Starting uploads'
+        : voiceFile
+          ? text
+            ? 'Sending'
+            : 'Uploading'
+          : 'Sending',
     );
-    markDraftSubmitted(draftFingerprint);
-    lastSubmittedDraftVersion = composerDraftVersion;
+    if (shouldTrackDraftSubmission) {
+      markDraftSubmitted(draftFingerprint);
+      lastSubmittedDraftVersion = composerDraftVersion;
+    }
     const canChat = await ensureChatPermissionReady();
     if (!canChat) {
       alert('Accept a chat request before sending messages.');
@@ -5340,14 +5469,21 @@ async function sendMessage() {
       isTyping: false,
     });
 
+    const queuedAttachments = queuePendingAttachmentUploads(selectedConversationKey);
+    if (queuedAttachments > 0) {
+      void processAttachmentUploadQueue();
+    }
+
     if (voiceFile) {
       const uploadedVoiceMessage = await uploadAttachment(voiceFile);
       await handleIncomingMessage(uploadedVoiceMessage, true);
       clearRecordedAudio();
     }
   } catch (error) {
-    clearDraftSubmissionGuard(draftFingerprint);
-    lastSubmittedDraftVersion = -1;
+    if (shouldTrackDraftSubmission) {
+      clearDraftSubmissionGuard(draftFingerprint);
+      lastSubmittedDraftVersion = -1;
+    }
     if (optimisticMessage) {
       removeOptimisticMessage(optimisticMessage.id);
       const roomId = optimisticMessage.groupId || optimisticMessage.receiverId;
@@ -5972,6 +6108,7 @@ async function handleAttachmentSelected() {
   }
 
   closeComposerActionsMenu();
+  markComposerDraftDirty();
   await startAttachmentUploads(files, buildUploadConversationTarget(selectedUser));
 }
 
@@ -6953,6 +7090,24 @@ async function setupNotifications() {
     return;
   }
 
+  if (Notification.permission === 'default') {
+    const alreadyRequested =
+      localStorage.getItem(NOTIFICATION_PERMISSION_KEY) === '1';
+
+    if (!alreadyRequested) {
+      localStorage.setItem(NOTIFICATION_PERMISSION_KEY, '1');
+      try {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          await subscribeForPush();
+        }
+      } catch (error) {
+        console.warn('Notification permission prompt failed', error);
+      }
+      return;
+    }
+  }
+
   if (Notification.permission === 'granted') {
     await subscribeForPush();
   }
@@ -7048,6 +7203,33 @@ function maybeShowForegroundNotification(message) {
       selectUser(group.id);
     } else if (sender) {
       selectUser(sender.id);
+    }
+    notification.close();
+  };
+}
+
+function maybeShowRequestNotification(request, otherUser) {
+  if (Notification.permission !== 'granted') {
+    return;
+  }
+
+  if (!document.hidden && document.hasFocus()) {
+    return;
+  }
+
+  const targetUser = otherUser || null;
+  const notification = new Notification('New chat request', {
+    body: targetUser
+      ? `${displayName(targetUser)} sent you a chat request`
+      : 'Someone sent you a chat request',
+    icon: targetUser ? userAvatar(targetUser) : undefined,
+    tag: `chat-request-${request?.id || 'pending'}`,
+  });
+
+  notification.onclick = () => {
+    window.focus();
+    if (targetUser?.id) {
+      selectUser(targetUser.id);
     }
     notification.close();
   };

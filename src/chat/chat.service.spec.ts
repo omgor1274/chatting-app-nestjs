@@ -7,6 +7,9 @@ import { PrismaService } from '../prisma/prisma.service';
 
 describe('ChatService', () => {
   let service: ChatService;
+  let pushNotifications: {
+    notifyUser: jest.Mock;
+  };
   let prisma: {
     user: {
       findUnique: jest.Mock;
@@ -40,6 +43,9 @@ describe('ChatService', () => {
   };
 
   beforeEach(async () => {
+    pushNotifications = {
+      notifyUser: jest.fn(),
+    };
     prisma = {
       user: {
         findUnique: jest.fn(),
@@ -86,9 +92,7 @@ describe('ChatService', () => {
         },
         {
           provide: PushNotificationService,
-          useValue: {
-            notifyUser: jest.fn(),
-          },
+          useValue: pushNotifications,
         },
         {
           provide: RedisService,
@@ -280,6 +284,48 @@ describe('ChatService', () => {
       senderId: 'user-1',
       receiverId: 'user-2',
       status: 'REJECTED',
+    });
+  });
+
+  it('sends a push notification when a new chat request is created', async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 'user-1',
+        name: 'Sender',
+        email: 'sender@example.com',
+      })
+      .mockResolvedValueOnce({
+        id: 'user-2',
+      });
+    prisma.userBlock.findMany.mockResolvedValue([]);
+    prisma.chatRequest.findFirst.mockResolvedValue(null);
+    prisma.chatRequest.create.mockResolvedValue({
+      id: 'request-2',
+      senderId: 'user-1',
+      receiverId: 'user-2',
+      status: 'PENDING',
+    });
+
+    const result = await service.sendRequest('user-1', 'receiver@example.com');
+
+    expect(prisma.chatRequest.create).toHaveBeenCalledWith({
+      data: {
+        senderId: 'user-1',
+        receiverId: 'user-2',
+        status: 'PENDING',
+      },
+    });
+    expect(pushNotifications.notifyUser).toHaveBeenCalledWith('user-2', {
+      title: 'New chat request',
+      body: 'Sender sent you a chat request',
+      tag: 'chat-request-request-2',
+      url: '/?chat=user-1',
+    });
+    expect(result).toEqual({
+      id: 'request-2',
+      senderId: 'user-1',
+      receiverId: 'user-2',
+      status: 'PENDING',
     });
   });
 });
