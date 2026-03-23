@@ -1227,11 +1227,14 @@ function setComposerSendingState(isSending, label = 'Send') {
 
 function setMessageLoadingState(isLoading, label = 'Loading messages...') {
   const indicator = document.getElementById('message-loading-indicator');
+  const text = document.getElementById('message-loading-label');
   if (!indicator) {
     return;
   }
 
-  indicator.textContent = label;
+  if (text) {
+    text.textContent = label;
+  }
   indicator.classList.toggle('hidden', !isLoading);
 }
 

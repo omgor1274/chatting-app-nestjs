@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#2563eb" />
     <title>O-chat</title>
-    <link rel="stylesheet" href="/public/app.css?v=20260323-mobilefix2" />
+    <link rel="stylesheet" href="/public/app.css?v=20260323-themefix1" />
   </head>
 
   <body class="mobile-page min-h-screen bg-slate-100 text-slate-900">
@@ -13,19 +13,39 @@
       class="mobile-page-shell mx-auto flex min-h-screen max-w-xl items-center justify-center p-6"
     >
       <section
-        class="glass w-full rounded-[28px] border border-white/70 bg-white p-8 shadow-[0_30px_120px_rgba(15,23,42,0.12)]"
+        class="loader-card glass w-full overflow-hidden rounded-[32px] border border-white/70 bg-white p-8 shadow-[0_30px_120px_rgba(15,23,42,0.12)]"
       >
-        <p
-          class="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500"
-        >
-          O-chat
-        </p>
-        <h1 class="mt-4 text-3xl font-bold text-slate-900">
-          Launching your workspace...
-        </h1>
-        <p class="mt-3 text-sm leading-6 text-slate-500">
-          We only load the heavy chat runtime when you actually open chats.
-        </p>
+        <div class="loader-card-glow" aria-hidden="true"></div>
+        <div class="relative z-[1]">
+          <div class="loader-stage" aria-hidden="true">
+            <div class="loader-orbit loader-orbit-outer"></div>
+            <div class="loader-orbit loader-orbit-middle"></div>
+            <div class="loader-core">
+              <span>O</span>
+            </div>
+            <div class="loader-pulse loader-pulse-one"></div>
+            <div class="loader-pulse loader-pulse-two"></div>
+          </div>
+          <p
+            class="mt-6 text-sm font-semibold uppercase tracking-[0.24em] text-slate-500"
+          >
+            O-chat
+          </p>
+          <h1 class="mt-3 text-3xl font-bold tracking-tight text-slate-900">
+            Syncing your workspace
+          </h1>
+          <p class="mt-3 text-sm leading-6 text-slate-500">
+            Preparing conversations, keys, and message history before the app opens.
+          </p>
+          <div class="loader-progress" aria-hidden="true">
+            <span class="loader-progress-bar"></span>
+          </div>
+          <div class="loader-status-row" aria-hidden="true">
+            <span class="loader-status-pill">Session</span>
+            <span class="loader-status-pill">Chats</span>
+            <span class="loader-status-pill">Realtime</span>
+          </div>
+        </div>
         <div class="mt-8 grid gap-3 sm:grid-cols-2">
           <a
             href="/auth"

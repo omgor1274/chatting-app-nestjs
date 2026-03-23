@@ -11,6 +11,7 @@ import {
 
 const LAST_CHAT_ROUTE_KEY = 'chat_last_route';
 const NOTIFICATION_PERMISSION_KEY = 'ochat_notification_permission_requested';
+let notificationsAvailableOnServer = null;
 
 function getById(id) {
   return document.getElementById(id);
@@ -94,9 +95,9 @@ function updateCloseLink() {
 function prefetchChatShell() {
   const hrefs = [
     getLastChatRoute(),
-    '/public/app.js?v=20260323-authfetchfix1',
+    '/public/app.js?v=20260323-loader2',
     '/public/runtime.js?v=20260323-authfetchfix1',
-    '/public/app.css?v=20260323-layoutlock1',
+    '/public/app.css?v=20260323-themefix1',
   ];
 
   hrefs.forEach((href) => {
@@ -136,6 +137,15 @@ function updateNotificationUi() {
     return;
   }
 
+  if (notificationsAvailableOnServer === false) {
+    status.textContent =
+      'Push notifications are not configured on the server yet. Add VAPID keys in the deploy environment, then reload this page.';
+    button.disabled = true;
+    button.textContent = 'Server Not Ready';
+    button.classList.add('opacity-70', 'cursor-not-allowed');
+    return;
+  }
+
   if (Notification.permission === 'granted') {
     status.textContent =
       'Notifications are enabled. You can receive new message, file, and chat request alerts even when the tab is closed.';
@@ -161,6 +171,32 @@ function updateNotificationUi() {
   button.classList.remove('opacity-70', 'cursor-not-allowed');
 }
 
+async function syncNotificationAvailability() {
+  if (!canUseNotifications()) {
+    notificationsAvailableOnServer = false;
+    updateNotificationUi();
+    return false;
+  }
+
+  try {
+    const keyResponse = await api('/users/notifications/public-key');
+    const keyData = await readJsonResponse(
+      keyResponse,
+      {},
+      'Failed to load notification settings.',
+    );
+    notificationsAvailableOnServer = Boolean(
+      keyResponse.ok && keyData.publicKey,
+    );
+  } catch (error) {
+    console.error('Failed to check notification configuration', error);
+    notificationsAvailableOnServer = false;
+  }
+
+  updateNotificationUi();
+  return notificationsAvailableOnServer;
+}
+
 async function enableNotifications() {
   const button = getById('settings-enable-notifications-btn');
   if (!button || !canUseNotifications()) {
@@ -172,6 +208,14 @@ async function enableNotifications() {
   button.classList.add('opacity-70', 'cursor-wait');
 
   try {
+    if (!(await syncNotificationAvailability())) {
+      showFeedback(
+        'Push notifications are not configured on the server yet.',
+        'error',
+      );
+      return;
+    }
+
     localStorage.setItem(NOTIFICATION_PERMISSION_KEY, '1');
     const permission = await Notification.requestPermission();
 
@@ -187,7 +231,7 @@ async function enableNotifications() {
     }
 
     const registration = await ensureSettingsServiceWorker();
-    const keyResponse = await fetch(`${getApiUrl()}/users/notifications/public-key`);
+    const keyResponse = await api('/users/notifications/public-key');
     const keyData = await readJsonResponse(
       keyResponse,
       {},
@@ -574,6 +618,8 @@ async function boot() {
       'error',
     );
   }
+
+  await syncNotificationAvailability();
 }
 
 boot().catch((error) => {
