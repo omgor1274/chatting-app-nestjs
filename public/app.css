@@ -1184,6 +1184,7 @@ body.chat-page #message-container {
 
   #profile-modal,
   #chat-contact-panel,
+  #shared-media-browser-modal,
   #rename-modal,
   #create-group-modal,
   #manage-group-modal,
@@ -1196,6 +1197,7 @@ body.chat-page #message-container {
 
   #profile-modal > div,
   #chat-contact-panel > div,
+  #shared-media-browser-modal > div,
   #rename-modal > div,
   #create-group-modal > div,
   #manage-group-modal > div,
@@ -1469,6 +1471,7 @@ body.dark-mode #input-area,
 body.dark-mode #auth-screen > div,
 body.dark-mode #profile-modal > div,
 body.dark-mode #chat-contact-panel > div,
+body.dark-mode #shared-media-browser-modal > div,
 body.dark-mode #chat-theme-modal > div,
 body.dark-mode #rename-modal > div,
 body.dark-mode #reset-password-modal > div,
@@ -1752,7 +1755,17 @@ body.dark-mode .pointer-events-none {
     border-left-color: rgba(255, 255, 255, 0.08) !important;
   }
 
+  body.dark-mode #shared-media-browser-modal > div {
+    background: #111b21 !important;
+    color: #e9edef !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+  }
+
   body.dark-mode #chat-contact-panel .border-slate-200 {
+    border-color: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  body.dark-mode #shared-media-browser-modal .border-slate-200 {
     border-color: rgba(255, 255, 255, 0.08) !important;
   }
 
@@ -1762,9 +1775,22 @@ body.dark-mode .pointer-events-none {
     background: #111b21 !important;
   }
 
+  body.dark-mode #shared-media-browser-modal .bg-white,
+  body.dark-mode #shared-media-browser-modal .bg-slate-50,
+  body.dark-mode #shared-media-browser-modal .bg-white\/90 {
+    background: #111b21 !important;
+  }
+
   body.dark-mode #chat-contact-panel .text-slate-900,
   body.dark-mode #chat-contact-panel .text-slate-700,
   body.dark-mode #chat-contact-panel .text-slate-600 {
+    color: #e9edef !important;
+  }
+
+  body.dark-mode #shared-media-browser-modal .text-slate-900,
+  body.dark-mode #shared-media-browser-modal .text-slate-800,
+  body.dark-mode #shared-media-browser-modal .text-slate-700,
+  body.dark-mode #shared-media-browser-modal .text-slate-600 {
     color: #e9edef !important;
   }
 
@@ -1773,7 +1799,16 @@ body.dark-mode .pointer-events-none {
     color: #8696a0 !important;
   }
 
+  body.dark-mode #shared-media-browser-modal .text-slate-500,
+  body.dark-mode #shared-media-browser-modal .text-slate-400 {
+    color: #8696a0 !important;
+  }
+
   body.dark-mode #chat-contact-panel button:hover {
+    background: rgba(255, 255, 255, 0.04) !important;
+  }
+
+  body.dark-mode #shared-media-browser-modal button:hover {
     background: rgba(255, 255, 255, 0.04) !important;
   }
 }

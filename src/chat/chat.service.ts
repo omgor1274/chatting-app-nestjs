@@ -81,10 +81,16 @@ export class ChatService {
 
   private async getHiddenDirectUserIds(userId: string) {
     const blocks = await this.prisma.userBlock.findMany({
-      where: { blockedUserId: userId },
-      select: { blockerId: true },
+      where: {
+        OR: [{ blockerId: userId }, { blockedUserId: userId }],
+      },
+      select: { blockerId: true, blockedUserId: true },
     });
-    return new Set(blocks.map((block) => block.blockerId));
+    return new Set(
+      blocks.map((block) =>
+        block.blockerId === userId ? block.blockedUserId : block.blockerId,
+      ),
+    );
   }
 
   private async ensureDirectPeer(
@@ -527,7 +533,7 @@ export class ChatService {
       },
     });
     const groupIds = groupMemberships.map((item) => item.groupId);
-    const [directMessages, directUsers, preferences, groupMessages] =
+    const [directMessages, acceptedRequests, preferences, groupMessages] =
       await Promise.all([
         this.prisma.message.findMany({
           where: {
@@ -538,15 +544,17 @@ export class ChatService {
           orderBy: { createdAt: 'desc' },
           take: 250,
         }),
-        this.prisma.user.findMany({
+        this.prisma.chatRequest.findMany({
           where: {
-            id: {
-              not: userId,
-              notIn: Array.from(hiddenDirectUserIds),
-            },
-            emailVerified: true,
+            status: 'ACCEPTED',
+            OR: [{ senderId: userId }, { receiverId: userId }],
           },
-          select: { id: true, email: true, name: true, avatar: true },
+          orderBy: { createdAt: 'desc' },
+          select: {
+            senderId: true,
+            receiverId: true,
+            createdAt: true,
+          },
         }),
         this.prisma.contactPreference.findMany({
           where: { ownerId: userId },
@@ -577,11 +585,39 @@ export class ChatService {
       if (peerId && !latestDirectByPeer.has(peerId))
         latestDirectByPeer.set(peerId, message);
     }
+    const latestAcceptedRequestByPeer = new Map();
+    for (const request of acceptedRequests) {
+      const peerId =
+        request.senderId === userId ? request.receiverId : request.senderId;
+      if (
+        peerId &&
+        !hiddenDirectUserIds.has(peerId) &&
+        !latestAcceptedRequestByPeer.has(peerId)
+      ) {
+        latestAcceptedRequestByPeer.set(peerId, request);
+      }
+    }
+    const visibleDirectPeerIds = Array.from(
+      new Set([
+        ...Array.from(latestDirectByPeer.keys()),
+        ...Array.from(latestAcceptedRequestByPeer.keys()),
+      ]),
+    ).filter((peerId) => Boolean(peerId) && !hiddenDirectUserIds.has(peerId));
+    const directUsers = visibleDirectPeerIds.length
+      ? await this.prisma.user.findMany({
+          where: {
+            id: { in: visibleDirectPeerIds },
+            emailVerified: true,
+          },
+          select: { id: true, email: true, name: true, avatar: true },
+        })
+      : [];
     const preferenceByUserId = new Map(
       preferences.map((item) => [item.contactUserId, item]),
     );
     const directEntries = directUsers.map((user) => {
       const latest = latestDirectByPeer.get(user.id);
+      const acceptedRequest = latestAcceptedRequestByPeer.get(user.id);
       const preference = preferenceByUserId.get(user.id);
       return {
         id: user.id,
@@ -592,8 +628,13 @@ export class ChatService {
         nickname: preference?.nickname ?? null,
         displayName: preference?.nickname ?? user.name,
         chatTheme: preference?.chatTheme ?? null,
-        lastMessagePreview: latest ? this.previewForMessage(latest) : '',
-        lastMessageAt: latest?.createdAt?.toISOString() ?? null,
+        lastMessagePreview: latest
+          ? this.previewForMessage(latest)
+          : 'Chat request accepted',
+        lastMessageAt:
+          latest?.createdAt?.toISOString() ??
+          acceptedRequest?.createdAt?.toISOString() ??
+          null,
         lastMessageType: latest?.messageType ?? null,
       };
     });

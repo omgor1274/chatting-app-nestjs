@@ -99,6 +99,11 @@ let requestActionInFlight = '';
 let manageGroupAvatarShouldClear = false;
 let presenceRefreshPromise = null;
 let groupDetailsCache = new Map();
+let detachedSelectedUser = false;
+let userSearchResults = [];
+let userSearchResultsQuery = '';
+let userSearchDebounceTimer = 0;
+let userSearchRequestToken = 0;
 const NOTIFICATION_PERMISSION_KEY = 'ochat_notification_permission_requested';
 const MESSAGE_ACTION_TOUCH_HOLD_MS = 750;
 const MESSAGE_ACTION_MOVE_TOLERANCE_PX = 6;
@@ -131,9 +136,12 @@ let rtcConfig = {
   iceServers: appConfig.stunServers.map((urls) => ({ urls })),
 };
 let sharedMediaItems = [];
+let sharedMediaLoading = false;
+let sharedMediaErrorMessage = '';
+let sharedMediaBrowserKind = 'image';
 const OFFLINE_QUEUE_KEY = 'ochat_offline_message_queue';
 const RINGTONE_PREFERENCE_KEY = 'ochat_ringtone_preference';
-const CLIENT_CACHE_VERSION = '20260323-smooth1';
+const CLIENT_CACHE_VERSION = '20260323-smooth16';
 const CHAT_SHELL_CACHE_TTL_MS = 2 * 60 * 1000;
 const CHAT_SHELL_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const CONVERSATION_CACHE_TTL_MS = 90 * 1000;
@@ -2532,9 +2540,11 @@ function createUploadRequestError(
   message,
   status = 0,
   fallbackMessage = 'Upload failed',
+  code = 'UPLOAD_FAILED',
 ) {
   const error = new Error(message || fallbackMessage);
   error.status = status;
+  error.code = code;
   return error;
 }
 
@@ -2586,7 +2596,15 @@ function uploadChunkWithProgress(sessionId, chunkIndex, chunkBlob, onProgress) {
 
     xhr.onabort = () => {
       activeAttachmentUploadRequest = null;
-      reject(createUploadRequestError('Upload cancelled', 0));
+      const abortReason = xhr.__chatAbortReason === 'paused' ? 'paused' : 'cancelled';
+      reject(
+        createUploadRequestError(
+          abortReason === 'paused' ? 'Upload paused' : 'Upload cancelled',
+          0,
+          abortReason === 'paused' ? 'Upload paused' : 'Upload cancelled',
+          abortReason === 'paused' ? 'UPLOAD_PAUSED' : 'UPLOAD_CANCELLED',
+        ),
+      );
     };
 
     xhr.onload = () => {
@@ -2833,7 +2851,8 @@ function renderAttachmentUploadQueue() {
     .map((task) => {
       const isDone = task.status === 'completed';
       const isFailed = task.status === 'failed';
-      const isUploading = ['uploading', 'retrying', 'finalizing'].includes(
+      const isActivelyUploading = ['uploading', 'retrying'].includes(task.status);
+      const isBusy = ['uploading', 'retrying', 'finalizing'].includes(
         task.status,
       );
       const percentage = task.file?.size
@@ -2863,7 +2882,9 @@ function renderAttachmentUploadQueue() {
         ? `<button type="button" onclick="resumeAttachmentUpload('${escapeHtml(task.id)}')" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">Resume</button>`
         : isDone
           ? `<button type="button" onclick="removeAttachmentUploadTask('${escapeHtml(task.id)}')" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">Remove</button>`
-          : `<button type="button" onclick="${isUploading ? `pauseAttachmentUpload('${escapeHtml(task.id)}')` : `cancelAttachmentUpload('${escapeHtml(task.id)}')`}" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">${isUploading ? 'Pause' : 'Remove'}</button>`;
+          : task.status === 'finalizing'
+            ? `<span class="inline-flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">Finishing...</span>`
+            : `<button type="button" onclick="${isActivelyUploading ? `pauseAttachmentUpload('${escapeHtml(task.id)}')` : `cancelAttachmentUpload('${escapeHtml(task.id)}')`}" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">${isActivelyUploading ? 'Pause' : isBusy ? 'Working...' : 'Remove'}</button>`;
 
       return `
         <div class="rounded-[20px] border border-slate-200 bg-white px-3 py-3 shadow-sm">
@@ -3070,6 +3091,15 @@ async function uploadAttachmentTask(task) {
     renderAttachmentUploadQueue();
   }
 
+  if (task.pauseRequested) {
+    throw createUploadRequestError(
+      'Upload paused',
+      0,
+      'Upload paused',
+      'UPLOAD_PAUSED',
+    );
+  }
+
   task.status = 'finalizing';
   task.progressBytes = task.file.size;
   renderAttachmentUploadQueue();
@@ -3106,11 +3136,18 @@ async function processAttachmentUploadQueue() {
   } catch (error) {
     console.error('Attachment upload failed', error);
 
-    if (nextTask.pauseRequested || String(error?.message || '').toLowerCase().includes('paused')) {
+    if (
+      nextTask.pauseRequested ||
+      error?.code === 'UPLOAD_PAUSED' ||
+      String(error?.message || '').toLowerCase().includes('paused')
+    ) {
       nextTask.status = 'paused';
       nextTask.errorMessage = 'Upload paused';
       nextTask.pauseRequested = false;
-    } else if (String(error?.message || '').toLowerCase().includes('cancel')) {
+    } else if (
+      error?.code === 'UPLOAD_CANCELLED' ||
+      String(error?.message || '').toLowerCase().includes('cancel')
+    ) {
       nextTask.status = 'cancelled';
       nextTask.errorMessage = '';
     } else if (isRecoverableUploadError(error)) {
@@ -3194,8 +3231,13 @@ async function pauseAttachmentUpload(taskId) {
     return;
   }
 
+  if (task.status === 'finalizing') {
+    return;
+  }
+
   task.pauseRequested = true;
   if (activeAttachmentUploadRequest?.taskId === task.id) {
+    activeAttachmentUploadRequest.xhr.__chatAbortReason = 'paused';
     activeAttachmentUploadRequest.xhr?.abort();
     return;
   }
@@ -3212,6 +3254,7 @@ async function cancelAttachmentUpload(taskId) {
   }
 
   if (activeAttachmentUploadRequest?.taskId === task.id) {
+    activeAttachmentUploadRequest.xhr.__chatAbortReason = 'cancelled';
     activeAttachmentUploadRequest.xhr?.abort();
     activeAttachmentUploadRequest = null;
   }
@@ -3297,6 +3340,7 @@ function normalizeUser(user, existingUser = null) {
 function resetSelectedConversation() {
   rememberActiveConversationScroll();
   selectedUser = null;
+  detachedSelectedUser = false;
   clearReplyTarget();
   renderedMessageIds = new Set();
   conversationMessages = new Map();
@@ -3326,11 +3370,16 @@ function syncSelectedUser() {
 
   const matchedUser = users.find((user) => user.id === selectedUser.id);
   if (!matchedUser) {
+    if (detachedSelectedUser) {
+      applyChatTheme();
+      return;
+    }
     resetSelectedConversation();
     return;
   }
 
   selectedUser = matchedUser;
+  detachedSelectedUser = false;
   applyChatTheme();
 }
 
@@ -3496,16 +3545,27 @@ function scheduleUsersRefreshInBackground(options = {}) {
 }
 
 function handleUserSearchInput() {
-  const query = document.getElementById('user-search')?.value.trim();
-  if (query && !peopleDirectoryLoaded) {
-    void loadPeopleDirectory()
-      .catch((error) => {
-        console.error('Failed to load people directory', error);
-      })
-      .finally(() => {
-        scheduleRenderUsers();
-      });
+  const query = document.getElementById('user-search')?.value.trim().toLowerCase();
+  if (userSearchDebounceTimer) {
+    window.clearTimeout(userSearchDebounceTimer);
+    userSearchDebounceTimer = 0;
   }
+
+  if (!query) {
+    userSearchRequestToken += 1;
+    userSearchResults = [];
+    userSearchResultsQuery = '';
+    scheduleRenderUsers();
+    return;
+  }
+
+  userSearchDebounceTimer = window.setTimeout(() => {
+    userSearchDebounceTimer = 0;
+    void loadUserSearchResults(query).catch((error) => {
+      console.error('Failed to search users', error);
+    });
+  }, 180);
+
   scheduleRenderUsers();
 }
 
@@ -3929,6 +3989,59 @@ function renderBlockedUsers() {
     .join('');
 }
 
+function getBlockedUserIdSet() {
+  return new Set(
+    (Array.isArray(blockedUsers) ? blockedUsers : [])
+      .map((user) => user?.id)
+      .filter(Boolean),
+  );
+}
+
+function isBlockedDirectUser(user, blockedIds = getBlockedUserIdSet()) {
+  return Boolean(user && !isGroupConversation(user) && blockedIds.has(user.id));
+}
+
+function filterBlockedDirectUsers(collection, blockedIds = getBlockedUserIdSet()) {
+  if (!Array.isArray(collection) || !collection.length || !blockedIds.size) {
+    return Array.isArray(collection) ? collection : [];
+  }
+
+  return collection.filter((user) => !isBlockedDirectUser(user, blockedIds));
+}
+
+function applyBlockedUserFilters(options = {}) {
+  const { resetSelectedIfBlocked = true } = options;
+  const blockedIds = getBlockedUserIdSet();
+  if (!blockedIds.size) {
+    return false;
+  }
+
+  const nextUsers = filterBlockedDirectUsers(users, blockedIds);
+  const nextDirectory = filterBlockedDirectUsers(peopleDirectory, blockedIds);
+  const nextSearchResults = filterBlockedDirectUsers(userSearchResults, blockedIds);
+  const usersChanged = nextUsers.length !== users.length;
+  const directoryChanged = nextDirectory.length !== peopleDirectory.length;
+  const searchChanged = nextSearchResults.length !== userSearchResults.length;
+
+  users = nextUsers;
+  peopleDirectory = nextDirectory;
+  userSearchResults = nextSearchResults;
+
+  let selectionReset = false;
+  if (resetSelectedIfBlocked && isBlockedDirectUser(selectedUser, blockedIds)) {
+    resetSelectedConversation();
+    selectionReset = true;
+  }
+
+  if (usersChanged) {
+    updateChatCount();
+    renderUsers();
+    schedulePersistChatShellCache();
+  }
+
+  return usersChanged || directoryChanged || searchChanged || selectionReset;
+}
+
 async function loadBlockedUsers() {
   const res = await api('/users/blocks');
   const data = await readJsonResponse(res, [], 'Failed to load blocked users.');
@@ -3936,6 +4049,7 @@ async function loadBlockedUsers() {
     throw new Error(data.message || 'Failed to load blocked users');
   }
   blockedUsers = Array.isArray(data) ? data : [];
+  applyBlockedUserFilters();
   renderBlockedUsers();
 }
 
@@ -3961,7 +4075,8 @@ async function unblockUserFromSettings(userId) {
 
   blockedUsers = blockedUsers.filter((entry) => entry.id !== userId);
   renderBlockedUsers();
-  await loadUsers();
+  await Promise.all([loadUsers(), loadPeopleDirectory(true)]);
+  scheduleRenderUsers();
   if (selectedUser?.id === userId && !isGroupConversation(selectedUser)) {
     await loadChatPermission();
     updateSelectedUserHeader();
@@ -4241,8 +4356,123 @@ function closeChatContactPanel(event) {
   document.body.classList.remove('chat-contact-panel-open');
 }
 
+function getSharedMediaItemsByKind(kind = sharedMediaBrowserKind) {
+  const normalizedKind = kind === 'video' ? 'video' : 'image';
+  return sharedMediaItems.filter((item) => item?.kind === normalizedKind);
+}
+
+function getSharedMediaKindLabel(kind, count = 1) {
+  const normalizedKind = kind === 'video' ? 'video' : 'image';
+  if (normalizedKind === 'video') {
+    return count === 1 ? 'video' : 'videos';
+  }
+
+  return count === 1 ? 'photo' : 'photos';
+}
+
+function getSharedMediaItemById(itemId) {
+  return sharedMediaItems.find((item) => item?.id === itemId) || null;
+}
+
+function openSharedMediaItem(itemId) {
+  const item = getSharedMediaItemById(itemId);
+  if (!item?.fileUrl) {
+    return;
+  }
+
+  const fileUrl = getFileUrl(item.fileUrl);
+  if (item.kind === 'video') {
+    window.open(fileUrl, '_blank', 'noopener');
+    return;
+  }
+
+  openImagePreview(fileUrl);
+}
+
+function downloadSharedMediaItem(itemId) {
+  const item = getSharedMediaItemById(itemId);
+  if (!item?.fileUrl) {
+    return;
+  }
+
+  void downloadFile(
+    getFileUrl(item.fileUrl),
+    item.fileName || `${item.kind || 'media'}-${item.id}`,
+  ).catch((error) => {
+    alert(error?.message || 'Failed to download file');
+  });
+}
+
+function renderSharedMediaGroupCard(kind, items, options = {}) {
+  const { loading = false } = options;
+  const latestItem = items[0] || null;
+  const total = items.length;
+  const normalizedKind = kind === 'video' ? 'video' : 'image';
+  const isPhoto = normalizedKind === 'image';
+  const isDisabled = !loading && total === 0;
+  const summary = loading
+    ? `Loading ${getSharedMediaKindLabel(normalizedKind, 2)}...`
+    : total > 0
+      ? `${total} shared ${getSharedMediaKindLabel(normalizedKind, total)}`
+      : `No shared ${getSharedMediaKindLabel(normalizedKind, 2)} yet`;
+  const latestLabel = latestItem
+    ? latestItem.fileName || `Shared ${getSharedMediaKindLabel(normalizedKind)}`
+    : isPhoto
+      ? 'Photos will appear here'
+      : 'Videos will appear here';
+  const latestMeta = latestItem?.createdAt
+    ? formatShortDate(latestItem.createdAt)
+    : loading
+      ? 'Syncing...'
+      : 'Nothing shared yet';
+  const preview = loading
+    ? `<div class="h-28 animate-pulse rounded-[22px] bg-slate-100"></div>`
+    : isPhoto && latestItem?.fileUrl
+      ? `<img src="${escapeHtml(getFileUrl(latestItem.fileUrl))}" alt="${latestLabel}" loading="lazy" decoding="async" class="h-28 w-full rounded-[22px] border border-slate-200 object-cover">`
+      : `<div class="flex h-28 items-center justify-center rounded-[22px] border border-slate-200 ${isPhoto ? 'bg-slate-100 text-slate-500' : 'bg-slate-950 text-white'}">
+          <div class="text-center">
+            <p class="text-xs font-semibold uppercase tracking-[0.22em]">${isPhoto ? 'Photos' : 'Videos'}</p>
+            <p class="mt-2 text-sm font-medium ${isPhoto ? 'text-slate-500' : 'text-white/80'}">${escapeHtml(latestMeta)}</p>
+          </div>
+        </div>`;
+  const body = `
+    <div class="flex items-start justify-between gap-3">
+      <div>
+        <p class="text-sm font-semibold text-slate-900">${isPhoto ? 'Photos' : 'Videos'}</p>
+        <p class="mt-1 text-sm text-slate-500">${escapeHtml(summary)}</p>
+      </div>
+      <span class="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+        ${loading ? 'Syncing' : total > 0 ? 'Open' : 'Empty'}
+      </span>
+    </div>
+    <div class="mt-3">${preview}</div>
+    <div class="mt-3">
+      <p class="truncate text-sm font-semibold text-slate-700">${escapeHtml(latestLabel)}</p>
+      <p class="mt-1 text-xs text-slate-500">${escapeHtml(latestMeta)}</p>
+    </div>
+  `;
+
+  if (isDisabled) {
+    return `
+      <div class="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4 opacity-75">
+        ${body}
+      </div>
+    `;
+  }
+
+  return `
+    <button
+      type="button"
+      onclick="openSharedMediaBrowser('${normalizedKind}')"
+      class="w-full rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4 text-left transition hover:border-blue-200 hover:bg-white hover:shadow-sm"
+    >
+      ${body}
+    </button>
+  `;
+}
+
 function renderSharedMedia() {
-  const grid = document.getElementById('chat-contact-panel-media-grid');
+  const grid = document.getElementById('chat-contact-panel-media-groups');
   const count = document.getElementById('chat-contact-panel-media-count');
   if (!grid || !count) {
     return;
@@ -4251,40 +4481,199 @@ function renderSharedMedia() {
   if (!selectedUser) {
     count.textContent = 'No chat selected.';
     grid.innerHTML = '';
+    renderSharedMediaBrowser();
     return;
   }
 
-  if (!sharedMediaItems.length) {
+  if (sharedMediaLoading) {
+    count.textContent = 'Loading shared media...';
+    grid.innerHTML = [
+      renderSharedMediaGroupCard('image', [], { loading: true }),
+      renderSharedMediaGroupCard('video', [], { loading: true }),
+    ].join('');
+    renderSharedMediaBrowser();
+    return;
+  }
+
+  if (sharedMediaErrorMessage) {
+    count.textContent = sharedMediaErrorMessage;
+  } else if (!sharedMediaItems.length) {
     count.textContent = 'No shared photos or videos yet.';
+  } else {
+    count.textContent = `${sharedMediaItems.length} shared item${
+      sharedMediaItems.length === 1 ? '' : 's'
+    }`;
+  }
+
+  grid.innerHTML = [
+    renderSharedMediaGroupCard('image', getSharedMediaItemsByKind('image')),
+    renderSharedMediaGroupCard('video', getSharedMediaItemsByKind('video')),
+  ].join('');
+  renderSharedMediaBrowser();
+}
+
+function renderSharedMediaBrowser() {
+  const title = document.getElementById('shared-media-browser-title');
+  const count = document.getElementById('shared-media-browser-count');
+  const empty = document.getElementById('shared-media-browser-empty');
+  const grid = document.getElementById('shared-media-browser-grid');
+  const photosTab = document.getElementById('shared-media-browser-photos-tab');
+  const videosTab = document.getElementById('shared-media-browser-videos-tab');
+  if (!title || !count || !empty || !grid || !photosTab || !videosTab) {
+    return;
+  }
+
+  const isPhotoView = sharedMediaBrowserKind !== 'video';
+  const items = getSharedMediaItemsByKind(sharedMediaBrowserKind);
+  const label = isPhotoView ? 'photos' : 'videos';
+  const tabBaseClass =
+    'rounded-2xl border px-4 py-3 text-sm font-semibold transition';
+
+  title.textContent = isPhotoView ? 'Shared photos' : 'Shared videos';
+  if (!selectedUser) {
+    count.textContent = 'No chat selected.';
+  } else if (sharedMediaLoading) {
+    count.textContent = `Loading ${label}...`;
+  } else if (sharedMediaErrorMessage) {
+    count.textContent = sharedMediaErrorMessage;
+  } else {
+    count.textContent = `${items.length} ${getSharedMediaKindLabel(sharedMediaBrowserKind, items.length)} in ${displayName(selectedUser)}`;
+  }
+
+  photosTab.className = `${tabBaseClass} ${
+    isPhotoView
+      ? 'border-blue-200 bg-blue-50 text-blue-700'
+      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+  }`;
+  videosTab.className = `${tabBaseClass} ${
+    !isPhotoView
+      ? 'border-blue-200 bg-blue-50 text-blue-700'
+      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+  }`;
+
+  if (sharedMediaLoading) {
+    empty.classList.add('hidden');
+    grid.innerHTML = Array.from({ length: 4 })
+      .map(
+        () => `
+          <div class="overflow-hidden rounded-[24px] border border-slate-200 bg-white p-3">
+            <div class="h-44 animate-pulse rounded-[20px] bg-slate-100"></div>
+            <div class="mt-3 h-4 animate-pulse rounded bg-slate-100"></div>
+            <div class="mt-2 h-3 w-24 animate-pulse rounded bg-slate-100"></div>
+          </div>
+        `,
+      )
+      .join('');
+    return;
+  }
+
+  if (!selectedUser || !items.length) {
+    empty.classList.remove('hidden');
+    empty.textContent = !selectedUser
+      ? 'Pick a chat to browse shared media.'
+      : `No shared ${label} yet.`;
     grid.innerHTML = '';
     return;
   }
 
-  count.textContent = `${sharedMediaItems.length} shared item${
-    sharedMediaItems.length === 1 ? '' : 's'
-  }`;
-  grid.innerHTML = sharedMediaItems
+  empty.classList.add('hidden');
+  grid.innerHTML = items
     .map((item) => {
-      const fileUrl = getFileUrl(item.fileUrl);
-      const label = escapeHtml(item.fileName || item.kind || 'media');
+      const itemId = escapeHtml(item.id);
+      const fileUrl = escapeHtml(getFileUrl(item.fileUrl));
+      const label = escapeHtml(
+        item.fileName || `Shared ${getSharedMediaKindLabel(item.kind)}`,
+      );
+      const dateLabel = escapeHtml(
+        formatShortDate(item.createdAt) || formatRelativeTime(item.createdAt) || '',
+      );
 
       if (item.kind === 'video') {
         return `
-          <button type="button" onclick="window.open('${fileUrl}', '_blank', 'noopener')" class="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 text-left">
-            <div class="flex h-24 items-center justify-center bg-slate-950 text-xs font-semibold uppercase tracking-wide text-white">Video</div>
-            <div class="px-2 py-2 text-[11px] font-medium text-slate-600">${label}</div>
-          </button>
+          <div class="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
+            <button type="button" onclick="openSharedMediaItem('${itemId}')" class="block w-full overflow-hidden bg-slate-950 text-left">
+              <div class="relative h-48 bg-slate-950">
+                <video src="${fileUrl}" preload="metadata" muted playsinline class="h-full w-full object-cover"></video>
+                <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-950/10 to-transparent"></div>
+                <div class="pointer-events-none absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-900">
+                  Video
+                </div>
+              </div>
+            </button>
+            <div class="space-y-3 px-4 py-3">
+              <div class="flex items-center justify-between gap-3 text-xs text-slate-500">
+                <span>Shared video</span>
+                <span>${dateLabel}</span>
+              </div>
+              <p class="truncate text-sm font-semibold text-slate-800">${label}</p>
+              <div class="flex gap-2">
+                <button type="button" onclick="openSharedMediaItem('${itemId}')" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
+                  Open
+                </button>
+                <button type="button" onclick="downloadSharedMediaItem('${itemId}')" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
+                  Download
+                </button>
+              </div>
+            </div>
+          </div>
         `;
       }
 
       return `
-        <button type="button" onclick="openImagePreview('${fileUrl}')" class="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 text-left">
-          <img src="${fileUrl}" alt="${label}" loading="lazy" decoding="async" class="h-24 w-full object-cover">
-          <div class="px-2 py-2 text-[11px] font-medium text-slate-600">${label}</div>
-        </button>
+        <div class="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
+          <button type="button" onclick="openSharedMediaItem('${itemId}')" class="block w-full overflow-hidden bg-slate-100 text-left">
+            <img src="${fileUrl}" alt="${label}" loading="lazy" decoding="async" class="h-48 w-full object-cover">
+          </button>
+          <div class="space-y-3 px-4 py-3">
+            <div class="flex items-center justify-between gap-3 text-xs text-slate-500">
+              <span>Shared photo</span>
+              <span>${dateLabel}</span>
+            </div>
+            <p class="truncate text-sm font-semibold text-slate-800">${label}</p>
+            <div class="flex gap-2">
+              <button type="button" onclick="openSharedMediaItem('${itemId}')" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
+                Open
+              </button>
+              <button type="button" onclick="downloadSharedMediaItem('${itemId}')" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
+                Download
+              </button>
+            </div>
+          </div>
+        </div>
       `;
     })
     .join('');
+}
+
+function openSharedMediaBrowser(kind = 'image') {
+  if (!selectedUser) {
+    return;
+  }
+
+  sharedMediaBrowserKind = kind === 'video' ? 'video' : 'image';
+  renderSharedMediaBrowser();
+
+  const modal = document.getElementById('shared-media-browser-modal');
+  if (!modal) {
+    return;
+  }
+
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+}
+
+function closeSharedMediaBrowser(event) {
+  if (event && event.target !== event.currentTarget) {
+    return;
+  }
+
+  const modal = document.getElementById('shared-media-browser-modal');
+  if (!modal) {
+    return;
+  }
+
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
 }
 
 function togglePinnedConversation() {
@@ -4384,24 +4773,30 @@ function toggleSelectedMessageStar() {
 
 async function loadSharedMediaForSelectedConversation() {
   const count = document.getElementById('chat-contact-panel-media-count');
-  const grid = document.getElementById('chat-contact-panel-media-grid');
+  const grid = document.getElementById('chat-contact-panel-media-groups');
   if (!count || !grid) {
     return;
   }
 
   if (!selectedUser) {
     sharedMediaItems = [];
+    sharedMediaLoading = false;
+    sharedMediaErrorMessage = '';
     renderSharedMedia();
     return;
   }
 
-  count.textContent = 'Loading shared media...';
-  grid.innerHTML = '';
+  const requestedConversation = selectedUser;
+  const requestedConversationKey = getConversationCacheKey(requestedConversation);
+  sharedMediaItems = [];
+  sharedMediaLoading = true;
+  sharedMediaErrorMessage = '';
+  renderSharedMedia();
 
   try {
-    const query = isGroupConversation(selectedUser)
-      ? `groupId=${encodeURIComponent(selectedUser.id)}`
-      : `userId=${encodeURIComponent(selectedUser.id)}`;
+    const query = isGroupConversation(requestedConversation)
+      ? `groupId=${encodeURIComponent(requestedConversation.id)}`
+      : `userId=${encodeURIComponent(requestedConversation.id)}`;
     const res = await api(`/chat/media?${query}`);
     const data = await readJsonResponse(res, [], 'Failed to load shared media.');
 
@@ -4409,14 +4804,27 @@ async function loadSharedMediaForSelectedConversation() {
       throw new Error(data.message || 'Failed to load shared media');
     }
 
+    if (requestedConversationKey !== getConversationCacheKey(selectedUser)) {
+      return;
+    }
+
     sharedMediaItems = Array.isArray(data) ? data : [];
-    renderSharedMedia();
   } catch (error) {
+    if (requestedConversationKey !== getConversationCacheKey(selectedUser)) {
+      return;
+    }
+
     console.error(error);
     sharedMediaItems = [];
-    count.textContent =
+    sharedMediaErrorMessage =
       error?.message || 'Failed to load shared media right now.';
-    grid.innerHTML = '';
+  } finally {
+    if (requestedConversationKey !== getConversationCacheKey(selectedUser)) {
+      return;
+    }
+
+    sharedMediaLoading = false;
+    renderSharedMedia();
   }
 }
 
@@ -4523,6 +4931,9 @@ function updateChatContactPanel() {
     status.innerText = 'Offline';
     status.className = 'mt-1 text-sm font-medium text-slate-500';
     sharedMediaItems = [];
+    sharedMediaLoading = false;
+    sharedMediaErrorMessage = '';
+    closeSharedMediaBrowser();
     renderSharedMedia();
     renderStarredMessages();
     renderConversationSearchResults([]);
@@ -4565,6 +4976,7 @@ function updateChatContactPanel() {
   renameBtn?.classList.toggle('hidden', isGroup);
   blockBtn?.classList.toggle('hidden', isGroup);
   manageGroupBtn?.classList.toggle('hidden', !isGroup);
+  renderSharedMedia();
   renderStarredMessages();
   if (isChatContactPanelOpen()) {
     renderConversationSearchResults();
@@ -5125,6 +5537,9 @@ async function startApp() {
   loadLocalConversationPreferences();
   restoreChatShellCache();
   restoreConversationHistoryCacheFromSession();
+  void loadBlockedUsers().catch((error) => {
+    console.warn('Blocked users prefetch skipped', error);
+  });
   document.getElementById('auth-screen').classList.add('hidden');
 
   const chatId = new URLSearchParams(window.location.search).get('chat');
@@ -5147,11 +5562,6 @@ async function startApp() {
   }
 
   prefetchSettingsShell();
-  scheduleIdleWork(() => {
-    void loadPeopleDirectory().catch((error) => {
-      console.warn('Directory prefetch skipped', error);
-    });
-  }, 1500);
   connectSocket();
   void setupNotifications().catch((error) => {
     console.warn('Push notification setup skipped', error);
@@ -5162,6 +5572,13 @@ async function startApp() {
     return;
   }
   if (chatId) {
+    if (!findKnownDirectUserById(chatId)) {
+      try {
+        await loadUserSearchResults(chatId);
+      } catch (error) {
+        console.warn('Detached chat lookup skipped', error);
+      }
+    }
     await selectUser(chatId);
   }
 }
@@ -5467,17 +5884,24 @@ async function loadUsers() {
       );
     });
 
-    users = [...directUsers, ...groupUsers];
+    users = filterBlockedDirectUsers([...directUsers, ...groupUsers]);
 
-    if (selectedUser && !users.some((user) => user.id === selectedUser.id)) {
+    if (selectedUser) {
       const fallbackKey = `${selectedUser.chatType || 'direct'}:${selectedUser.id}`;
-      users = [
-        normalizeUser(
-          selectedUser,
-          existingByKey.get(fallbackKey) || selectedUser,
-        ),
-        ...users,
-      ];
+      const shouldKeepSelectedConversationVisible =
+        isGroupConversation(selectedUser) || recentByKey.has(fallbackKey);
+      if (
+        shouldKeepSelectedConversationVisible &&
+        !users.some((user) => userListKey(user) === fallbackKey)
+      ) {
+        users = [
+          normalizeUser(
+            selectedUser,
+            existingByKey.get(fallbackKey) || selectedUser,
+          ),
+          ...users,
+        ];
+      }
     }
 
     users
@@ -5527,16 +5951,65 @@ async function loadPeopleDirectory(force = false) {
     throw new Error(data.message || 'Failed to load users');
   }
 
-  peopleDirectory = data.map((user) =>
-    normalizeUser({ ...user, chatType: 'direct' }),
+  peopleDirectory = filterBlockedDirectUsers(
+    data.map((user) => normalizeUser({ ...user, chatType: 'direct' })),
   );
   peopleDirectoryLoaded = true;
   return peopleDirectory;
 }
 
+async function loadUserSearchResults(query) {
+  const requestQuery = String(query || '').trim();
+  const normalizedQuery = requestQuery.toLowerCase();
+  if (!requestQuery) {
+    userSearchResults = [];
+    userSearchResultsQuery = '';
+    scheduleRenderUsers();
+    return userSearchResults;
+  }
+
+  if (userSearchResultsQuery === normalizedQuery && userSearchResults.length) {
+    return userSearchResults;
+  }
+
+  const requestToken = ++userSearchRequestToken;
+  const res = await api(`/users?q=${encodeURIComponent(requestQuery)}`);
+  const data = await readJsonResponse(res, [], 'Failed to search users.');
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to search users');
+  }
+
+  if (requestToken !== userSearchRequestToken) {
+    return userSearchResults;
+  }
+
+  userSearchResults = filterBlockedDirectUsers(
+    data.map((user) => normalizeUser({ ...user, chatType: 'direct' })),
+  );
+  userSearchResultsQuery = normalizedQuery;
+  scheduleRenderUsers();
+  return userSearchResults;
+}
+
+function findKnownDirectUserById(userId) {
+  if (!userId) {
+    return null;
+  }
+
+  return (
+    users.find((user) => !isGroupConversation(user) && user.id === userId) ||
+    userSearchResults.find((user) => user.id === userId) ||
+    peopleDirectory.find((user) => user.id === userId) ||
+    null
+  );
+}
+
 function getSearchUserPool() {
-  const directUsers = peopleDirectoryLoaded
-    ? peopleDirectory.map((user) => {
+  const query = document.getElementById('user-search')?.value.trim().toLowerCase();
+  const matchingSearchResults =
+    query && userSearchResultsQuery === query ? userSearchResults : [];
+  const directUsers = matchingSearchResults.length
+    ? matchingSearchResults.map((user) => {
         const existing = users.find(
           (entry) => !isGroupConversation(entry) && entry.id === user.id,
         );
@@ -6001,6 +6474,20 @@ function emitSocketEvent(eventName, payload) {
   });
 }
 
+function disconnectSocketForPageExit() {
+  if (!socket) {
+    return;
+  }
+
+  try {
+    socket.disconnect();
+  } catch (error) {
+    console.warn('Failed to close realtime connection during page exit', error);
+  } finally {
+    socket = null;
+  }
+}
+
 function connectSocket() {
   if (socket) {
     socket.disconnect();
@@ -6009,6 +6496,7 @@ function connectSocket() {
   socket = io(API_URL, {
     auth: { token },
     transports: ['websocket', 'polling'],
+    closeOnBeforeunload: true,
   });
 
   socket.on('connect', () => {
@@ -6262,9 +6750,12 @@ async function handleIncomingMessage(message, isOwnMessage) {
 
 async function selectUser(userId) {
   rememberActiveConversationScroll();
-  const fallbackUser = getSearchUserPool().find((user) => user.id === userId);
-  selectedUser =
-    users.find((user) => user.id === userId) || fallbackUser || null;
+  const fallbackUser =
+    getSearchUserPool().find((user) => user.id === userId) ||
+    findKnownDirectUserById(userId);
+  const matchedSidebarUser = users.find((user) => user.id === userId) || null;
+  selectedUser = matchedSidebarUser || fallbackUser || null;
+  detachedSelectedUser = Boolean(selectedUser && !matchedSidebarUser);
 
   if (!selectedUser) return;
 
@@ -6273,7 +6764,7 @@ async function selectUser(userId) {
 
   const conversationState = activateConversationHistory(selectedUser);
 
-  if (!users.some((user) => user.id === selectedUser.id)) {
+  if (!detachedSelectedUser && !users.some((user) => user.id === selectedUser.id)) {
     users = [selectedUser, ...users];
   }
 
@@ -6872,6 +7363,7 @@ async function toggleBlockedUser() {
     return;
   }
 
+  const targetUserId = selectedUser.id;
   const isBlockedByMe = Boolean(chatPermission.blockedByMe);
   const confirmed = window.confirm(
     isBlockedByMe
@@ -6904,13 +7396,30 @@ async function toggleBlockedUser() {
     return;
   }
 
-  await loadUsers();
-  await loadBlockedUsers().catch((error) => {
-    console.error('Failed to refresh blocked users', error);
-  });
-  await loadChatPermission();
-  syncSelectedUser();
-  updateSelectedUserHeader();
+  if (!isBlockedByMe) {
+    resetSelectedConversation();
+  }
+
+  await Promise.all([
+    loadUsers(),
+    loadPeopleDirectory(true),
+    loadBlockedUsers().catch((error) => {
+      console.error('Failed to refresh blocked users', error);
+    }),
+  ]);
+  scheduleRenderUsers();
+  if (isBlockedByMe) {
+    const restoredUser =
+      users.find((user) => user.id === targetUserId) ||
+      peopleDirectory.find((user) => user.id === targetUserId) ||
+      null;
+    if (restoredUser) {
+      selectedUser = restoredUser;
+      await loadChatPermission();
+      syncSelectedUser();
+      updateSelectedUserHeader();
+    }
+  }
   alert(data.message || (isBlockedByMe ? 'User unblocked.' : 'User blocked.'));
 }
 
@@ -9509,10 +10018,7 @@ function forceSessionLogout(message = '') {
   token = null;
   currentUser = null;
 
-  if (socket) {
-    socket.disconnect();
-    socket = null;
-  }
+  disconnectSocketForPageExit();
 
   if (backgroundUsersRefreshTimer) {
     window.clearTimeout(backgroundUsersRefreshTimer);
@@ -9640,6 +10146,7 @@ document.addEventListener('keydown', (event) => {
   }
 
   closeImagePreview();
+  closeSharedMediaBrowser();
   closeComposerActionsMenu();
   closeChatActionsMenu();
   closeChatContactPanel();
@@ -9712,6 +10219,18 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) {
     retryConversationDecryption();
   }
+});
+
+window.addEventListener('beforeunload', () => {
+  disconnectSocketForPageExit();
+});
+
+window.addEventListener('pagehide', (event) => {
+  if (event.persisted) {
+    return;
+  }
+
+  disconnectSocketForPageExit();
 });
 
 window.addEventListener('online', () => {

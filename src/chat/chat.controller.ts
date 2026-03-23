@@ -125,6 +125,15 @@ export class ChatController {
       req.user.userId,
     );
     this.chatGateway.emitRequestUpdate(request);
+    this.chatGateway.emitConversationRefresh(
+      [request.senderId, request.receiverId],
+      {
+        otherUserId:
+          request.senderId === req.user.userId
+            ? request.receiverId
+            : request.senderId,
+      },
+    );
     return request;
   }
 

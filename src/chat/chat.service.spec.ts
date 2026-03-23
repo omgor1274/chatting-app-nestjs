@@ -23,6 +23,7 @@ describe('ChatService', () => {
     };
     chatRequest: {
       findFirst: jest.Mock;
+      findMany: jest.Mock;
       create: jest.Mock;
       findUnique: jest.Mock;
       update: jest.Mock;
@@ -59,6 +60,7 @@ describe('ChatService', () => {
       },
       chatRequest: {
         findFirst: jest.fn(),
+        findMany: jest.fn(),
         create: jest.fn(),
         findUnique: jest.fn(),
         update: jest.fn(),
@@ -183,6 +185,13 @@ describe('ChatService', () => {
     prisma.userBlock.findMany.mockResolvedValue([]);
     prisma.groupMember.findMany.mockResolvedValue([]);
     prisma.message.findMany.mockResolvedValueOnce([]);
+    prisma.chatRequest.findMany.mockResolvedValue([
+      {
+        senderId: 'user-1',
+        receiverId: 'user-2',
+        createdAt: new Date('2026-03-23T00:00:00.000Z'),
+      },
+    ]);
     prisma.user.findMany.mockResolvedValue([
       {
         id: 'user-2',
@@ -201,8 +210,49 @@ describe('ChatService', () => {
         id: 'user-2',
         chatType: 'direct',
         displayName: 'User Two',
+        lastMessagePreview: 'Chat request accepted',
       }),
     ]);
+  });
+
+  it('does not return unrelated users without an accepted request or message history', async () => {
+    prisma.userBlock.findMany.mockResolvedValue([]);
+    prisma.groupMember.findMany.mockResolvedValue([]);
+    prisma.message.findMany.mockResolvedValueOnce([]);
+    prisma.chatRequest.findMany.mockResolvedValue([]);
+    prisma.user.findMany.mockResolvedValue([]);
+    prisma.contactPreference.findMany.mockResolvedValue([]);
+
+    const result = await service.getRecentChats('user-1');
+
+    expect(result).toEqual([]);
+  });
+
+  it('hides direct chats when either side has blocked the other user', async () => {
+    prisma.userBlock.findMany.mockResolvedValue([
+      { blockerId: 'user-1', blockedUserId: 'user-2' },
+      { blockerId: 'user-3', blockedUserId: 'user-1' },
+    ]);
+    prisma.groupMember.findMany.mockResolvedValue([]);
+    prisma.message.findMany.mockResolvedValueOnce([]);
+    prisma.chatRequest.findMany.mockResolvedValue([
+      {
+        senderId: 'user-1',
+        receiverId: 'user-2',
+        createdAt: new Date('2026-03-23T00:00:00.000Z'),
+      },
+      {
+        senderId: 'user-3',
+        receiverId: 'user-1',
+        createdAt: new Date('2026-03-23T00:00:00.000Z'),
+      },
+    ]);
+    prisma.user.findMany.mockResolvedValue([]);
+    prisma.contactPreference.findMany.mockResolvedValue([]);
+
+    await service.getRecentChats('user-1');
+
+    expect(prisma.user.findMany).not.toHaveBeenCalled();
   });
 
   it('treats only the latest pending request as authoritative', async () => {

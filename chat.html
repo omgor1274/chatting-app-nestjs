@@ -28,7 +28,7 @@
     <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="./public/app.css?v=20260323-smooth10" />
+    <link rel="stylesheet" href="./public/app.css?v=20260323-smooth11" />
   </head>
 
   <body class="chat-page mobile-page min-h-screen bg-slate-100 text-slate-900 lg:p-3">
@@ -903,7 +903,7 @@
             <div class="flex items-center justify-between gap-3">
               <div>
                 <p class="text-sm font-semibold text-slate-900">
-                  Media, photos and videos
+                  Shared media
                 </p>
                 <p
                   id="chat-contact-panel-media-count"
@@ -914,8 +914,8 @@
               </div>
             </div>
             <div
-              id="chat-contact-panel-media-grid"
-              class="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-4"
+              id="chat-contact-panel-media-groups"
+              class="mt-4 grid gap-3 sm:grid-cols-2"
             ></div>
           </section>
 
@@ -2082,6 +2082,80 @@
     </div>
 
     <div
+      id="shared-media-browser-modal"
+      class="modal-backdrop fixed inset-0 z-[79] hidden items-center justify-center p-0 sm:p-4"
+      onclick="closeSharedMediaBrowser(event)"
+    >
+      <div
+        class="flex h-[100dvh] w-full max-w-5xl flex-col overflow-hidden bg-white shadow-2xl sm:h-[min(92vh,860px)] sm:rounded-[30px] sm:border sm:border-white/20"
+        onclick="event.stopPropagation()"
+      >
+        <div
+          class="flex items-center justify-between gap-4 border-b border-slate-200 bg-white/90 px-4 py-4 backdrop-blur sm:px-6"
+        >
+          <div>
+            <p
+              class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400"
+            >
+              Shared Media
+            </p>
+            <h3
+              id="shared-media-browser-title"
+              class="display-font mt-1 text-2xl font-bold text-slate-900"
+            >
+              Shared photos
+            </h3>
+            <p
+              id="shared-media-browser-count"
+              class="mt-1 text-sm text-slate-500"
+            >
+              Loading shared media...
+            </p>
+          </div>
+          <button
+            type="button"
+            onclick="closeSharedMediaBrowser()"
+            class="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+          >
+            Close
+          </button>
+        </div>
+        <div class="border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
+          <div class="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              id="shared-media-browser-photos-tab"
+              onclick="openSharedMediaBrowser('image')"
+              class="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 transition"
+            >
+              Photos
+            </button>
+            <button
+              type="button"
+              id="shared-media-browser-videos-tab"
+              onclick="openSharedMediaBrowser('video')"
+              class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+            >
+              Videos
+            </button>
+          </div>
+        </div>
+        <div class="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+          <div
+            id="shared-media-browser-empty"
+            class="hidden rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500"
+          >
+            No shared media yet.
+          </div>
+          <div
+            id="shared-media-browser-grid"
+            class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+          ></div>
+        </div>
+      </div>
+    </div>
+
+    <div
       id="image-preview-modal"
       class="modal-backdrop hidden fixed inset-0 z-[80] p-4 sm:p-6 items-center justify-center"
       onclick="closeImagePreview()"
@@ -2155,7 +2229,7 @@
         window.location.replace('/auth');
       } else {
         loadScript('https://cdn.socket.io/4.7.2/socket.io.min.js')
-          .then(() => loadScript('/public/app.js?v=20260323-smooth11'))
+          .then(() => loadScript('/public/app.js?v=20260323-smooth16'))
           .catch((error) =>
             console.error('Failed to load chat runtime', error),
           );

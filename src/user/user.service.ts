@@ -365,8 +365,9 @@ export class UserService {
   }
 
   async searchUsers(userId: string, query?: string) {
-    const blockedByOthers = await this.getBlockedUserIds(userId, {
-      blockedByMe: false,
+    const normalizedQuery = query?.trim();
+    const blockedUserIds = await this.getBlockedUserIds(userId, {
+      blockedByMe: true,
       blockedMe: true,
     });
 
@@ -375,13 +376,24 @@ export class UserService {
         where: {
           id: {
             not: userId,
-            notIn: Array.from(blockedByOthers),
+            notIn: Array.from(blockedUserIds),
           },
           emailVerified: true,
-          OR: query
+          OR: normalizedQuery
             ? [
-                { email: { contains: query, mode: 'insensitive' } },
-                { name: { contains: query, mode: 'insensitive' } },
+                { id: normalizedQuery },
+                {
+                  email: {
+                    contains: normalizedQuery,
+                    mode: 'insensitive',
+                  },
+                },
+                {
+                  name: {
+                    contains: normalizedQuery,
+                    mode: 'insensitive',
+                  },
+                },
               ]
             : undefined,
         },
