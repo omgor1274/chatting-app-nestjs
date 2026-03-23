@@ -142,7 +142,7 @@ let sharedMediaErrorMessage = '';
 let sharedMediaBrowserKind = 'image';
 const OFFLINE_QUEUE_KEY = 'ochat_offline_message_queue';
 const RINGTONE_PREFERENCE_KEY = 'ochat_ringtone_preference';
-const CLIENT_CACHE_VERSION = '20260323-smooth19';
+const CLIENT_CACHE_VERSION = '20260323-smooth20';
 const CHAT_SHELL_CACHE_TTL_MS = 2 * 60 * 1000;
 const CHAT_SHELL_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const CONVERSATION_CACHE_TTL_MS = 90 * 1000;
@@ -2619,6 +2619,7 @@ function uploadFormDataWithProgress(path, formData, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${API_URL}${path}`);
+    xhr.timeout = 90 * 1000;
 
     if (token) {
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
@@ -2633,13 +2634,31 @@ function uploadFormDataWithProgress(path, formData, onProgress) {
     };
 
     xhr.onerror = () => {
-      reject(new Error('Network error while uploading attachment'));
+      reject(
+        createUploadRequestError(
+          'Network error while uploading attachment',
+          xhr.status,
+          'Network error while uploading attachment',
+          'NETWORK_ERROR',
+        ),
+      );
+    };
+
+    xhr.ontimeout = () => {
+      reject(
+        createUploadRequestError(
+          'Upload timed out while sending the attachment',
+          0,
+          'Upload timed out while sending the attachment',
+          'UPLOAD_TIMEOUT',
+        ),
+      );
     };
 
     xhr.onload = () => {
       if (xhr.status === 401 && token) {
         forceSessionLogout('Your session expired. Please log in again.');
-        reject(new Error('Session expired'));
+        reject(createUploadRequestError('Session expired', 401));
         return;
       }
 
@@ -2659,7 +2678,12 @@ function uploadFormDataWithProgress(path, formData, onProgress) {
       }
 
       if (xhr.status < 200 || xhr.status >= 300) {
-        reject(new Error(data.message || 'Failed to upload attachment'));
+        reject(
+          createUploadRequestError(
+            data.message || 'Failed to upload attachment',
+            xhr.status,
+          ),
+        );
         return;
       }
 
@@ -2708,7 +2732,13 @@ function buildUploadConversationTarget(user = selectedUser) {
 
 function isRecoverableUploadError(error) {
   const status = Number(error?.status || 0);
-  return !status || status >= 500;
+  const code = String(error?.code || '').toUpperCase();
+
+  if (['NETWORK_ERROR', 'UPLOAD_TIMEOUT'].includes(code)) {
+    return true;
+  }
+
+  return !status || [408, 425, 429, 502, 503, 504].includes(status);
 }
 
 function createUploadRequestError(
@@ -2873,11 +2903,39 @@ function createAttachmentUploadTask(file, conversation) {
     totalChunks: 0,
     chunkSize: 0,
     autoRetryCount: 0,
+    directUploadFallbackAttempted: false,
     errorMessage: '',
     previewUrl,
     completedMessageId: null,
     pauseRequested: false,
   };
+}
+
+function buildAttachmentUploadFormData(file, conversation) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  if (conversation?.groupId) {
+    formData.append('groupId', conversation.groupId);
+    return formData;
+  }
+
+  if (conversation?.receiverId) {
+    formData.append('receiverId', conversation.receiverId);
+    return formData;
+  }
+
+  if (conversation?.chatType === 'group' && conversation?.id) {
+    formData.append('groupId', conversation.id);
+    return formData;
+  }
+
+  if (conversation?.id) {
+    formData.append('receiverId', conversation.id);
+    return formData;
+  }
+
+  throw new Error('No chat selected');
 }
 
 async function compressImageFileIfNeeded(file) {
@@ -3264,6 +3322,34 @@ async function cancelAttachmentUploadSession(task) {
   await readJsonResponse(res, {}, 'Failed to cancel the upload session.');
 }
 
+function shouldAttemptDirectAttachmentUploadFallback(task, error) {
+  if (
+    !task?.file ||
+    !task?.conversation ||
+    task.directUploadFallbackAttempted ||
+    task.pauseRequested ||
+    !navigator.onLine
+  ) {
+    return false;
+  }
+
+  if (Number(task.uploadedBytes || 0) > 0) {
+    return false;
+  }
+
+  const status = Number(error?.status || 0);
+  const code = String(error?.code || '').toUpperCase();
+
+  return (
+    !status ||
+    status === 500 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504 ||
+    ['NETWORK_ERROR', 'UPLOAD_TIMEOUT'].includes(code)
+  );
+}
+
 function scheduleAttachmentUploadRetry(task) {
   if (task.autoRetryCount >= MAX_ATTACHMENT_UPLOAD_AUTO_RETRIES) {
     task.status = 'failed';
@@ -3291,6 +3377,45 @@ function scheduleAttachmentUploadRetry(task) {
       console.error('Failed to resume upload queue', error);
     });
   }, delay);
+}
+
+async function uploadAttachmentTaskWithDirectEndpoint(task) {
+  if (!task?.file || !task.conversation) {
+    throw new Error('Upload task is missing file data');
+  }
+
+  task.directUploadFallbackAttempted = true;
+  task.status = 'uploading';
+  task.errorMessage = '';
+  task.progressBytes = 0;
+  renderAttachmentUploadQueue();
+
+  const message = await uploadFormDataWithProgress(
+    '/chat/attachments',
+    buildAttachmentUploadFormData(task.file, task.conversation),
+    (loaded) => {
+      task.progressBytes = Math.min(task.file.size, loaded);
+      renderAttachmentUploadQueue();
+    },
+  );
+
+  task.status = 'completed';
+  task.progressBytes = task.file.size;
+  task.uploadedBytes = task.file.size;
+  task.errorMessage = '';
+  renderAttachmentUploadQueue();
+
+  if (task.sessionId) {
+    await cancelAttachmentUploadSession(task).catch((error) => {
+      console.warn(
+        'Failed to clean up chunked upload session after direct upload fallback',
+        error,
+      );
+    });
+  }
+
+  await handleIncomingMessage(message, true);
+  removeAttachmentUploadTask(task.id);
 }
 
 async function uploadAttachmentTask(task) {
@@ -3415,16 +3540,34 @@ async function processAttachmentUploadQueue() {
     ) {
       nextTask.status = 'cancelled';
       nextTask.errorMessage = 'Upload stopped';
-    } else if (isRecoverableUploadError(error)) {
-      try {
-        await syncAttachmentUploadSession(nextTask);
-      } catch (syncError) {
-        console.error('Failed to sync upload after recoverable error', syncError);
-      }
-      scheduleAttachmentUploadRetry(nextTask);
     } else {
-      nextTask.status = 'failed';
-      nextTask.errorMessage = error?.message || 'Upload failed';
+      let resolvedError = error;
+
+      if (shouldAttemptDirectAttachmentUploadFallback(nextTask, error)) {
+        try {
+          await uploadAttachmentTaskWithDirectEndpoint(nextTask);
+          nextTask.autoRetryCount = 0;
+          return;
+        } catch (fallbackError) {
+          console.error(
+            'Attachment direct upload fallback failed',
+            fallbackError,
+          );
+          resolvedError = fallbackError;
+        }
+      }
+
+      if (isRecoverableUploadError(resolvedError)) {
+        try {
+          await syncAttachmentUploadSession(nextTask);
+        } catch (syncError) {
+          console.error('Failed to sync upload after recoverable error', syncError);
+        }
+        scheduleAttachmentUploadRetry(nextTask);
+      } else {
+        nextTask.status = 'failed';
+        nextTask.errorMessage = resolvedError?.message || 'Upload failed';
+      }
     }
   } finally {
     if (activeAttachmentUploadTaskId === nextTask.id) {
@@ -8127,11 +8270,9 @@ async function uploadAttachment(file, user = selectedUser) {
     return;
   }
 
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append(
-    isGroupConversation(user) ? 'groupId' : 'receiverId',
-    user.id,
+  const formData = buildAttachmentUploadFormData(
+    file,
+    buildUploadConversationTarget(user),
   );
   const sendStatus = document.getElementById('chat-send-status');
 
