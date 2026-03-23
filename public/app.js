@@ -142,7 +142,7 @@ let sharedMediaErrorMessage = '';
 let sharedMediaBrowserKind = 'image';
 const OFFLINE_QUEUE_KEY = 'ochat_offline_message_queue';
 const RINGTONE_PREFERENCE_KEY = 'ochat_ringtone_preference';
-const CLIENT_CACHE_VERSION = '20260323-smooth18';
+const CLIENT_CACHE_VERSION = '20260323-smooth19';
 const CHAT_SHELL_CACHE_TTL_MS = 2 * 60 * 1000;
 const CHAT_SHELL_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const CONVERSATION_CACHE_TTL_MS = 90 * 1000;
@@ -477,6 +477,55 @@ async function restorePrivateKeyBackupForUser(
       unlockMaterial,
     )) || ''
   );
+}
+
+async function resolveCurrentUserPrivateKeyForBackup() {
+  if (!currentUser?.id) {
+    return '';
+  }
+
+  const storedPrivateKey = localStorage.getItem(
+    privateKeyStorageKey(currentUser.id),
+  );
+  if (storedPrivateKey) {
+    return storedPrivateKey;
+  }
+
+  if (
+    !currentUser.privateKeyBackupCiphertext ||
+    !currentUser.privateKeyBackupIv
+  ) {
+    return '';
+  }
+
+  try {
+    const restoredPrivateKey = await restorePrivateKeyBackupForUser(
+      currentUser.id,
+      currentUser.privateKeyBackupCiphertext,
+      currentUser.privateKeyBackupIv,
+    );
+    if (!restoredPrivateKey) {
+      return '';
+    }
+
+    localStorage.setItem(
+      privateKeyStorageKey(currentUser.id),
+      restoredPrivateKey,
+    );
+    if (currentUser.publicKey) {
+      localStorage.setItem(
+        publicKeyStorageKey(currentUser.id),
+        currentUser.publicKey,
+      );
+    }
+    return restoredPrivateKey;
+  } catch (error) {
+    console.warn(
+      'Failed to restore your message key before changing password',
+      error,
+    );
+    return '';
+  }
 }
 
 function canUseWebPush() {
@@ -1369,7 +1418,7 @@ function clearScopedRuntimeCaches() {
 }
 
 function prefetchSettingsShell() {
-  const hrefs = ['/settings', '/public/settings.js?v=20260323-smooth2'];
+  const hrefs = ['/settings', '/public/settings.js?v=20260323-smooth3'];
 
   hrefs.forEach((href) => {
     if (document.head.querySelector(`link[rel="prefetch"][href="${href}"]`)) {
@@ -5997,7 +6046,16 @@ async function changePassword() {
 
   let keyBackupPayload = null;
   if (currentUser.id && newPassword) {
-    const privateKey = localStorage.getItem(privateKeyStorageKey(currentUser.id));
+    const hasStoredPrivateKeyBackup = Boolean(
+      currentUser.privateKeyBackupCiphertext && currentUser.privateKeyBackupIv,
+    );
+    const privateKey = await resolveCurrentUserPrivateKeyForBackup();
+    if (hasStoredPrivateKeyBackup && !privateKey) {
+      alert(
+        'Please log in again on this device before changing your password so O-chat can refresh your encrypted message key backup.',
+      );
+      return;
+    }
     if (privateKey) {
       try {
         const deriveUnlockMaterial =

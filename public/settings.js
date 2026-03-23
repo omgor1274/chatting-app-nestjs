@@ -2,6 +2,7 @@ import {
   api,
   clearToken,
   clearKeyBackupUnlockMaterial,
+  decryptPrivateKeyBackup,
   deriveKeyBackupUnlockMaterial,
   encryptPrivateKeyBackup,
   getAvatarUrl,
@@ -9,11 +10,13 @@ import {
   getToken,
   hasValidSession,
   loadPublicConfig,
+  readKeyBackupUnlockMaterial,
   readJsonResponse,
 } from './runtime.js?v=20260323-smooth2';
 
 const LAST_CHAT_ROUTE_KEY = 'chat_last_route';
 let currentProfileId = '';
+let currentProfile = null;
 
 function getById(id) {
   return document.getElementById(id);
@@ -97,7 +100,7 @@ function updateCloseLink() {
 function prefetchChatShell() {
   const hrefs = [
     getLastChatRoute(),
-    '/public/app.js?v=20260323-smooth18',
+    '/public/app.js?v=20260323-smooth19',
     '/public/runtime.js?v=20260323-smooth2',
     '/public/app.css?v=20260323-smooth11',
   ];
@@ -273,6 +276,7 @@ async function loadProfile() {
     throw new Error(data?.message || 'Failed to load profile');
   }
 
+  currentProfile = data;
   currentProfileId = data.id;
 
   getById('settings-current-name').textContent = data.name || 'Your profile';
@@ -289,6 +293,47 @@ async function loadProfile() {
   getById('settings-backup-videos-input').checked = Boolean(data.backupVideos);
   getById('settings-backup-files-input').checked = Boolean(data.backupFiles);
   applyDarkMode(Boolean(data.darkMode));
+}
+
+async function resolveCurrentProfilePrivateKey() {
+  if (!currentProfileId) {
+    return '';
+  }
+
+  const storedPrivateKey = localStorage.getItem(
+    `chat_private_key_${currentProfileId}`,
+  );
+  if (storedPrivateKey) {
+    return storedPrivateKey;
+  }
+
+  if (
+    !currentProfile?.privateKeyBackupCiphertext ||
+    !currentProfile?.privateKeyBackupIv
+  ) {
+    return '';
+  }
+
+  const unlockMaterial = readKeyBackupUnlockMaterial(currentProfileId);
+  if (!unlockMaterial) {
+    return '';
+  }
+
+  try {
+    return (
+      (await decryptPrivateKeyBackup(
+        currentProfile.privateKeyBackupCiphertext,
+        currentProfile.privateKeyBackupIv,
+        unlockMaterial,
+      )) || ''
+    );
+  } catch (error) {
+    console.warn(
+      'Failed to restore your message key before changing password',
+      error,
+    );
+    return '';
+  }
 }
 
 async function saveProfile(event) {
@@ -356,7 +401,18 @@ async function changePassword(event) {
 
   let keyBackupPayload = null;
   if (currentProfileId && newPassword) {
-    const privateKey = localStorage.getItem(`chat_private_key_${currentProfileId}`);
+    const hasStoredPrivateKeyBackup = Boolean(
+      currentProfile?.privateKeyBackupCiphertext &&
+        currentProfile?.privateKeyBackupIv,
+    );
+    const privateKey = await resolveCurrentProfilePrivateKey();
+    if (hasStoredPrivateKeyBackup && !privateKey) {
+      showFeedback(
+        'Please log in again on this device before changing your password so O-chat can refresh your encrypted message key backup.',
+        'error',
+      );
+      return;
+    }
     if (privateKey) {
       try {
         const unlockMaterial = await deriveKeyBackupUnlockMaterial(
