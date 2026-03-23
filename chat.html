@@ -429,7 +429,7 @@
           class="mobile-chat-header hidden items-center gap-3 border-b border-slate-200 bg-white/88 px-3 py-2.5 backdrop-blur sm:px-4 lg:px-5"
         >
           <button
-            onclick="openSidebar()"
+            onclick="showUsersList()"
             class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 lg:hidden"
           >
             Back
@@ -1927,7 +1927,7 @@
         window.location.replace('/auth');
       } else {
         loadScript('https://cdn.socket.io/4.7.2/socket.io.min.js')
-          .then(() => loadScript('/public/app.js?v=20260323-speed1'))
+          .then(() => loadScript('/public/app.js?v=20260323-userslist1'))
           .catch((error) =>
             console.error('Failed to load chat runtime', error),
           );

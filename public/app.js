@@ -90,6 +90,8 @@ let manageGroupAvatarShouldClear = false;
 let presenceRefreshPromise = null;
 let groupDetailsCache = new Map();
 const NOTIFICATION_PERMISSION_KEY = 'ochat_notification_permission_requested';
+const MESSAGE_ACTION_TOUCH_HOLD_MS = 1800;
+const MESSAGE_ACTION_MOVE_TOLERANCE_PX = 14;
 let activeCall = {
   peer: null,
   localStream: null,
@@ -2732,6 +2734,13 @@ function setSidebarVisibility(open) {
 }
 
 function openSidebar() {
+  setSidebarVisibility(true);
+}
+
+function showUsersList() {
+  if (window.innerWidth < 1024) {
+    resetSelectedConversation();
+  }
   setSidebarVisibility(true);
 }
 
@@ -6940,18 +6949,53 @@ function createMessageElement(message) {
     event.preventDefault();
     openMessageActions(event.clientX, event.clientY, message);
   };
+
+  const clearHoldTimer = () => {
+    if (div._holdTimer) {
+      clearTimeout(div._holdTimer);
+      div._holdTimer = null;
+    }
+  };
+
   div.onpointerdown = (event) => {
-    if (event.pointerType === 'mouse' && event.button !== 0) {
+    const isTouchLikePointer =
+      event.pointerType === 'touch' ||
+      event.pointerType === 'pen' ||
+      !event.pointerType;
+
+    if (!isTouchLikePointer) {
       return;
     }
-    const x = event.clientX;
-    const y = event.clientY;
+
+    clearHoldTimer();
+    const holdX = event.clientX;
+    const holdY = event.clientY;
+    div._holdStartX = holdX;
+    div._holdStartY = holdY;
     div._holdTimer = window.setTimeout(() => {
-      openMessageActions(x, y, message);
-    }, 450);
+      div._holdTimer = null;
+      openMessageActions(holdX, holdY, message);
+    }, MESSAGE_ACTION_TOUCH_HOLD_MS);
   };
-  div.onpointerup = () => clearTimeout(div._holdTimer);
-  div.onpointerleave = () => clearTimeout(div._holdTimer);
+
+  div.onpointermove = (event) => {
+    if (!div._holdTimer) {
+      return;
+    }
+
+    const deltaX = Math.abs(event.clientX - (div._holdStartX ?? event.clientX));
+    const deltaY = Math.abs(event.clientY - (div._holdStartY ?? event.clientY));
+    if (
+      deltaX > MESSAGE_ACTION_MOVE_TOLERANCE_PX ||
+      deltaY > MESSAGE_ACTION_MOVE_TOLERANCE_PX
+    ) {
+      clearHoldTimer();
+    }
+  };
+
+  div.onpointerup = clearHoldTimer;
+  div.onpointerleave = clearHoldTimer;
+  div.onpointercancel = clearHoldTimer;
   return div;
 }
 
