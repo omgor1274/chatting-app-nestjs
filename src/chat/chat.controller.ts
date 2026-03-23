@@ -18,8 +18,9 @@ import { JwtGuard } from '../auth/jwt/jwt.guard';
 import { resolveWritableDataPath } from '../common/app-paths';
 import { ChatGateway } from './chat.gateway';
 import {
-  CHAT_ATTACHMENT_ALLOWED_MIME_TYPES,
   CHAT_UPLOAD_CHUNK_SIZE_BYTES,
+  isAllowedChatAttachmentMimeType,
+  normalizeChatAttachmentMimeType,
   resolveAttachmentMessageType,
 } from './chat-upload.constants';
 import { ChatUploadService } from './chat-upload.service';
@@ -523,12 +524,20 @@ export class ChatController {
         filename: attachmentFileName,
       }),
       fileFilter: (req, file, callback) => {
-        if (!CHAT_ATTACHMENT_ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+        const normalizedMimeType = normalizeChatAttachmentMimeType(
+          file.mimetype,
+          file.originalname,
+        );
+        if (
+          !normalizedMimeType ||
+          !isAllowedChatAttachmentMimeType(normalizedMimeType, file.originalname)
+        ) {
           return callback(
             new BadRequestException('Unsupported file type'),
             false,
           );
         }
+        file.mimetype = normalizedMimeType;
         callback(null, true);
       },
     }),
@@ -556,6 +565,10 @@ export class ChatController {
       throw new BadRequestException('Attachment file is required');
     }
 
+    const normalizedMimeType =
+      normalizeChatAttachmentMimeType(file.mimetype, file.originalname) ??
+      file.mimetype;
+
     const message = await this.chatService.createEncryptedMessage({
       senderId: req.user.userId,
       receiverId: body.receiverId,
@@ -566,9 +579,9 @@ export class ChatController {
       algorithm: body.algorithm,
       fileUrl: `/uploads/chat/${file.filename}`,
       fileName: file.originalname,
-      fileMimeType: file.mimetype,
+      fileMimeType: normalizedMimeType,
       fileSize: file.size,
-      messageType: resolveAttachmentMessageType(file.mimetype),
+      messageType: resolveAttachmentMessageType(normalizedMimeType),
     });
 
     await this.chatGateway.emitMessageToConversation(message);

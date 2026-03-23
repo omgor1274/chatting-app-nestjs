@@ -7,11 +7,9 @@ import {
   hasValidSession,
   loadPublicConfig,
   readJsonResponse,
-} from './runtime.js?v=20260323-authfetchfix1';
+} from './runtime.js?v=20260323-smooth1';
 
 const LAST_CHAT_ROUTE_KEY = 'chat_last_route';
-const NOTIFICATION_PERMISSION_KEY = 'ochat_notification_permission_requested';
-let notificationsAvailableOnServer = null;
 
 function getById(id) {
   return document.getElementById(id);
@@ -95,9 +93,9 @@ function updateCloseLink() {
 function prefetchChatShell() {
   const hrefs = [
     getLastChatRoute(),
-    '/public/app.js?v=20260323-loader2',
-    '/public/runtime.js?v=20260323-authfetchfix1',
-    '/public/app.css?v=20260323-themefix1',
+    '/public/app.js?v=20260323-smooth1',
+    '/public/runtime.js?v=20260323-smooth1',
+    '/public/app.css?v=20260323-smooth1',
   ];
 
   hrefs.forEach((href) => {
@@ -106,183 +104,6 @@ function prefetchChatShell() {
     link.href = href;
     document.head.appendChild(link);
   });
-}
-
-function canUseNotifications() {
-  return (
-    window.location.protocol !== 'file:' &&
-    'Notification' in window &&
-    'serviceWorker' in navigator &&
-    'PushManager' in window
-  );
-}
-
-async function ensureSettingsServiceWorker() {
-  return navigator.serviceWorker.register('/sw.js');
-}
-
-function updateNotificationUi() {
-  const status = getById('settings-notification-status');
-  const button = getById('settings-enable-notifications-btn');
-  if (!status || !button) {
-    return;
-  }
-
-  if (!canUseNotifications()) {
-    status.textContent =
-      'This browser does not support push notifications for this app.';
-    button.disabled = true;
-    button.textContent = 'Not Supported';
-    button.classList.add('opacity-70', 'cursor-not-allowed');
-    return;
-  }
-
-  if (notificationsAvailableOnServer === false) {
-    status.textContent =
-      'Push notifications are not configured on the server yet. Add VAPID keys in the deploy environment, then reload this page.';
-    button.disabled = true;
-    button.textContent = 'Server Not Ready';
-    button.classList.add('opacity-70', 'cursor-not-allowed');
-    return;
-  }
-
-  if (Notification.permission === 'granted') {
-    status.textContent =
-      'Notifications are enabled. You can receive new message, file, and chat request alerts even when the tab is closed.';
-    button.disabled = true;
-    button.textContent = 'Enabled';
-    button.classList.add('opacity-70', 'cursor-not-allowed');
-    return;
-  }
-
-  if (Notification.permission === 'denied') {
-    status.textContent =
-      'Notifications are blocked in the browser. Allow them in site settings, then reopen this page.';
-    button.disabled = true;
-    button.textContent = 'Blocked';
-    button.classList.add('opacity-70', 'cursor-not-allowed');
-    return;
-  }
-
-  status.textContent =
-    'Enable notifications once to receive new messages, files, and chat requests on this device.';
-  button.disabled = false;
-  button.textContent = 'Enable Notifications';
-  button.classList.remove('opacity-70', 'cursor-not-allowed');
-}
-
-async function syncNotificationAvailability() {
-  if (!canUseNotifications()) {
-    notificationsAvailableOnServer = false;
-    updateNotificationUi();
-    return false;
-  }
-
-  try {
-    const keyResponse = await api('/users/notifications/public-key');
-    const keyData = await readJsonResponse(
-      keyResponse,
-      {},
-      'Failed to load notification settings.',
-    );
-    notificationsAvailableOnServer = Boolean(
-      keyResponse.ok && keyData.publicKey,
-    );
-  } catch (error) {
-    console.error('Failed to check notification configuration', error);
-    notificationsAvailableOnServer = false;
-  }
-
-  updateNotificationUi();
-  return notificationsAvailableOnServer;
-}
-
-async function enableNotifications() {
-  const button = getById('settings-enable-notifications-btn');
-  if (!button || !canUseNotifications()) {
-    return;
-  }
-
-  button.disabled = true;
-  button.textContent = 'Enabling...';
-  button.classList.add('opacity-70', 'cursor-wait');
-
-  try {
-    if (!(await syncNotificationAvailability())) {
-      showFeedback(
-        'Push notifications are not configured on the server yet.',
-        'error',
-      );
-      return;
-    }
-
-    localStorage.setItem(NOTIFICATION_PERMISSION_KEY, '1');
-    const permission = await Notification.requestPermission();
-
-    if (permission !== 'granted') {
-      updateNotificationUi();
-      showFeedback(
-        permission === 'denied'
-          ? 'Notifications were blocked in the browser.'
-          : 'Notification permission was not granted.',
-        'error',
-      );
-      return;
-    }
-
-    const registration = await ensureSettingsServiceWorker();
-    const keyResponse = await api('/users/notifications/public-key');
-    const keyData = await readJsonResponse(
-      keyResponse,
-      {},
-      'Failed to load notification settings.',
-    );
-
-    if (!keyResponse.ok || !keyData.publicKey) {
-      throw new Error('Push notifications are not configured on the server');
-    }
-
-    let subscription = await registration.pushManager.getSubscription();
-    if (!subscription) {
-      const base64 = keyData.publicKey;
-      const padding = '='.repeat((4 - (base64.length % 4)) % 4);
-      const normalized = (base64 + padding)
-        .replace(/-/g, '+')
-        .replace(/_/g, '/');
-      const raw = window.atob(normalized);
-      const key = Uint8Array.from([...raw].map((char) => char.charCodeAt(0)));
-
-      subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: key,
-      });
-    }
-
-    const subscribeResponse = await api('/users/notifications/subscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(subscription),
-    });
-    const subscribeData = await readJsonResponse(
-      subscribeResponse,
-      {},
-      'Failed to save push subscription.',
-    );
-
-    if (!subscribeResponse.ok) {
-      throw new Error(
-        subscribeData.message || 'Failed to save push subscription',
-      );
-    }
-
-    updateNotificationUi();
-    showFeedback('Notifications enabled for this device.', 'success');
-  } catch (error) {
-    updateNotificationUi();
-    showFeedback(error?.message || 'Failed to enable notifications.', 'error');
-  } finally {
-    button.classList.remove('cursor-wait');
-  }
 }
 
 function renderBlockedUsers(blockedUsers) {
@@ -580,10 +401,6 @@ async function boot() {
   getById('logout-btn').addEventListener('click', logout);
   getById('change-avatar-btn').addEventListener('click', openAvatarPicker);
   getById('remove-avatar-btn').addEventListener('click', removeAvatar);
-  getById('settings-enable-notifications-btn').addEventListener(
-    'click',
-    enableNotifications,
-  );
   getById('avatar-input').addEventListener('change', uploadAvatar);
   getById('settings-darkmode-input').addEventListener('change', (event) => {
     applyDarkMode(Boolean(event.target?.checked));
@@ -601,7 +418,6 @@ async function boot() {
     }
   });
   setBlockedUsersState('Loading blocked users...');
-  updateNotificationUi();
   const [profileResult, blockedUsersResult] = await Promise.allSettled([
     loadProfile(),
     loadBlockedUsers(),
@@ -619,7 +435,6 @@ async function boot() {
     );
   }
 
-  await syncNotificationAvailability();
 }
 
 boot().catch((error) => {

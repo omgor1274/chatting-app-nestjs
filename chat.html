@@ -24,11 +24,11 @@
         pointer-events: none;
       }
     </style>
-    <link rel="manifest" href="/manifest.webmanifest?v=20260323-speed1" />
+    <link rel="manifest" href="/manifest.webmanifest?v=20260323-smooth1" />
     <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="./public/app.css?v=20260323-themefix1" />
+    <link rel="stylesheet" href="./public/app.css?v=20260323-smooth1" />
   </head>
 
   <body class="chat-page mobile-page min-h-screen bg-slate-100 text-slate-900 lg:p-3">
@@ -375,6 +375,40 @@
             New Group
           </button>
           <div id="group-invites" class="hidden space-y-2"></div>
+          <section
+            id="sidebar-pinned-section"
+            class="hidden rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm"
+          >
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+                Pinned Chats
+              </p>
+              <p
+                id="sidebar-pinned-count"
+                class="mt-1 text-sm text-slate-500"
+              >
+                No pinned chats yet.
+              </p>
+            </div>
+            <div id="sidebar-pinned-list" class="mt-3 space-y-2"></div>
+          </section>
+          <section
+            id="sidebar-starred-section"
+            class="hidden rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm"
+          >
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+                Starred Hub
+              </p>
+              <p
+                id="sidebar-starred-count"
+                class="mt-1 text-sm text-slate-500"
+              >
+                No starred messages yet.
+              </p>
+            </div>
+            <div id="sidebar-starred-list" class="mt-3 space-y-2"></div>
+          </section>
         </div>
 
         <div class="flex items-center justify-between px-5 pt-4 sm:px-6">
@@ -590,6 +624,33 @@
         >
           <div class="mx-auto flex w-full max-w-[46rem] flex-col gap-2">
             <div
+              id="reply-preview"
+              class="hidden rounded-[24px] border border-slate-200 bg-white px-4 py-3 shadow-sm"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <p class="text-xs font-semibold uppercase tracking-[0.24em] text-blue-600">
+                    Replying to
+                  </p>
+                  <p
+                    id="reply-preview-author"
+                    class="mt-1 truncate text-sm font-semibold text-slate-900"
+                  ></p>
+                  <p
+                    id="reply-preview-text"
+                    class="mt-1 truncate text-sm text-slate-500"
+                  ></p>
+                </div>
+                <button
+                  type="button"
+                  onclick="clearReplyTarget()"
+                  class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+            <div
               id="attachment-preview"
               class="hidden rounded-[24px] border border-slate-200 bg-slate-50 p-3"
             >
@@ -667,6 +728,12 @@
                   class="text-xs leading-5 text-slate-500"
                 ></p>
               </div>
+            </div>
+            <div
+              id="chat-dropzone-hint"
+              class="hidden rounded-[24px] border border-dashed border-blue-300 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-700"
+            >
+              Drop files here to queue them for this chat.
             </div>
             <div
               class="rounded-[24px] border border-slate-200 bg-white p-1.5 shadow-sm"
@@ -840,6 +907,69 @@
             ></div>
           </section>
 
+          <section
+            id="chat-contact-panel-search-section"
+            class="mt-4 rounded-[24px] border border-slate-200 bg-white px-4 py-4"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="text-sm font-semibold text-slate-900">
+                  Search this chat
+                </p>
+                <p
+                  id="chat-search-summary"
+                  class="mt-1 text-sm text-slate-500"
+                >
+                  Search loaded messages, jump by date, or filter media.
+                </p>
+              </div>
+              <button
+                type="button"
+                onclick="clearConversationSearch()"
+                class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Clear
+              </button>
+            </div>
+            <div class="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr),9rem]">
+              <input
+                id="chat-search-input"
+                type="text"
+                placeholder="Search text or filename"
+                oninput="runConversationSearch()"
+                class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              />
+              <select
+                id="chat-search-filter"
+                onchange="runConversationSearch()"
+                class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              >
+                <option value="all">All</option>
+                <option value="media">Media</option>
+                <option value="files">Files</option>
+              </select>
+            </div>
+            <div class="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr),auto]">
+              <input
+                id="chat-search-date"
+                type="date"
+                onchange="jumpToConversationDate()"
+                class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              />
+              <button
+                type="button"
+                onclick="loadOlderMessagesForSearch()"
+                class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Load Older
+              </button>
+            </div>
+            <div
+              id="chat-search-results"
+              class="mt-4 max-h-72 space-y-2 overflow-y-auto"
+            ></div>
+          </section>
+
           <section class="mt-4 rounded-[24px] border border-slate-200 bg-white px-4 py-4">
             <div class="flex items-center justify-between gap-3">
               <div>
@@ -856,6 +986,33 @@
             </div>
             <div
               id="chat-contact-panel-starred-list"
+              class="mt-4 space-y-3"
+            ></div>
+          </section>
+
+          <section class="mt-4 rounded-[24px] border border-slate-200 bg-white px-4 py-4">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="text-sm font-semibold text-slate-900">
+                  Recent calls
+                </p>
+                <p
+                  id="chat-contact-panel-calls-count"
+                  class="mt-1 text-sm text-slate-500"
+                >
+                  No recent calls yet.
+                </p>
+              </div>
+              <button
+                type="button"
+                onclick="clearConversationCallHistory()"
+                class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Clear
+              </button>
+            </div>
+            <div
+              id="chat-contact-panel-calls-list"
               class="mt-4 space-y-3"
             ></div>
           </section>
@@ -1218,6 +1375,7 @@
                   id="settings-darkmode-input"
                   type="checkbox"
                   class="h-5 w-5"
+                  onchange="toggleDarkModePreference()"
                 />
               </label>
               <label
@@ -1312,6 +1470,28 @@
                 >
                   Install O-chat App
                 </button>
+              </div>
+              <div
+                class="rounded-2xl border border-slate-200 bg-white px-4 py-4"
+              >
+                <label
+                  for="settings-ringtone-select"
+                  class="block text-sm font-semibold text-slate-900"
+                  >Incoming Call Sound</label
+                >
+                <p class="mt-1 text-sm leading-6 text-slate-500">
+                  Pick how the browser should ring when someone calls you.
+                </p>
+                <select
+                  id="settings-ringtone-select"
+                  onchange="updateRingtonePreference()"
+                  class="mt-4 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                >
+                  <option value="classic">Classic</option>
+                  <option value="soft">Soft</option>
+                  <option value="pulse">Pulse</option>
+                  <option value="silent">Silent</option>
+                </select>
               </div>
             </div>
           </section>
@@ -1676,6 +1856,48 @@
       class="floating-menu fixed z-[72] hidden min-w-[220px] max-w-[calc(100vw-24px)] rounded-[22px] border border-slate-200 bg-white p-2 shadow-xl"
     >
       <button
+        id="message-action-reply"
+        onclick="startReplyToSelectedMessage()"
+        class="flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+      >
+        <span>Reply</span>
+      </button>
+      <div class="px-3 pb-2 pt-1">
+        <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+          Reactions
+        </p>
+        <div class="mt-2 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onclick="toggleSelectedMessageReaction('👍')"
+            class="message-reaction-option rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-base transition hover:bg-slate-100"
+          >
+            👍
+          </button>
+          <button
+            type="button"
+            onclick="toggleSelectedMessageReaction('❤️')"
+            class="message-reaction-option rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-base transition hover:bg-slate-100"
+          >
+            ❤️
+          </button>
+          <button
+            type="button"
+            onclick="toggleSelectedMessageReaction('😂')"
+            class="message-reaction-option rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-base transition hover:bg-slate-100"
+          >
+            😂
+          </button>
+          <button
+            type="button"
+            onclick="toggleSelectedMessageReaction('🔥')"
+            class="message-reaction-option rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-base transition hover:bg-slate-100"
+          >
+            🔥
+          </button>
+        </div>
+      </div>
+      <button
         id="message-action-star"
         onclick="toggleSelectedMessageStar()"
         class="flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
@@ -1889,12 +2111,12 @@
       "
     />
 
-    <script src="/runtime-config.js?v=20260323-authfetchfix1"></script>
+    <script src="/runtime-config.js?v=20260323-smooth1"></script>
     <script type="module">
       import {
         hasValidSession,
         loadPublicConfig,
-      } from '/public/runtime.js?v=20260323-authfetchfix1';
+      } from '/public/runtime.js?v=20260323-smooth1';
 
       const loadScript = (src) =>
         new Promise((resolve, reject) => {
@@ -1912,7 +2134,7 @@
         window.location.replace('/auth');
       } else {
         loadScript('https://cdn.socket.io/4.7.2/socket.io.min.js')
-          .then(() => loadScript('/public/app.js?v=20260323-loader2'))
+          .then(() => loadScript('/public/app.js?v=20260323-smooth1'))
           .catch((error) =>
             console.error('Failed to load chat runtime', error),
           );

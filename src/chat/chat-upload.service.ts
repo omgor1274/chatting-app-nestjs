@@ -22,6 +22,7 @@ import { ChatService } from './chat.service';
 import {
   CHAT_UPLOAD_CHUNK_SIZE_BYTES,
   isAllowedChatAttachmentMimeType,
+  normalizeChatAttachmentMimeType,
   resolveAttachmentMessageType,
 } from './chat-upload.constants';
 
@@ -253,14 +254,17 @@ export class ChatUploadService {
 
   async createSession(userId: string, input: CreateUploadSessionInput) {
     const fileName = basename((input.fileName || '').trim());
-    const fileMimeType = (input.fileMimeType || '').trim();
+    const fileMimeType = normalizeChatAttachmentMimeType(
+      input.fileMimeType,
+      fileName,
+    );
     const fileSize = Number(input.fileSize);
 
     if (!fileName) {
       throw new BadRequestException('File name is required');
     }
 
-    if (!fileMimeType || !isAllowedChatAttachmentMimeType(fileMimeType)) {
+    if (!fileMimeType || !isAllowedChatAttachmentMimeType(fileMimeType, fileName)) {
       throw new BadRequestException('Unsupported file type');
     }
 
