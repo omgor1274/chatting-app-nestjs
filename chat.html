@@ -28,7 +28,7 @@
     <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="./public/app.css?v=20260323-smooth1" />
+    <link rel="stylesheet" href="./public/app.css?v=20260323-smooth4" />
   </head>
 
   <body class="chat-page mobile-page min-h-screen bg-slate-100 text-slate-900 lg:p-3">
@@ -603,7 +603,7 @@
         >
           <div
             id="message-loading-indicator"
-            class="message-loading-pill hidden sticky top-4 z-20 mx-auto w-fit rounded-full border border-slate-200 bg-white/88 px-3 py-2 text-xs font-medium tracking-wide text-slate-600 shadow-md backdrop-blur-md transition-all duration-300"
+            class="message-loading-pill hidden sticky top-3 z-20 mx-auto mb-3 w-fit rounded-full border border-slate-200/90 bg-white/92 px-3.5 py-2 text-xs font-medium text-slate-600 shadow-sm transition-all duration-200"
           >
             <span class="message-loading-waves" aria-hidden="true">
               <span></span>
@@ -2134,7 +2134,7 @@
         window.location.replace('/auth');
       } else {
         loadScript('https://cdn.socket.io/4.7.2/socket.io.min.js')
-          .then(() => loadScript('/public/app.js?v=20260323-smooth1'))
+          .then(() => loadScript('/public/app.js?v=20260323-smooth4'))
           .catch((error) =>
             console.error('Failed to load chat runtime', error),
           );

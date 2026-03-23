@@ -99,9 +99,9 @@ let manageGroupAvatarShouldClear = false;
 let presenceRefreshPromise = null;
 let groupDetailsCache = new Map();
 const NOTIFICATION_PERMISSION_KEY = 'ochat_notification_permission_requested';
-const MESSAGE_ACTION_TOUCH_HOLD_MS = 1800;
-const MESSAGE_ACTION_MOVE_TOLERANCE_PX = 8;
-const MESSAGE_ACTION_SCROLL_BLOCK_MS = 450;
+const MESSAGE_ACTION_TOUCH_HOLD_MS = 750;
+const MESSAGE_ACTION_MOVE_TOLERANCE_PX = 6;
+const MESSAGE_ACTION_SCROLL_BLOCK_MS = 700;
 let messageActionScrollBlockedUntil = 0;
 const MATROSKA_ATTACHMENT_MIME_TYPES = new Set([
   'video/x-matroska',
@@ -968,7 +968,7 @@ function renderActiveConversationFromCache(options = {}) {
       return;
     }
 
-    if (options.restoreScroll !== false && typeof state.scrollTop === 'number') {
+    if (options.restoreScroll === true && typeof state.scrollTop === 'number') {
       const maxScrollTop = Math.max(
         0,
         container.scrollHeight - container.clientHeight,
@@ -6056,7 +6056,6 @@ async function selectUser(userId) {
   document.getElementById('chat-header').classList.remove('hidden');
   document.getElementById('chat-header').classList.add('flex');
   document.getElementById('message-container').classList.remove('hidden');
-  document.getElementById('message-container').classList.add('flex');
   document.getElementById('input-area').classList.remove('hidden');
   document.body.classList.add('chat-mode-active');
   document.getElementById('mobile-chat-topbar')?.classList.add('hidden');
@@ -8652,6 +8651,7 @@ function createMessageElement(message) {
       deltaY > MESSAGE_ACTION_MOVE_TOLERANCE_PX
     ) {
       clearHoldTimer();
+      blockMessageActionsWhileScrolling();
     }
   };
 
@@ -9280,6 +9280,14 @@ if (window.visualViewport) {
 
 getById('message-container')?.addEventListener(
   'touchmove',
+  () => {
+    blockMessageActionsWhileScrolling();
+  },
+  { passive: true },
+);
+
+getById('message-container')?.addEventListener(
+  'scroll',
   () => {
     blockMessageActionsWhileScrolling();
   },
