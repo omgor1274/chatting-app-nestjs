@@ -1,3 +1,11 @@
+:root {
+  --motion-fast: 180ms;
+  --motion-mid: 280ms;
+  --motion-slow: 440ms;
+  --motion-silk: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-bounce: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 html,
 body {
   height: 100%;
@@ -132,6 +140,12 @@ img {
 
 .glass {
   background: #ffffff;
+  transform: translateZ(0);
+  transition:
+    transform var(--motion-mid) var(--motion-silk),
+    box-shadow var(--motion-mid) var(--motion-silk),
+    background-color var(--motion-mid) ease,
+    border-color var(--motion-mid) ease;
 }
 
 .loader-card {
@@ -383,19 +397,99 @@ img {
   }
 }
 
+@keyframes app-shell-settle {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes chat-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes chat-message-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(var(--message-enter-x, 0), 16px, 0) scale(0.98);
+    filter: blur(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes chat-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes chat-menu-pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes backdrop-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
 .sidebar-panel {
   transition:
-    transform 220ms ease,
-    opacity 220ms ease;
-  will-change: transform;
+    transform var(--motion-slow) var(--motion-silk),
+    opacity var(--motion-mid) ease,
+    filter var(--motion-mid) ease;
+  will-change: transform, opacity;
+  opacity: 1;
+  filter: blur(0);
 }
 
 .sidebar-closed {
   transform: translateX(-104%);
+  opacity: 0;
+  filter: blur(8px);
 }
 
 .sidebar-open {
   transform: translateX(0);
+  opacity: 1;
+  filter: blur(0);
+  animation: chat-panel-enter var(--motion-mid) var(--motion-bounce);
 }
 
 .modal-backdrop {
@@ -404,8 +498,21 @@ img {
   -webkit-backdrop-filter: blur(10px);
 }
 
+.modal-backdrop:not(.hidden) {
+  animation: backdrop-fade var(--motion-mid) ease;
+}
+
+.modal-backdrop:not(.hidden) > div {
+  animation: chat-menu-pop var(--motion-mid) var(--motion-bounce);
+}
+
 .floating-menu {
   box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
+}
+
+.floating-menu:not(.hidden) {
+  transform-origin: top left;
+  animation: chat-menu-pop var(--motion-fast) var(--motion-bounce);
 }
 
 .chat-actions-anchor {
@@ -464,6 +571,7 @@ body.chat-page #message-container {
 
 .mobile-chat-shell {
   isolation: isolate;
+  animation: app-shell-settle 580ms var(--motion-bounce);
 }
 
 .mobile-chat-main {
@@ -496,6 +604,11 @@ body.chat-page #message-container {
 #chat-header {
   position: relative;
   z-index: 16;
+  transition:
+    transform var(--motion-mid) var(--motion-silk),
+    background-color var(--motion-mid) ease,
+    border-color var(--motion-mid) ease,
+    box-shadow var(--motion-mid) var(--motion-silk);
 }
 
 #chat-contact-trigger {
@@ -509,11 +622,16 @@ body.chat-page #message-container {
   border-radius: 1.25rem;
   text-align: left;
   cursor: pointer;
-  transition: background-color 160ms ease;
+  transition:
+    transform var(--motion-fast) var(--motion-silk),
+    background-color var(--motion-fast) ease,
+    box-shadow var(--motion-fast) var(--motion-silk);
 }
 
 #chat-contact-trigger:hover {
   background: rgba(241, 245, 249, 0.92);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
 }
 
 #chat-contact-trigger:focus-visible {
@@ -528,6 +646,16 @@ body.chat-page #message-container {
 .chat-header-icon {
   width: 2.75rem;
   height: 2.75rem;
+  transition:
+    transform var(--motion-fast) var(--motion-silk),
+    box-shadow var(--motion-mid) var(--motion-silk),
+    background-color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease;
+}
+
+.chat-header-icon:hover {
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
 }
 
 #chat-actions-btn {
@@ -544,10 +672,29 @@ body.chat-page #message-container {
 }
 
 #composer-actions-btn {
+  display: grid;
+  place-items: center;
   padding: 0;
   line-height: 1;
   font-size: 1.7rem;
   align-self: center;
+  transition:
+    transform var(--motion-fast) var(--motion-bounce),
+    box-shadow var(--motion-mid) var(--motion-silk),
+    background-color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease;
+}
+
+#composer-actions-btn:hover {
+  transform: translateY(-1px) scale(1.03) rotate(6deg);
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.12);
+}
+
+.composer-actions-icon {
+  display: block;
+  width: 1.1rem;
+  height: 1.1rem;
+  pointer-events: none;
 }
 
 #target-name {
@@ -560,6 +707,65 @@ body.chat-page #message-container {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+#send-message-btn,
+#voice-send-btn,
+#voice-record-btn,
+#request-action-btn,
+#request-reject-btn,
+.sidebar-header-btn,
+.sidebar-quick-card,
+.search-result-card,
+.call-history-card,
+.contact-panel-action,
+#users-list > li,
+.message-bubble-shell,
+#input-area .rounded-\[24px\],
+#input-area .rounded-\[22px\] {
+  transition:
+    transform var(--motion-fast) var(--motion-silk),
+    box-shadow var(--motion-mid) var(--motion-silk),
+    background-color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    opacity var(--motion-fast) ease;
+}
+
+#send-message-btn:hover,
+#voice-send-btn:hover,
+#voice-record-btn:hover,
+#request-action-btn:hover,
+#request-reject-btn:hover,
+.sidebar-header-btn:hover,
+.sidebar-quick-card:hover,
+.search-result-card:hover,
+.call-history-card:hover,
+.contact-panel-action:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+}
+
+#users-list > li:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+}
+
+.message-bubble-shell:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.08);
+}
+
+.chat-list-card {
+  animation: chat-card-enter var(--motion-mid) var(--motion-bounce) both;
+  animation-delay: calc(var(--motion-index, 0) * 18ms);
+}
+
+.chat-message-enter {
+  animation: chat-message-enter 320ms var(--motion-bounce) both;
+}
+
+.chat-chrome-enter {
+  animation: chat-panel-enter 280ms var(--motion-bounce);
 }
 
 .contact-panel-action[disabled] {

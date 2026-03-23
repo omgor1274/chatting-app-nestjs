@@ -109,14 +109,23 @@ const MATROSKA_ATTACHMENT_MIME_TYPES = new Set([
   'video/mkv',
   'application/x-matroska',
 ]);
-let activeCall = {
-  peer: null,
-  localStream: null,
-  remoteStream: null,
-  targetUserId: null,
-  callType: null,
-  reconnectTimer: null,
-};
+
+function createEmptyActiveCallState() {
+  return {
+    peer: null,
+    localStream: null,
+    remoteStream: null,
+    targetUserId: null,
+    callType: null,
+    reconnectTimer: null,
+    videoDeviceIds: [],
+    currentVideoDeviceId: null,
+    preferredFacingMode: 'user',
+    switchingCamera: false,
+  };
+}
+
+let activeCall = createEmptyActiveCallState();
 let rtcConfig = {
   iceServers: appConfig.stunServers.map((urls) => ({ urls })),
 };
@@ -954,7 +963,7 @@ function renderActiveConversationFromCache(options = {}) {
     if (message?.id) {
       renderedMessageIds.add(message.id);
     }
-    fragment.appendChild(createMessageElement(message));
+    fragment.appendChild(createMessageElement(message, { animate: false }));
   }
 
   list.innerHTML = '';
@@ -3249,6 +3258,19 @@ function scheduleHeaderUpdate() {
   });
 }
 
+function triggerMotionClass(element, className, durationMs = 420) {
+  if (!element || !className) {
+    return;
+  }
+
+  element.classList.remove(className);
+  void element.offsetWidth;
+  element.classList.add(className);
+  window.setTimeout(() => {
+    element.classList.remove(className);
+  }, durationMs);
+}
+
 function getCacheAgeMs(savedAt) {
   const timestamp = Number(savedAt || 0);
   if (!Number.isFinite(timestamp) || timestamp <= 0) {
@@ -5530,7 +5552,7 @@ function getUserRenderSignature(user) {
   ].join('::');
 }
 
-function createUserListElement(user) {
+function createUserListElement(user, index = 0) {
   const item = document.createElement('li');
   const isSelected = selectedUser?.id === user.id;
   const isOnline = !isGroupConversation(user) && onlineUserIds.has(user.id);
@@ -5565,11 +5587,13 @@ function createUserListElement(user) {
     .join('');
 
   item.dataset.userKey = userListKey(user);
+  item.style.setProperty('--motion-index', String(index % 10));
   item.className = `cursor-pointer rounded-[26px] border p-2.5 transition-all ${
     isSelected
       ? 'border-blue-200 bg-blue-50 shadow-sm'
       : 'border-transparent bg-white/70 hover:border-slate-200 hover:bg-white'
   }`;
+  item.classList.add('chat-list-card');
   item.onclick = () => selectUser(user.id);
   item.innerHTML = `
         <div class="flex items-center gap-3 rounded-[22px] p-2">
@@ -5612,7 +5636,7 @@ function renderUsers() {
   );
   const nextSignatures = new Map();
 
-  for (const user of sortedUsers) {
+  sortedUsers.forEach((user, index) => {
     const key = userListKey(user);
     const signature = getUserRenderSignature(user);
     nextSignatures.set(key, signature);
@@ -5621,14 +5645,14 @@ function renderUsers() {
     const nextNode =
       existingNode && renderedUserSignatures.get(key) === signature
         ? existingNode
-        : createUserListElement(user);
+        : createUserListElement(user, index);
 
     list.appendChild(nextNode);
     if (existingNode && existingNode !== nextNode) {
       existingNode.remove();
     }
     existingNodes.delete(key);
-  }
+  });
 
   for (const [key, node] of existingNodes.entries()) {
     renderedUserSignatures.delete(key);
@@ -6066,6 +6090,9 @@ async function selectUser(userId) {
   closeChatContactPanel();
   closeChatActionsMenu();
   closeComposerActionsMenu();
+  triggerMotionClass(document.getElementById('chat-header'), 'chat-chrome-enter');
+  triggerMotionClass(document.getElementById('input-area'), 'chat-chrome-enter');
+  triggerMotionClass(document.getElementById('messages-list'), 'chat-chrome-enter');
 
   updateSelectedUserHeader();
   applyChatTheme();
@@ -6695,7 +6722,7 @@ function replaceRenderedMessage(message) {
     return;
   }
 
-  const next = createMessageElement(message);
+  const next = createMessageElement(message, { animate: false });
   existing.replaceWith(next);
 }
 
@@ -8067,12 +8094,92 @@ function closeIncomingCallModal() {
   document.getElementById('incoming-call-modal').classList.remove('flex');
 }
 
+function updateActiveCallFlipButton() {
+  const button = document.getElementById('active-call-flip-btn');
+  if (!button) {
+    return;
+  }
+
+  const shouldShow =
+    activeCall.callType === 'video' && activeCall.videoDeviceIds.length > 1;
+  button.classList.toggle('hidden', !shouldShow);
+  button.disabled = !shouldShow || activeCall.switchingCamera;
+  button.innerText = activeCall.switchingCamera ? 'Switching...' : 'Flip Camera';
+}
+
+async function refreshActiveCallVideoDevices() {
+  if (
+    activeCall.callType !== 'video' ||
+    !navigator.mediaDevices ||
+    typeof navigator.mediaDevices.enumerateDevices !== 'function'
+  ) {
+    activeCall.videoDeviceIds = [];
+    updateActiveCallFlipButton();
+    return;
+  }
+
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    activeCall.videoDeviceIds = devices
+      .filter((device) => device.kind === 'videoinput' && device.deviceId)
+      .map((device) => device.deviceId);
+  } catch (error) {
+    console.warn('Unable to enumerate camera devices', error);
+    activeCall.videoDeviceIds = activeCall.currentVideoDeviceId
+      ? [activeCall.currentVideoDeviceId]
+      : [];
+  }
+
+  if (
+    activeCall.currentVideoDeviceId &&
+    !activeCall.videoDeviceIds.includes(activeCall.currentVideoDeviceId)
+  ) {
+    activeCall.currentVideoDeviceId = activeCall.videoDeviceIds[0] || null;
+  }
+
+  updateActiveCallFlipButton();
+}
+
+function getVideoCallConstraints(options = {}) {
+  const { deviceId, facingMode } = options;
+  const constraints = {
+    width: { ideal: 1280 },
+    height: { ideal: 720 },
+  };
+
+  if (deviceId) {
+    constraints.deviceId = { exact: deviceId };
+  } else if (facingMode) {
+    constraints.facingMode = { ideal: facingMode };
+  }
+
+  return constraints;
+}
+
+function syncActiveCallVideoState(stream) {
+  const videoTrack =
+    stream && typeof stream.getVideoTracks === 'function'
+      ? stream.getVideoTracks()[0] || null
+      : null;
+  const settings =
+    videoTrack && typeof videoTrack.getSettings === 'function'
+      ? videoTrack.getSettings()
+      : {};
+
+  activeCall.currentVideoDeviceId = settings.deviceId || null;
+  if (settings.facingMode === 'environment' || settings.facingMode === 'user') {
+    activeCall.preferredFacingMode = settings.facingMode;
+  }
+}
+
 function openActiveCallPanel(userId, callType, status) {
   const panel = document.getElementById('active-call-panel');
   const user = users.find((item) => item.id === userId) || selectedUser;
   document.getElementById('active-call-title').innerText =
     `${displayName(user)} ${callType === 'video' ? 'video call' : 'voice call'}`;
   document.getElementById('active-call-status').innerText = status || '';
+  activeCall.callType = callType;
+  updateActiveCallFlipButton();
   panel.classList.remove('hidden');
 }
 
@@ -8098,21 +8205,16 @@ function cleanupActiveCall(notifyPeer = false) {
     activeCall.remoteStream.getTracks().forEach((track) => track.stop());
   }
 
-  activeCall = {
-    peer: null,
-    localStream: null,
-    remoteStream: null,
-    targetUserId: null,
-    callType: null,
-    reconnectTimer: null,
-  };
+  activeCall = createEmptyActiveCallState();
 
   document.getElementById('active-call-panel').classList.add('hidden');
+  document.getElementById('active-call-status').innerText = '';
   document.getElementById('local-video').classList.add('hidden');
   document.getElementById('remote-video').classList.add('hidden');
   document.getElementById('local-video').srcObject = null;
   document.getElementById('remote-video').srcObject = null;
   document.getElementById('remote-audio').srcObject = null;
+  updateActiveCallFlipButton();
 }
 
 async function createPeerConnection(targetUserId, callType) {
@@ -8180,19 +8282,123 @@ async function createPeerConnection(targetUserId, callType) {
 async function prepareCallStream(callType) {
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: true,
-    video: callType === 'video',
+    video:
+      callType === 'video'
+        ? getVideoCallConstraints({
+            facingMode: activeCall.preferredFacingMode,
+          })
+        : false,
   });
 
   activeCall.localStream = stream;
   document.getElementById('local-video').srcObject = stream;
 
   if (callType === 'video') {
+    syncActiveCallVideoState(stream);
+    await refreshActiveCallVideoDevices();
     document.getElementById('local-video').classList.remove('hidden');
   } else {
+    activeCall.videoDeviceIds = [];
+    activeCall.currentVideoDeviceId = null;
+    updateActiveCallFlipButton();
     document.getElementById('local-video').classList.add('hidden');
   }
 
   return stream;
+}
+
+async function flipActiveCamera() {
+  if (
+    activeCall.callType !== 'video' ||
+    activeCall.switchingCamera ||
+    !activeCall.localStream
+  ) {
+    return;
+  }
+
+  const currentVideoTrack = activeCall.localStream.getVideoTracks()[0];
+  if (!currentVideoTrack) {
+    return;
+  }
+
+  const availableDeviceIds = activeCall.videoDeviceIds.filter(Boolean);
+  const currentVideoSettings =
+    typeof currentVideoTrack.getSettings === 'function'
+      ? currentVideoTrack.getSettings()
+      : {};
+  const currentDeviceId =
+    activeCall.currentVideoDeviceId || currentVideoSettings.deviceId || null;
+  const nextFacingMode =
+    activeCall.preferredFacingMode === 'environment' ? 'user' : 'environment';
+  let targetDeviceId = null;
+
+  if (availableDeviceIds.length > 1) {
+    const currentIndex = currentDeviceId
+      ? availableDeviceIds.indexOf(currentDeviceId)
+      : -1;
+    const nextIndex =
+      currentIndex >= 0
+        ? (currentIndex + 1) % availableDeviceIds.length
+        : 0;
+    targetDeviceId = availableDeviceIds[nextIndex] || null;
+  }
+
+  const nextConstraints = getVideoCallConstraints({
+    deviceId: targetDeviceId,
+    facingMode: targetDeviceId ? null : nextFacingMode,
+  });
+  const localAudioTracks = activeCall.localStream.getAudioTracks();
+  const statusNode = document.getElementById('active-call-status');
+  const previousStatus = statusNode?.innerText || '';
+
+  activeCall.switchingCamera = true;
+  updateActiveCallFlipButton();
+  if (statusNode) {
+    statusNode.innerText = 'Switching camera...';
+  }
+
+  try {
+    const replacementStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: nextConstraints,
+    });
+    const nextVideoTrack = replacementStream.getVideoTracks()[0];
+
+    if (!nextVideoTrack) {
+      throw new Error('Unable to access another camera');
+    }
+
+    const sender = activeCall.peer
+      ?.getSenders()
+      ?.find((item) => item.track?.kind === 'video');
+    if (sender) {
+      await sender.replaceTrack(nextVideoTrack);
+    }
+
+    activeCall.localStream = new MediaStream([
+      ...localAudioTracks,
+      nextVideoTrack,
+    ]);
+    document.getElementById('local-video').srcObject = activeCall.localStream;
+
+    currentVideoTrack.stop();
+    syncActiveCallVideoState(activeCall.localStream);
+
+    if (!targetDeviceId) {
+      activeCall.preferredFacingMode = nextFacingMode;
+    }
+
+    await refreshActiveCallVideoDevices();
+  } catch (error) {
+    console.error('Unable to switch camera', error);
+    alert(error?.message || 'Unable to switch camera');
+  } finally {
+    if (statusNode) {
+      statusNode.innerText = previousStatus;
+    }
+    activeCall.switchingCamera = false;
+    updateActiveCallFlipButton();
+  }
 }
 
 async function startCall(callType) {
@@ -8460,7 +8666,7 @@ function renderMessageReactionHtml(message) {
   `;
 }
 
-function createMessageElement(message) {
+function createMessageElement(message, options = {}) {
   const div = document.createElement('div');
   const isSent = message.senderId === currentUser.id;
   const metaTone = isSent ? 'text-blue-100/90' : 'text-slate-500';
@@ -8469,6 +8675,10 @@ function createMessageElement(message) {
     : '';
   div.id = `message-${message.id}`;
   div.className = `${isSent ? 'self-end' : 'self-start'} max-w-full`;
+  if (options.animate !== false) {
+    div.classList.add('chat-message-enter');
+    div.style.setProperty('--message-enter-x', isSent ? '14px' : '-14px');
+  }
 
   const bubbleTone = isSent
     ? `rounded-[18px] rounded-br-sm text-white shadow-sm ${
@@ -8710,7 +8920,9 @@ function appendMessages(messages, options = {}) {
 
     renderedMessageIds.add(message.id);
     conversationMessages.set(message.id, message);
-    fragment.appendChild(createMessageElement(message));
+    fragment.appendChild(createMessageElement(message, {
+      animate: options.animate !== false,
+    }));
     appendedCount += 1;
   }
 
@@ -8750,7 +8962,7 @@ function prependMessages(messages) {
 
     renderedMessageIds.add(message.id);
     conversationMessages.set(message.id, message);
-    fragment.appendChild(createMessageElement(message));
+    fragment.appendChild(createMessageElement(message, { animate: false }));
   }
 
   list.prepend(fragment);

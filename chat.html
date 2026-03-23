@@ -28,7 +28,7 @@
     <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="./public/app.css?v=20260323-smooth4" />
+    <link rel="stylesheet" href="./public/app.css?v=20260323-smooth6" />
   </head>
 
   <body class="chat-page mobile-page min-h-screen bg-slate-100 text-slate-900 lg:p-3">
@@ -746,7 +746,19 @@
                     onclick="toggleComposerActionsMenu()"
                     class="flex h-11 w-11 items-center justify-center rounded-[18px] border border-slate-200 bg-slate-50 text-2xl font-semibold text-slate-700 transition hover:bg-slate-100"
                   >
-                    +
+                    <svg
+                      class="composer-actions-icon"
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M10 4.25v11.5M4.25 10h11.5"
+                        stroke="currentColor"
+                        stroke-width="2.2"
+                        stroke-linecap="round"
+                      />
+                    </svg>
                   </button>
                   <div
                     id="composer-actions-menu"
@@ -2034,12 +2046,21 @@
             </h3>
             <p id="active-call-status" class="mt-1 text-sm text-slate-300"></p>
           </div>
-          <button
-            onclick="endCurrentCall()"
-            class="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
-          >
-            End
-          </button>
+          <div class="flex items-center gap-2">
+            <button
+              id="active-call-flip-btn"
+              onclick="flipActiveCamera()"
+              class="hidden rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
+            >
+              Flip Camera
+            </button>
+            <button
+              onclick="endCurrentCall()"
+              class="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
+            >
+              End
+            </button>
+          </div>
         </div>
         <div class="mt-4 grid gap-3 sm:grid-cols-2">
           <video
@@ -2134,7 +2155,7 @@
         window.location.replace('/auth');
       } else {
         loadScript('https://cdn.socket.io/4.7.2/socket.io.min.js')
-          .then(() => loadScript('/public/app.js?v=20260323-smooth4'))
+          .then(() => loadScript('/public/app.js?v=20260323-smooth5'))
           .catch((error) =>
             console.error('Failed to load chat runtime', error),
           );
