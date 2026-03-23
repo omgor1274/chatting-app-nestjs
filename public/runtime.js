@@ -1,5 +1,7 @@
 const isFileOrigin = window.location.protocol === 'file:';
-const localBackendOrigin = 'http://localhost:8080';
+const defaultApiOrigin =
+  window.__OCHAT_RUNTIME_CONFIG__?.defaultApiOrigin || 'http://localhost:8080';
+const localBackendOrigin = defaultApiOrigin;
 const isHostedOrigin =
   !isFileOrigin && !/^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
 
@@ -11,6 +13,26 @@ let appConfig = {
 let API_URL = appConfig.apiUrl;
 let configLoadPromise = null;
 const DEFAULT_AVATAR_URL = '/icons/default-avatar.svg';
+
+function getConfigCandidates() {
+  const candidates = [
+    !isFileOrigin && window.location.origin ? window.location.origin : null,
+    localBackendOrigin,
+  ].filter(Boolean);
+
+  try {
+    const parsed = new URL(localBackendOrigin);
+    if (parsed.hostname === 'localhost') {
+      candidates.push(`${parsed.protocol}//127.0.0.1${parsed.port ? `:${parsed.port}` : ''}`);
+    } else if (parsed.hostname === '127.0.0.1') {
+      candidates.push(`${parsed.protocol}//localhost${parsed.port ? `:${parsed.port}` : ''}`);
+    }
+  } catch {
+    // Ignore invalid env-driven defaults and keep the explicit candidates above.
+  }
+
+  return Array.from(new Set(candidates));
+}
 
 function resolveHostedApiUrl(candidate, data) {
   const configuredApiUrl = data?.apiUrl;
@@ -91,19 +113,7 @@ export async function loadPublicConfig() {
   }
 
   configLoadPromise = (async () => {
-    const candidates = isHostedOrigin
-      ? [window.location.origin]
-      : Array.from(
-          new Set(
-            [
-              !isFileOrigin && window.location.origin
-                ? window.location.origin
-                : null,
-              localBackendOrigin,
-              'http://127.0.0.1:8080',
-            ].filter(Boolean),
-          ),
-        );
+    const candidates = isHostedOrigin ? [window.location.origin] : getConfigCandidates();
 
     for (const candidate of candidates) {
       try {

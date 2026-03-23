@@ -25,10 +25,13 @@ export class AppService {
     });
     const appOrigin = requestOrigin || resolveDefaultAppOrigin();
     const configuredApiUrl = process.env.PUBLIC_API_URL?.trim();
+    const defaultApiOrigin =
+      configuredApiUrl || process.env.APP_ORIGIN?.trim() || appOrigin;
 
     return {
       appOrigin,
       apiUrl: configuredApiUrl || requestOrigin || appOrigin,
+      defaultApiOrigin,
       avatarBaseUrl:
         process.env.UI_AVATAR_BASE_URL || '/icons/default-avatar.svg',
       stunServers: (process.env.STUN_SERVER_URLS || 'stun:stun.l.google.com:19302')

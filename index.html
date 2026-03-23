@@ -43,11 +43,12 @@
       </section>
     </main>
 
+    <script src="/runtime-config.js?v=20260323-runtimecfg1"></script>
     <script type="module">
       import {
         hasValidSession,
         loadPublicConfig,
-      } from '/public/runtime.js?v=20260323-apiroute1';
+      } from '/public/runtime.js?v=20260323-runtimecfg1';
 
       await loadPublicConfig();
       if (window.location.pathname === '/') {

@@ -4,7 +4,7 @@ import {
   loadPublicConfig,
   readJsonResponse,
   setToken,
-} from './runtime.js?v=20260323-apiroute1';
+} from './runtime.js?v=20260323-runtimecfg1';
 
 let isLogin = true;
 let pendingVerificationEmail = '';

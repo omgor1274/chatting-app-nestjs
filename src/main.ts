@@ -78,10 +78,11 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule);
   const expressApp = app.getHttpAdapter().getInstance();
+  const port = readEnvNumber('PORT', 8080);
   const configuredOrigins = collectConfiguredOrigins();
   const allowedOrigins = configuredOrigins.length
     ? configuredOrigins
-    : [`http://localhost:${process.env.PORT ?? 8080}`];
+    : [`http://localhost:${port}`];
   const trustProxy = resolveTrustProxy(process.env.TRUST_PROXY);
   const connectSrc = Array.from(
     new Set(["'self'", 'https:', 'ws:', 'wss:', ...configuredOrigins]),
@@ -196,7 +197,7 @@ async function bootstrap() {
     }),
   );
   console.log('PORT from env:', process.env.PORT);
-  const port = Number(process.env.PORT);
+  console.log('Resolved server port:', port);
   await app.listen(port, '0.0.0.0');
   console.log(`O-chat server listening on 0.0.0.0:${port}`);
 }

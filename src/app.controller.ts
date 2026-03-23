@@ -40,4 +40,16 @@ export class AppController {
   getConfig(@Req() req: Request) {
     return this.appService.getPublicConfig(req);
   }
+
+  @Get('runtime-config.js')
+  getRuntimeConfig(@Req() req: Request, @Res() res: Response) {
+    const config = this.appService.getPublicConfig(req);
+    res.setHeader('Cache-Control', 'no-store');
+    res.type('application/javascript');
+    return res.send(
+      `window.__OCHAT_RUNTIME_CONFIG__ = ${JSON.stringify({
+        defaultApiOrigin: config.defaultApiOrigin,
+      })};`,
+    );
+  }
 }
