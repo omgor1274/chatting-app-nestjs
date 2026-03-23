@@ -12,7 +12,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage, memoryStorage } from 'multer';
+import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { JwtGuard } from '../auth/jwt/jwt.guard';
 import { createUploadDestination } from '../common/upload-storage';
@@ -47,6 +47,18 @@ function groupAvatarFileName(
   callback(
     null,
     `${req['user']?.userId ?? 'group'}-${uniqueSuffix}${extname(file.originalname)}`,
+  );
+}
+
+function uploadChunkTempFileName(
+  req: { user?: { userId?: string } },
+  file: { originalname: string },
+  callback: (error: Error | null, filename: string) => void,
+) {
+  const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+  callback(
+    null,
+    `${req['user']?.userId ?? 'chunk'}-${uniqueSuffix}${extname(file.originalname || '.part') || '.part'}`,
   );
 }
 
@@ -479,7 +491,14 @@ export class ChatController {
   @UseGuards(JwtGuard)
   @UseInterceptors(
     FileInterceptor('chunk', {
-      storage: memoryStorage(),
+      storage: diskStorage({
+        destination: createUploadDestination(
+          'uploads',
+          'chat-sessions',
+          'incoming',
+        ),
+        filename: uploadChunkTempFileName,
+      }),
       limits: {
         fileSize: CHAT_UPLOAD_CHUNK_SIZE_BYTES + 1024,
       },
@@ -489,7 +508,7 @@ export class ChatController {
     @Req() req,
     @Param('sessionId') sessionId: string,
     @Body() body: { chunkIndex?: string | number },
-    @UploadedFile() file?: { buffer: Buffer; size: number },
+    @UploadedFile() file?: { path: string; size: number },
   ) {
     return this.chatUploadService.uploadChunk(
       sessionId,
@@ -497,7 +516,7 @@ export class ChatController {
       body.chunkIndex,
       file
         ? {
-            buffer: file.buffer,
+            path: file.path,
             size: file.size,
           }
         : undefined,

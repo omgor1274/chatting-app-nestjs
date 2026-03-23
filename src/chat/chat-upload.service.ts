@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { createReadStream, createWriteStream } from 'fs';
 import {
   mkdir,
   readFile,
@@ -16,6 +17,7 @@ import {
 } from 'fs/promises';
 import { basename, extname, join } from 'path';
 import { randomUUID } from 'crypto';
+import { pipeline } from 'stream/promises';
 import { PrismaService } from '../prisma/prisma.service';
 import { resolveWritableDataPath } from '../common/app-paths';
 import { ChatService } from './chat.service';
@@ -313,45 +315,55 @@ export class ChatUploadService {
     sessionId: string,
     userId: string,
     chunkIndexInput: string | number | undefined,
-    chunk: { buffer: Buffer; size: number } | undefined,
+    chunk: { path: string; size: number } | undefined,
   ) {
-    if (!chunk?.buffer || !chunk.size) {
+    if (!chunk?.path || !chunk.size) {
       throw new BadRequestException('Chunk file is required');
     }
 
+    let uploadedChunkMoved = false;
     const chunkIndex = this.normalizeChunkIndex(chunkIndexInput);
-    const record = await this.getOwnedSessionRecord(sessionId, userId);
+    try {
+      const record = await this.getOwnedSessionRecord(sessionId, userId);
 
-    if (record.status !== 'pending') {
-      throw new BadRequestException('Only pending uploads can receive chunks');
+      if (record.status !== 'pending') {
+        throw new BadRequestException('Only pending uploads can receive chunks');
+      }
+
+      if (chunkIndex >= record.totalChunks) {
+        throw new BadRequestException('Chunk index is out of range');
+      }
+
+      const expectedSize = this.getChunkByteLength(record, chunkIndex);
+      if (chunk.size > record.chunkSize || chunk.size !== expectedSize) {
+        throw new BadRequestException('Chunk size does not match the upload plan');
+      }
+
+      await this.ensureUploadConversationAccess(userId, {
+        receiverId: record.receiverId,
+        groupId: record.groupId,
+      });
+
+      await mkdir(this.getSessionChunksDirPath(record.id), { recursive: true });
+      const chunkPath = this.getChunkPath(record.id, chunkIndex);
+      await unlink(chunkPath).catch(() => undefined);
+      await rename(chunk.path, chunkPath);
+      uploadedChunkMoved = true;
+
+      if (!record.uploadedChunks.includes(chunkIndex)) {
+        record.uploadedChunks = [...record.uploadedChunks, chunkIndex].sort(
+          (left, right) => left - right,
+        );
+      }
+      record.updatedAt = new Date().toISOString();
+
+      await this.writeSessionRecord(record);
+      return this.serializeSession(record);
+    } finally {
+      if (!uploadedChunkMoved) {
+        await unlink(chunk.path).catch(() => undefined);
+      }
     }
-
-    if (chunkIndex >= record.totalChunks) {
-      throw new BadRequestException('Chunk index is out of range');
-    }
-
-    const expectedSize = this.getChunkByteLength(record, chunkIndex);
-    if (chunk.size > record.chunkSize || chunk.size !== expectedSize) {
-      throw new BadRequestException('Chunk size does not match the upload plan');
-    }
-
-    await this.ensureUploadConversationAccess(userId, {
-      receiverId: record.receiverId,
-      groupId: record.groupId,
-    });
-
-    await mkdir(this.getSessionChunksDirPath(record.id), { recursive: true });
-    await writeFile(this.getChunkPath(record.id, chunkIndex), chunk.buffer);
-
-    if (!record.uploadedChunks.includes(chunkIndex)) {
-      record.uploadedChunks = [...record.uploadedChunks, chunkIndex].sort(
-        (left, right) => left - right,
-      );
-    }
-    record.updatedAt = new Date().toISOString();
-
-    await this.writeSessionRecord(record);
-    return this.serializeSession(record);
   }
 
   async finalizeSession(sessionId: string, userId: string) {
@@ -392,8 +404,10 @@ export class ChatUploadService {
           );
         }
 
-        const buffer = await readFile(chunkPath);
-        await writeFile(tempPath, buffer, { flag: 'a' });
+        await pipeline(
+          createReadStream(chunkPath),
+          createWriteStream(tempPath, { flags: 'a' }),
+        );
       }
 
       await rename(tempPath, finalPath);

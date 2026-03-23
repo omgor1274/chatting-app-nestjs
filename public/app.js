@@ -142,7 +142,7 @@ let sharedMediaErrorMessage = '';
 let sharedMediaBrowserKind = 'image';
 const OFFLINE_QUEUE_KEY = 'ochat_offline_message_queue';
 const RINGTONE_PREFERENCE_KEY = 'ochat_ringtone_preference';
-const CLIENT_CACHE_VERSION = '20260323-smooth20';
+const CLIENT_CACHE_VERSION = '20260323-smooth21';
 const CHAT_SHELL_CACHE_TTL_MS = 2 * 60 * 1000;
 const CHAT_SHELL_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const CONVERSATION_CACHE_TTL_MS = 90 * 1000;
@@ -3328,7 +3328,8 @@ function shouldAttemptDirectAttachmentUploadFallback(task, error) {
     !task?.conversation ||
     task.directUploadFallbackAttempted ||
     task.pauseRequested ||
-    !navigator.onLine
+    !navigator.onLine ||
+    Number(task.file.size || 0) > 25 * 1024 * 1024
   ) {
     return false;
   }
