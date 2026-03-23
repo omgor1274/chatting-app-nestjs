@@ -13,11 +13,16 @@ let configLoadPromise = null;
 const DEFAULT_AVATAR_URL = '/icons/default-avatar.svg';
 
 function resolveHostedApiUrl(candidate, data) {
-  if (isHostedOrigin) {
-    return window.location.origin;
+  const configuredApiUrl = data?.apiUrl;
+  if (configuredApiUrl) {
+    return configuredApiUrl;
   }
 
-  return data?.apiUrl || candidate;
+  if (isHostedOrigin) {
+    return candidate || window.location.origin;
+  }
+
+  return candidate;
 }
 
 export function getApiUrl() {
