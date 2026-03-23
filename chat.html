@@ -9,6 +9,7 @@
     <meta name="apple-mobile-web-app-title" content="O-chat" />
     <title>O-chat</title>
     <script>
+      document.documentElement.classList.add('chat-page-root');
       if (localStorage.getItem('chat_token')) {
         document.documentElement.classList.add('has-session-token');
       }
@@ -27,7 +28,7 @@
     <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="./public/app.css?v=20260323-speed1" />
+    <link rel="stylesheet" href="./public/app.css?v=20260323-layoutlock1" />
   </head>
 
   <body class="chat-page mobile-page min-h-screen bg-slate-100 text-slate-900 lg:p-3">

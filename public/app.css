@@ -4,6 +4,13 @@ body {
   -webkit-text-size-adjust: 100%;
 }
 
+html.chat-page-root,
+html.chat-page-root body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 body {
   margin: 0;
   font-family:
@@ -129,6 +136,25 @@ img {
   min-height: 100dvh;
   padding-bottom: max(1rem, env(safe-area-inset-bottom));
   overflow-x: hidden;
+}
+
+body.chat-page {
+  min-height: var(--app-shell-height, 100dvh);
+  height: var(--app-shell-height, 100dvh);
+  padding-bottom: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body.chat-page #app-shell {
+  min-height: 0;
+}
+
+body.chat-page #sidebar,
+body.chat-page #users-list,
+body.chat-page #message-container {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .mobile-page-shell {
