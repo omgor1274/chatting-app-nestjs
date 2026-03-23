@@ -91,7 +91,9 @@ let presenceRefreshPromise = null;
 let groupDetailsCache = new Map();
 const NOTIFICATION_PERMISSION_KEY = 'ochat_notification_permission_requested';
 const MESSAGE_ACTION_TOUCH_HOLD_MS = 1800;
-const MESSAGE_ACTION_MOVE_TOLERANCE_PX = 14;
+const MESSAGE_ACTION_MOVE_TOLERANCE_PX = 8;
+const MESSAGE_ACTION_SCROLL_BLOCK_MS = 450;
+let messageActionScrollBlockedUntil = 0;
 let activeCall = {
   peer: null,
   localStream: null,
@@ -4893,6 +4895,8 @@ async function ensureScrollableHistory() {
 }
 
 async function handleMessageContainerScroll() {
+  blockMessageActionsWhileScrolling();
+
   if (historyScrollFrame) {
     return;
   }
@@ -6046,6 +6050,19 @@ function openMessageActions(x, y, message) {
   menu.style.top = `${top}px`;
 }
 
+function blockMessageActionsWhileScrolling(
+  durationMs = MESSAGE_ACTION_SCROLL_BLOCK_MS,
+) {
+  messageActionScrollBlockedUntil = Math.max(
+    messageActionScrollBlockedUntil,
+    Date.now() + durationMs,
+  );
+}
+
+function areMessageActionsBlockedByScroll() {
+  return Date.now() < messageActionScrollBlockedUntil;
+}
+
 function closeMessageActions() {
   const menu = document.getElementById('message-actions-menu');
   menu.classList.add('hidden');
@@ -6947,6 +6964,9 @@ function createMessageElement(message) {
 
   div.oncontextmenu = (event) => {
     event.preventDefault();
+    if (window.innerWidth < 1024) {
+      return;
+    }
     openMessageActions(event.clientX, event.clientY, message);
   };
 
@@ -6967,6 +6987,10 @@ function createMessageElement(message) {
       return;
     }
 
+    if (areMessageActionsBlockedByScroll()) {
+      return;
+    }
+
     clearHoldTimer();
     const holdX = event.clientX;
     const holdY = event.clientY;
@@ -6974,6 +6998,9 @@ function createMessageElement(message) {
     div._holdStartY = holdY;
     div._holdTimer = window.setTimeout(() => {
       div._holdTimer = null;
+      if (areMessageActionsBlockedByScroll()) {
+        return;
+      }
       openMessageActions(holdX, holdY, message);
     }, MESSAGE_ACTION_TOUCH_HOLD_MS);
   };
@@ -7560,6 +7587,14 @@ window.addEventListener('appinstalled', () => {
 if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', scheduleViewportHeight);
 }
+
+getById('message-container')?.addEventListener(
+  'touchmove',
+  () => {
+    blockMessageActionsWhileScrolling();
+  },
+  { passive: true },
+);
 
 applyViewportHeight();
 updateInstallAppUI();

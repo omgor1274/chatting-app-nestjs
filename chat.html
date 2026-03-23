@@ -1927,7 +1927,7 @@
         window.location.replace('/auth');
       } else {
         loadScript('https://cdn.socket.io/4.7.2/socket.io.min.js')
-          .then(() => loadScript('/public/app.js?v=20260323-userslist1'))
+          .then(() => loadScript('/public/app.js?v=20260323-scrollsafe1'))
           .catch((error) =>
             console.error('Failed to load chat runtime', error),
           );

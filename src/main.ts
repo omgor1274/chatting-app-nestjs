@@ -195,7 +195,8 @@ async function bootstrap() {
       },
     }),
   );
-  const port = Number(process.env.PORT) || 8080;
+  console.log('PORT from env:', process.env.PORT);
+  const port = Number(process.env.PORT);
   await app.listen(port, '0.0.0.0');
   console.log(`O-chat server listening on 0.0.0.0:${port}`);
 }
