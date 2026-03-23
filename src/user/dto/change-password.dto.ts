@@ -20,4 +20,16 @@ export class ChangePasswordDto {
   @MinLength(6)
   @MaxLength(128)
   newPassword: string;
+
+  @Trim()
+  @IsOptional()
+  @IsString()
+  @MaxLength(40000)
+  privateKeyBackupCiphertext?: string;
+
+  @Trim()
+  @IsOptional()
+  @IsString()
+  @MaxLength(1024)
+  privateKeyBackupIv?: string;
 }

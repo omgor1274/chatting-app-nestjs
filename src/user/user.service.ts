@@ -82,6 +82,8 @@ export class UserService {
     backupFiles?: boolean;
     darkMode?: boolean;
     publicKey?: string | null;
+    privateKeyBackupCiphertext?: string | null;
+    privateKeyBackupIv?: string | null;
     publicKeyUpdatedAt?: Date | null;
     createdAt?: Date;
     updatedAt?: Date;
@@ -97,6 +99,8 @@ export class UserService {
       backupFiles: user.backupFiles ?? true,
       darkMode: user.darkMode ?? false,
       publicKey: user.publicKey ?? null,
+      privateKeyBackupCiphertext: user.privateKeyBackupCiphertext ?? null,
+      privateKeyBackupIv: user.privateKeyBackupIv ?? null,
       publicKeyUpdatedAt: user.publicKeyUpdatedAt ?? null,
     };
   }
@@ -351,6 +355,8 @@ export class UserService {
         backupFiles: true,
         darkMode: true,
         publicKey: true,
+        privateKeyBackupCiphertext: true,
+        privateKeyBackupIv: true,
         publicKeyUpdatedAt: true,
         createdAt: true,
         updatedAt: true,
@@ -465,15 +471,25 @@ export class UserService {
     }));
   }
 
-  async updatePublicKey(userId: string, publicKey: string) {
-    if (!publicKey?.trim()) {
+  async updatePublicKey(
+    userId: string,
+    data: {
+      publicKey: string;
+      privateKeyBackupCiphertext?: string;
+      privateKeyBackupIv?: string;
+    },
+  ) {
+    if (!data.publicKey?.trim()) {
       throw new BadRequestException('Public key is required');
     }
 
     return this.prisma.user.update({
       where: { id: userId },
       data: {
-        publicKey: publicKey.trim(),
+        publicKey: data.publicKey.trim(),
+        privateKeyBackupCiphertext:
+          data.privateKeyBackupCiphertext?.trim() || null,
+        privateKeyBackupIv: data.privateKeyBackupIv?.trim() || null,
         publicKeyUpdatedAt: new Date(),
       },
       select: {
@@ -489,6 +505,8 @@ export class UserService {
         backupFiles: true,
         darkMode: true,
         publicKey: true,
+        privateKeyBackupCiphertext: true,
+        privateKeyBackupIv: true,
         publicKeyUpdatedAt: true,
       },
     });
@@ -566,6 +584,8 @@ export class UserService {
         backupFiles: true,
         darkMode: true,
         publicKey: true,
+        privateKeyBackupCiphertext: true,
+        privateKeyBackupIv: true,
         publicKeyUpdatedAt: true,
       },
     });
@@ -590,6 +610,8 @@ export class UserService {
         backupFiles: true,
         darkMode: true,
         publicKey: true,
+        privateKeyBackupCiphertext: true,
+        privateKeyBackupIv: true,
         publicKeyUpdatedAt: true,
       },
     });
@@ -645,6 +667,8 @@ export class UserService {
         backupFiles: true,
         darkMode: true,
         publicKey: true,
+        privateKeyBackupCiphertext: true,
+        privateKeyBackupIv: true,
         publicKeyUpdatedAt: true,
         createdAt: true,
         updatedAt: true,
@@ -726,6 +750,8 @@ export class UserService {
         backupFiles: true,
         darkMode: true,
         publicKey: true,
+        privateKeyBackupCiphertext: true,
+        privateKeyBackupIv: true,
         publicKeyUpdatedAt: true,
         createdAt: true,
         updatedAt: true,
@@ -737,7 +763,12 @@ export class UserService {
 
   async changePassword(
     userId: string,
-    data: { newPassword: string; currentPassword?: string },
+    data: {
+      newPassword: string;
+      currentPassword?: string;
+      privateKeyBackupCiphertext?: string;
+      privateKeyBackupIv?: string;
+    },
   ) {
     const newPassword = data.newPassword?.trim();
 
@@ -772,6 +803,9 @@ export class UserService {
       where: { id: userId },
       data: {
         password,
+        privateKeyBackupCiphertext:
+          data.privateKeyBackupCiphertext?.trim() || null,
+        privateKeyBackupIv: data.privateKeyBackupIv?.trim() || null,
         tokenVersion: {
           increment: 1,
         },

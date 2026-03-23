@@ -1,15 +1,19 @@
 import {
   api,
   clearToken,
+  clearKeyBackupUnlockMaterial,
+  deriveKeyBackupUnlockMaterial,
+  encryptPrivateKeyBackup,
   getAvatarUrl,
   getApiUrl,
   getToken,
   hasValidSession,
   loadPublicConfig,
   readJsonResponse,
-} from './runtime.js?v=20260323-smooth1';
+} from './runtime.js?v=20260323-smooth2';
 
 const LAST_CHAT_ROUTE_KEY = 'chat_last_route';
+let currentProfileId = '';
 
 function getById(id) {
   return document.getElementById(id);
@@ -93,8 +97,8 @@ function updateCloseLink() {
 function prefetchChatShell() {
   const hrefs = [
     getLastChatRoute(),
-    '/public/app.js?v=20260323-smooth16',
-    '/public/runtime.js?v=20260323-smooth1',
+    '/public/app.js?v=20260323-smooth18',
+    '/public/runtime.js?v=20260323-smooth2',
     '/public/app.css?v=20260323-smooth11',
   ];
 
@@ -269,6 +273,8 @@ async function loadProfile() {
     throw new Error(data?.message || 'Failed to load profile');
   }
 
+  currentProfileId = data.id;
+
   getById('settings-current-name').textContent = data.name || 'Your profile';
   getById('settings-current-email').textContent = data.email || '';
   getById('settings-avatar').src = data.avatar
@@ -348,10 +354,33 @@ async function changePassword(event) {
     return;
   }
 
+  let keyBackupPayload = null;
+  if (currentProfileId && newPassword) {
+    const privateKey = localStorage.getItem(`chat_private_key_${currentProfileId}`);
+    if (privateKey) {
+      try {
+        const unlockMaterial = await deriveKeyBackupUnlockMaterial(
+          newPassword,
+          currentProfileId,
+        );
+        keyBackupPayload = await encryptPrivateKeyBackup(
+          privateKey,
+          unlockMaterial,
+        );
+      } catch (error) {
+        console.warn('Failed to refresh message key backup for password change', error);
+      }
+    }
+  }
+
   const res = await api('/users/password', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ currentPassword, newPassword }),
+    body: JSON.stringify({
+      currentPassword,
+      newPassword,
+      ...(keyBackupPayload || {}),
+    }),
   });
   const data = await readJsonResponse(res, {}, 'Failed to update password.');
 
@@ -360,6 +389,7 @@ async function changePassword(event) {
     return;
   }
 
+  clearKeyBackupUnlockMaterial(currentProfileId);
   clearToken();
   showFeedback(
     data.message || 'Password updated. Please log in again.',
@@ -376,6 +406,7 @@ async function logout() {
     return;
   }
 
+  clearKeyBackupUnlockMaterial(currentProfileId);
   clearToken();
   window.location.replace('/auth');
 }

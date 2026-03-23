@@ -1,10 +1,12 @@
 import {
+  deriveKeyBackupUnlockMaterial,
   getApiUrl,
   hasValidSession,
   loadPublicConfig,
   readJsonResponse,
   setToken,
-} from './runtime.js?v=20260323-authfetchfix1';
+  storeKeyBackupUnlockMaterial,
+} from './runtime.js?v=20260323-smooth2';
 
 let isLogin = true;
 let pendingVerificationEmail = '';
@@ -186,6 +188,17 @@ async function handleAuthSubmit(event) {
 
     const authToken = data.token || data.access_token;
     if (authToken) {
+      if (data.user?.id && password) {
+        try {
+          const unlockMaterial = await deriveKeyBackupUnlockMaterial(
+            password,
+            data.user.id,
+          );
+          storeKeyBackupUnlockMaterial(data.user.id, unlockMaterial);
+        } catch (error) {
+          console.warn('Failed to prepare message key backup unlock material', error);
+        }
+      }
       setToken(authToken);
       window.location.replace('/chat');
       return;

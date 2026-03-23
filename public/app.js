@@ -142,7 +142,7 @@ let sharedMediaErrorMessage = '';
 let sharedMediaBrowserKind = 'image';
 const OFFLINE_QUEUE_KEY = 'ochat_offline_message_queue';
 const RINGTONE_PREFERENCE_KEY = 'ochat_ringtone_preference';
-const CLIENT_CACHE_VERSION = '20260323-smooth16';
+const CLIENT_CACHE_VERSION = '20260323-smooth18';
 const CHAT_SHELL_CACHE_TTL_MS = 2 * 60 * 1000;
 const CHAT_SHELL_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const CONVERSATION_CACHE_TTL_MS = 90 * 1000;
@@ -429,6 +429,56 @@ function getFileUrl(path) {
   return `${API_URL}${path}`;
 }
 
+function keyBackupRuntime() {
+  return window.__OCHAT_KEY_BACKUP__ || {};
+}
+
+function readKeyBackupUnlockMaterial(userId) {
+  return keyBackupRuntime().readKeyBackupUnlockMaterial?.(userId) || '';
+}
+
+function clearKeyBackupUnlockMaterial(userId) {
+  keyBackupRuntime().clearKeyBackupUnlockMaterial?.(userId);
+}
+
+async function encryptPrivateKeyBackupForUser(privateKey, userId, unlockMaterial) {
+  if (!privateKey || !userId) {
+    return null;
+  }
+
+  const resolvedUnlockMaterial =
+    unlockMaterial || readKeyBackupUnlockMaterial(userId);
+  if (!resolvedUnlockMaterial) {
+    return null;
+  }
+
+  return (
+    (await keyBackupRuntime().encryptPrivateKeyBackup?.(
+      privateKey,
+      resolvedUnlockMaterial,
+    )) || null
+  );
+}
+
+async function restorePrivateKeyBackupForUser(
+  userId,
+  privateKeyBackupCiphertext,
+  privateKeyBackupIv,
+) {
+  const unlockMaterial = readKeyBackupUnlockMaterial(userId);
+  if (!userId || !unlockMaterial) {
+    return '';
+  }
+
+  return (
+    (await keyBackupRuntime().decryptPrivateKeyBackup?.(
+      privateKeyBackupCiphertext,
+      privateKeyBackupIv,
+      unlockMaterial,
+    )) || ''
+  );
+}
+
 function canUseWebPush() {
   return (
     !isFileOrigin &&
@@ -495,6 +545,33 @@ async function importPrivateEncryptionKey(privateKey) {
   );
 }
 
+async function generateAndPersistEncryptionKeyPair(userId) {
+  const keyPair = await window.crypto.subtle.generateKey(
+    {
+      name: 'RSA-OAEP',
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: 'SHA-256',
+    },
+    true,
+    ['encrypt', 'decrypt'],
+  );
+  const privateKey = arrayBufferToBase64(
+    await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey),
+  );
+  const publicKey = arrayBufferToBase64(
+    await window.crypto.subtle.exportKey('spki', keyPair.publicKey),
+  );
+
+  localStorage.setItem(privateKeyStorageKey(userId), privateKey);
+  localStorage.setItem(publicKeyStorageKey(userId), publicKey);
+
+  return {
+    privateKey,
+    publicKey,
+  };
+}
+
 async function ensureEncryptionKeys(forceSync = false) {
   if (!currentUser?.id || !canUseE2EE()) {
     return;
@@ -506,35 +583,78 @@ async function ensureEncryptionKeys(forceSync = false) {
   let savedPublicKey = localStorage.getItem(
     publicKeyStorageKey(currentUser.id),
   );
+  let generatedNewKeyPair = false;
+  const hasServerKeyBackup = Boolean(
+    currentUser.privateKeyBackupCiphertext && currentUser.privateKeyBackupIv,
+  );
+  let restoredFromServerKeyBackup = false;
+
+  if (
+    (!savedPrivateKey || !savedPublicKey) &&
+    currentUser.privateKeyBackupCiphertext &&
+    currentUser.privateKeyBackupIv
+  ) {
+    try {
+      const restoredPrivateKey = await restorePrivateKeyBackupForUser(
+        currentUser.id,
+        currentUser.privateKeyBackupCiphertext,
+        currentUser.privateKeyBackupIv,
+      );
+      if (restoredPrivateKey && currentUser.publicKey) {
+        savedPrivateKey = restoredPrivateKey;
+        savedPublicKey = currentUser.publicKey;
+        restoredFromServerKeyBackup = true;
+        localStorage.setItem(
+          privateKeyStorageKey(currentUser.id),
+          restoredPrivateKey,
+        );
+        localStorage.setItem(
+          publicKeyStorageKey(currentUser.id),
+          currentUser.publicKey,
+        );
+      }
+    } catch (error) {
+      console.error('Failed to restore your message decryption key', error);
+    }
+  }
 
   if (!savedPrivateKey || !savedPublicKey) {
-    const keyPair = await window.crypto.subtle.generateKey(
-      {
-        name: 'RSA-OAEP',
-        modulusLength: 2048,
-        publicExponent: new Uint8Array([1, 0, 1]),
-        hash: 'SHA-256',
-      },
-      true,
-      ['encrypt', 'decrypt'],
+    if (hasServerKeyBackup && !restoredFromServerKeyBackup) {
+      throw new Error(
+        'Please log in again on this device so O-chat can unlock your encrypted messages.',
+      );
+    }
+
+    const generatedKeys = await generateAndPersistEncryptionKeyPair(
+      currentUser.id,
     );
-    savedPrivateKey = arrayBufferToBase64(
-      await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey),
-    );
-    savedPublicKey = arrayBufferToBase64(
-      await window.crypto.subtle.exportKey('spki', keyPair.publicKey),
-    );
-    localStorage.setItem(privateKeyStorageKey(currentUser.id), savedPrivateKey);
-    localStorage.setItem(publicKeyStorageKey(currentUser.id), savedPublicKey);
+    savedPrivateKey = generatedKeys.privateKey;
+    savedPublicKey = generatedKeys.publicKey;
+    generatedNewKeyPair = true;
   }
 
   currentPrivateKey = await importPrivateEncryptionKey(savedPrivateKey);
 
-  if (forceSync || currentUser.publicKey !== savedPublicKey) {
+  const keyBackupPayload = await encryptPrivateKeyBackupForUser(
+    savedPrivateKey,
+    currentUser.id,
+  );
+  const shouldSyncBackup = Boolean(
+    keyBackupPayload &&
+      (!currentUser.privateKeyBackupCiphertext ||
+        !currentUser.privateKeyBackupIv ||
+        generatedNewKeyPair ||
+        currentUser.publicKey !== savedPublicKey),
+  );
+
+  if (forceSync || currentUser.publicKey !== savedPublicKey || shouldSyncBackup) {
     const res = await api('/users/keys/public', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ publicKey: savedPublicKey }),
+      body: JSON.stringify({
+        publicKey: savedPublicKey,
+        ...(shouldSyncBackup ? keyBackupPayload : {}),
+      }),
     });
     const data = await readJsonResponse(
       res,
@@ -544,7 +664,12 @@ async function ensureEncryptionKeys(forceSync = false) {
     if (!res.ok) {
       throw new Error(data.message || 'Failed to sync your encryption key');
     }
-    currentUser = { ...currentUser, publicKey: savedPublicKey };
+    currentUser = {
+      ...currentUser,
+      ...data,
+      publicKey: savedPublicKey,
+      ...(shouldSyncBackup ? keyBackupPayload : {}),
+    };
   }
 }
 
@@ -1244,7 +1369,7 @@ function clearScopedRuntimeCaches() {
 }
 
 function prefetchSettingsShell() {
-  const hrefs = ['/settings', '/public/settings.js?v=20260323-smooth1'];
+  const hrefs = ['/settings', '/public/settings.js?v=20260323-smooth2'];
 
   hrefs.forEach((href) => {
     if (document.head.querySelector(`link[rel="prefetch"][href="${href}"]`)) {
@@ -2584,6 +2709,7 @@ function uploadChunkWithProgress(sessionId, chunkIndex, chunkBlob, onProgress) {
     formData.append('chunk', chunkBlob, `chunk-${chunkIndex}.part`);
     formData.append('chunkIndex', String(chunkIndex));
     xhr.open('POST', `${API_URL}/chat/uploads/sessions/${encodeURIComponent(sessionId)}/chunks`);
+    xhr.timeout = 90 * 1000;
 
     if (token) {
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
@@ -2608,6 +2734,18 @@ function uploadChunkWithProgress(sessionId, chunkIndex, chunkBlob, onProgress) {
         createUploadRequestError(
           'Network error while uploading file chunk',
           xhr.status,
+        ),
+      );
+    };
+
+    xhr.ontimeout = () => {
+      activeAttachmentUploadRequest = null;
+      reject(
+        createUploadRequestError(
+          'Upload timed out while sending the file chunk',
+          0,
+          'Upload timed out while sending the file chunk',
+          'UPLOAD_TIMEOUT',
         ),
       );
     };
@@ -4250,7 +4388,10 @@ function updateSidebarCurrentUser() {
 }
 
 function applyCurrentUser(user) {
-  currentUser = user;
+  currentUser =
+    currentUser?.id && currentUser.id === user?.id
+      ? { ...currentUser, ...user }
+      : user;
   updateSidebarCurrentUser();
   updateSettingsUI();
   applyDarkMode(Boolean(currentUser.darkMode));
@@ -5854,10 +5995,38 @@ async function changePassword() {
     return;
   }
 
+  let keyBackupPayload = null;
+  if (currentUser.id && newPassword) {
+    const privateKey = localStorage.getItem(privateKeyStorageKey(currentUser.id));
+    if (privateKey) {
+      try {
+        const deriveUnlockMaterial =
+          keyBackupRuntime().deriveKeyBackupUnlockMaterial;
+        const unlockMaterial = deriveUnlockMaterial
+          ? await deriveUnlockMaterial(newPassword, currentUser.id)
+          : '';
+        keyBackupPayload = await encryptPrivateKeyBackupForUser(
+          privateKey,
+          currentUser.id,
+          unlockMaterial,
+        );
+      } catch (error) {
+        console.warn(
+          'Failed to refresh message key backup for password change',
+          error,
+        );
+      }
+    }
+  }
+
   const res = await api('/users/password', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ currentPassword, newPassword }),
+    body: JSON.stringify({
+      currentPassword,
+      newPassword,
+      ...(keyBackupPayload || {}),
+    }),
   });
   const data = await readJsonResponse(
     res,
@@ -10094,6 +10263,7 @@ function forceSessionLogout(message = '') {
 
   sessionExpiryHandled = true;
   clearScopedRuntimeCaches();
+  clearKeyBackupUnlockMaterial(currentUser?.id);
   token = null;
   currentUser = null;
 

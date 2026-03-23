@@ -114,7 +114,11 @@ export class UserController {
   @UseGuards(JwtGuard)
   @Post('keys/public')
   updatePublicKey(@Req() req, @Body() body: PublicKeyDto) {
-    return this.userService.updatePublicKey(req.user.userId, body.publicKey);
+    return this.userService.updatePublicKey(req.user.userId, {
+      publicKey: body.publicKey,
+      privateKeyBackupCiphertext: body.privateKeyBackupCiphertext,
+      privateKeyBackupIv: body.privateKeyBackupIv,
+    });
   }
 
   @UseGuards(JwtGuard)

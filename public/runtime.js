@@ -4,6 +4,7 @@ const defaultApiOrigin =
 const localBackendOrigin = defaultApiOrigin;
 const isHostedOrigin =
   !isFileOrigin && !/^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
+const KEY_BACKUP_UNLOCK_MATERIAL_PREFIX = 'ochat_key_unlock_material_';
 
 let appConfig = {
   apiUrl: localBackendOrigin,
@@ -13,6 +14,28 @@ let appConfig = {
 let API_URL = appConfig.apiUrl;
 let configLoadPromise = null;
 const DEFAULT_AVATAR_URL = '/icons/default-avatar.svg';
+
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return window.btoa(binary);
+}
+
+function base64ToUint8Array(base64) {
+  const binary = window.atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+function keyBackupUnlockStorageKey(userId) {
+  return `${KEY_BACKUP_UNLOCK_MATERIAL_PREFIX}${userId}`;
+}
 
 function getConfigCandidates() {
   const candidates = [
@@ -61,6 +84,117 @@ export function setToken(token) {
 
 export function clearToken() {
   localStorage.removeItem('chat_token');
+}
+
+export async function deriveKeyBackupUnlockMaterial(password, userId) {
+  const normalizedPassword = String(password || '');
+  const normalizedUserId = String(userId || '').trim();
+  if (!normalizedPassword || !normalizedUserId || !window.crypto?.subtle) {
+    return '';
+  }
+
+  const baseKey = await window.crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(normalizedPassword),
+    'PBKDF2',
+    false,
+    ['deriveBits'],
+  );
+  const bits = await window.crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      hash: 'SHA-256',
+      salt: new TextEncoder().encode(`ochat-key-backup:${normalizedUserId}`),
+      iterations: 250000,
+    },
+    baseKey,
+    256,
+  );
+
+  return arrayBufferToBase64(bits);
+}
+
+export function storeKeyBackupUnlockMaterial(userId, unlockMaterial) {
+  if (!userId || !unlockMaterial) {
+    return;
+  }
+
+  sessionStorage.setItem(
+    keyBackupUnlockStorageKey(userId),
+    String(unlockMaterial),
+  );
+}
+
+export function readKeyBackupUnlockMaterial(userId) {
+  if (!userId) {
+    return '';
+  }
+
+  return sessionStorage.getItem(keyBackupUnlockStorageKey(userId)) || '';
+}
+
+export function clearKeyBackupUnlockMaterial(userId) {
+  if (!userId) {
+    return;
+  }
+
+  sessionStorage.removeItem(keyBackupUnlockStorageKey(userId));
+}
+
+async function importKeyBackupKey(unlockMaterial) {
+  return window.crypto.subtle.importKey(
+    'raw',
+    base64ToUint8Array(unlockMaterial),
+    { name: 'AES-GCM' },
+    false,
+    ['encrypt', 'decrypt'],
+  );
+}
+
+export async function encryptPrivateKeyBackup(privateKey, unlockMaterial) {
+  if (!privateKey || !unlockMaterial || !window.crypto?.subtle) {
+    return null;
+  }
+
+  const encryptionKey = await importKeyBackupKey(unlockMaterial);
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await window.crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    encryptionKey,
+    new TextEncoder().encode(String(privateKey)),
+  );
+
+  return {
+    privateKeyBackupCiphertext: arrayBufferToBase64(ciphertext),
+    privateKeyBackupIv: arrayBufferToBase64(iv),
+  };
+}
+
+export async function decryptPrivateKeyBackup(
+  privateKeyBackupCiphertext,
+  privateKeyBackupIv,
+  unlockMaterial,
+) {
+  if (
+    !privateKeyBackupCiphertext ||
+    !privateKeyBackupIv ||
+    !unlockMaterial ||
+    !window.crypto?.subtle
+  ) {
+    return '';
+  }
+
+  const encryptionKey = await importKeyBackupKey(unlockMaterial);
+  const plaintext = await window.crypto.subtle.decrypt(
+    {
+      name: 'AES-GCM',
+      iv: base64ToUint8Array(privateKeyBackupIv),
+    },
+    encryptionKey,
+    base64ToUint8Array(privateKeyBackupCiphertext),
+  );
+
+  return new TextDecoder().decode(plaintext);
 }
 
 export async function hasValidSession(options = {}) {
@@ -185,3 +319,12 @@ export async function api(path, options = {}) {
     },
   });
 }
+
+window.__OCHAT_KEY_BACKUP__ = {
+  deriveKeyBackupUnlockMaterial,
+  storeKeyBackupUnlockMaterial,
+  readKeyBackupUnlockMaterial,
+  clearKeyBackupUnlockMaterial,
+  encryptPrivateKeyBackup,
+  decryptPrivateKeyBackup,
+};

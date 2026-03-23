@@ -23,6 +23,8 @@ model User {
   darkMode           Boolean     @default(false)
   tokenVersion       Int         @default(0)
   publicKey          String?
+  privateKeyBackupCiphertext String?
+  privateKeyBackupIv String?
   publicKeyUpdatedAt DateTime?
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @default(now()) @updatedAt

@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import * as bcrypt from 'bcrypt';
 import { MailService } from '../mail/mail.service';
 import { PushNotificationService } from '../notifications/push-notification.service';
 import { UserService } from './user.service';
@@ -170,5 +171,70 @@ describe('UserService', () => {
         displayName: 'User Nine',
       }),
     ]);
+  });
+
+  it('stores the encrypted private key backup when updating the public key', async () => {
+    prisma.user.update.mockResolvedValue({
+      id: 'user-1',
+      email: 'user1@example.com',
+      pendingEmail: null,
+      name: 'User One',
+      avatar: null,
+      emailVerified: true,
+      backupEnabled: true,
+      backupImages: true,
+      backupVideos: true,
+      backupFiles: true,
+      darkMode: false,
+      publicKey: 'public-key',
+      privateKeyBackupCiphertext: 'ciphertext',
+      privateKeyBackupIv: 'iv-value',
+      publicKeyUpdatedAt: new Date('2026-03-23T00:00:00.000Z'),
+    });
+
+    await service.updatePublicKey('user-1', {
+      publicKey: 'public-key',
+      privateKeyBackupCiphertext: 'ciphertext',
+      privateKeyBackupIv: 'iv-value',
+    });
+
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'user-1' },
+        data: expect.objectContaining({
+          publicKey: 'public-key',
+          privateKeyBackupCiphertext: 'ciphertext',
+          privateKeyBackupIv: 'iv-value',
+        }),
+      }),
+    );
+  });
+
+  it('refreshes the encrypted private key backup when changing password', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      password: await bcrypt.hash('old-password', 10),
+    });
+    prisma.user.update.mockResolvedValue({
+      id: 'user-1',
+    });
+
+    await service.changePassword('user-1', {
+      currentPassword: 'old-password',
+      newPassword: 'new-password',
+      privateKeyBackupCiphertext: 'new-ciphertext',
+      privateKeyBackupIv: 'new-iv',
+    });
+
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'user-1' },
+        data: expect.objectContaining({
+          privateKeyBackupCiphertext: 'new-ciphertext',
+          privateKeyBackupIv: 'new-iv',
+          tokenVersion: { increment: 1 },
+        }),
+      }),
+    );
   });
 });
