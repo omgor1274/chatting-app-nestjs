@@ -24,4 +24,17 @@ describe('upload-storage', () => {
       join(process.env.APP_DATA_DIR, 'uploads', 'avatars'),
     );
   });
+
+  it('resolves relative upload roots against the current working directory', () => {
+    process.env.APP_DATA_DIR = 'tmp-upload-root-relative';
+    const destinationResolver = createUploadDestination('uploads', 'avatars');
+    const callback = jest.fn<void, [Error | null, string]>();
+
+    destinationResolver({}, {}, callback);
+
+    expect(callback).toHaveBeenCalledWith(
+      null,
+      join(process.cwd(), 'tmp-upload-root-relative', 'uploads', 'avatars'),
+    );
+  });
 });

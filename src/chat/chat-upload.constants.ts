@@ -30,7 +30,7 @@ const CHAT_MATROSKA_MIME_TYPES = new Set([
   'application/octet-stream',
 ]);
 
-export const CHAT_UPLOAD_CHUNK_SIZE_BYTES = 5 * 1024 * 1024;
+export const CHAT_UPLOAD_CHUNK_SIZE_BYTES = 16 * 1024 * 1024;
 
 export function normalizeChatAttachmentMimeType(
   mimeType?: string | null,

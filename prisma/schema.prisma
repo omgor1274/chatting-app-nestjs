@@ -56,7 +56,7 @@ model Message {
   fileUrl      String?
   fileName     String?
   fileMimeType String?
-  fileSize     Int?
+  fileSize     BigInt?
   encryptedKey String?
   iv           String?
   algorithm    String?

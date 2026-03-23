@@ -15,6 +15,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const MESSAGE_PAGE_SIZE = 20;
 const DELETE_FOR_EVERYONE_WINDOW_MS = 5 * 60 * 1000;
+const LEGACY_MESSAGE_FILE_SIZE_MAX = BigInt(2147483647);
 
 @Injectable()
 export class ChatService {
@@ -52,6 +53,24 @@ export class ChatService {
     }
     if (message.isEncrypted) return 'Encrypted message';
     return message.content ?? message.ciphertext ?? 'New message';
+  }
+
+  private shouldRetryMessageCreateWithoutFileSize(error: unknown) {
+    const rawMessage = String(
+      error && typeof error === 'object' && 'message' in error
+        ? error.message
+        : error,
+    ).toLowerCase();
+
+    return (
+      rawMessage.includes('filesize') ||
+      rawMessage.includes('file size') ||
+      rawMessage.includes('value out of range') ||
+      rawMessage.includes('integer out of range') ||
+      rawMessage.includes('unable to fit integer value') ||
+      rawMessage.includes('int4') ||
+      rawMessage.includes('bigint')
+    );
   }
 
   private async getBlockState(currentUserId: string, otherUserId: string) {
@@ -233,8 +252,14 @@ export class ChatService {
   }
 
   private serializeDirectMessage(message: any, currentUserId: string) {
+    const normalizedFileSize =
+      message?.fileSize === null || message?.fileSize === undefined
+        ? null
+        : Number(message.fileSize);
+
     return {
       ...message,
+      fileSize: normalizedFileSize,
       readByCount: message.senderId === currentUserId && message.readAt ? 1 : 0,
       recipientCount: message.receiverId ? 1 : 0,
     };
@@ -254,6 +279,10 @@ export class ChatService {
       ).length;
       return {
         ...message,
+        fileSize:
+          message?.fileSize === null || message?.fileSize === undefined
+            ? null
+            : Number(message.fileSize),
         readByCount,
         recipientCount: others.length,
       };
@@ -1272,7 +1301,7 @@ export class ChatService {
     fileUrl?: string;
     fileName?: string;
     fileMimeType?: string;
-    fileSize?: number;
+    fileSize?: number | bigint;
     messageType?: MessageType;
   }) {
     if (!input.receiverId && !input.groupId) {
@@ -1332,29 +1361,56 @@ export class ChatService {
       );
     }
 
-    const createdMessage = await this.prisma.message.create({
-      data: {
-        content: hasEncryptedText
-          ? null
-          : hasPlainText
-            ? input.plainText?.trim()
-            : null,
-        ciphertext: hasEncryptedText ? input.ciphertext?.trim() : null,
-        senderId: input.senderId,
-        receiverId,
-        groupId,
-        messageType,
-        fileUrl: input.fileUrl ?? null,
-        fileName: input.fileName ?? null,
-        fileMimeType: input.fileMimeType ?? null,
-        fileSize: input.fileSize ?? null,
-        encryptedKey: input.encryptedKey?.trim() || null,
-        iv: input.iv?.trim() || null,
-        algorithm: input.algorithm?.trim() || null,
-        isEncrypted:
-          hasEncryptedText || Boolean(input.encryptedKey) || Boolean(input.iv),
-      },
-    });
+    const normalizedFileSize =
+      input.fileSize === null || input.fileSize === undefined
+        ? null
+        : BigInt(input.fileSize);
+
+    const messageData = {
+      content: hasEncryptedText
+        ? null
+        : hasPlainText
+          ? input.plainText?.trim()
+          : null,
+      ciphertext: hasEncryptedText ? input.ciphertext?.trim() : null,
+      senderId: input.senderId,
+      receiverId,
+      groupId,
+      messageType,
+      fileUrl: input.fileUrl ?? null,
+      fileName: input.fileName ?? null,
+      fileMimeType: input.fileMimeType ?? null,
+      fileSize: normalizedFileSize,
+      encryptedKey: input.encryptedKey?.trim() || null,
+      iv: input.iv?.trim() || null,
+      algorithm: input.algorithm?.trim() || null,
+      isEncrypted:
+        hasEncryptedText || Boolean(input.encryptedKey) || Boolean(input.iv),
+    };
+
+    let createdMessage;
+    try {
+      createdMessage = await this.prisma.message.create({
+        data: messageData,
+      });
+    } catch (error) {
+      const canRetryWithoutFileSize =
+        normalizedFileSize !== null &&
+        normalizedFileSize > LEGACY_MESSAGE_FILE_SIZE_MAX &&
+        Boolean(input.fileUrl) &&
+        this.shouldRetryMessageCreateWithoutFileSize(error);
+
+      if (!canRetryWithoutFileSize) {
+        throw error;
+      }
+
+      createdMessage = await this.prisma.message.create({
+        data: {
+          ...messageData,
+          fileSize: null,
+        },
+      });
+    }
 
     const preview = this.previewForMessage(createdMessage);
     if (receiverId) {
@@ -1388,6 +1444,10 @@ export class ChatService {
 
     return {
       ...createdMessage,
+      fileSize:
+        createdMessage.fileSize === null || createdMessage.fileSize === undefined
+          ? null
+          : Number(createdMessage.fileSize),
       readByCount: 0,
       recipientCount: recipientIds.length,
     };

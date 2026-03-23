@@ -1,0 +1,2 @@
+ALTER TABLE "Message"
+ALTER COLUMN "fileSize" TYPE BIGINT;

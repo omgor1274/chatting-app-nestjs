@@ -55,8 +55,18 @@ function getEnvFilePath() {
 }
 
 function getWritableDataRoot() {
-  return process.env.APP_DATA_DIR?.trim()
-    || path.join(app.getPath('userData'), BACKEND_SUBDIR);
+  const configuredPath = process.env.APP_DATA_DIR?.trim();
+  if (configuredPath) {
+    if (path.isAbsolute(configuredPath)) {
+      return configuredPath;
+    }
+
+    if (isDevelopment()) {
+      return path.resolve(getAppAssetRoot(), configuredPath);
+    }
+  }
+
+  return path.join(app.getPath('userData'), BACKEND_SUBDIR);
 }
 
 function loadDesktopEnvFile() {

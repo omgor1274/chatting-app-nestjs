@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { GroupMemberRole } from '@prisma/client';
+import { GroupMemberRole, MessageType } from '@prisma/client';
 import { ChatService } from './chat.service';
 import { PushNotificationService } from '../notifications/push-notification.service';
 import { RedisService } from '../redis/redis.service';
@@ -16,6 +16,7 @@ describe('ChatService', () => {
       findMany: jest.Mock;
     };
     message: {
+      create: jest.Mock;
       findMany: jest.Mock;
     };
     userBlock: {
@@ -53,6 +54,7 @@ describe('ChatService', () => {
         findMany: jest.fn(),
       },
       message: {
+        create: jest.fn(),
         findMany: jest.fn(),
       },
       userBlock: {
@@ -110,6 +112,66 @@ describe('ChatService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it('retries large attachment inserts without file size when a legacy int column rejects them', async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 'sender-1',
+        name: 'Sender',
+        email: 'sender@example.com',
+      })
+      .mockResolvedValueOnce({
+        id: 'receiver-1',
+      });
+
+    jest.spyOn(service, 'assertUsersCanChat').mockResolvedValue(undefined);
+
+    prisma.message.create
+      .mockRejectedValueOnce(
+        new Error('Unable to fit integer value into an INT4 column for fileSize'),
+      )
+      .mockResolvedValueOnce({
+        id: 'message-1',
+        senderId: 'sender-1',
+        receiverId: 'receiver-1',
+        groupId: null,
+        messageType: MessageType.DOCUMENT,
+        fileUrl: '/uploads/chat/video.mkv',
+        fileName: 'video.mkv',
+        fileMimeType: 'video/x-matroska',
+        fileSize: null,
+        createdAt: new Date('2026-03-23T00:00:00.000Z'),
+        readAt: null,
+      });
+
+    const result = await service.createEncryptedMessage({
+      senderId: 'sender-1',
+      receiverId: 'receiver-1',
+      fileUrl: '/uploads/chat/video.mkv',
+      fileName: 'video.mkv',
+      fileMimeType: 'video/x-matroska',
+      fileSize: 10n * 1024n * 1024n * 1024n,
+      messageType: MessageType.DOCUMENT,
+    });
+
+    expect(prisma.message.create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          fileSize: 10n * 1024n * 1024n * 1024n,
+        }),
+      }),
+    );
+    expect(prisma.message.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          fileSize: null,
+        }),
+      }),
+    );
+    expect(result.fileSize).toBeNull();
   });
 
   it('promotes the next member to admin when the last admin leaves', async () => {

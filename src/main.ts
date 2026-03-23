@@ -9,6 +9,7 @@ import { AppModule } from './app.module';
 import {
   getEnvFilePath,
   resolveAppRootPath,
+  getWritableDataDir,
   resolveWritableDataPath,
 } from './common/app-paths';
 import {
@@ -69,6 +70,9 @@ async function bootstrap() {
     recursive: true,
   });
   mkdirSync(resolveWritableDataPath('uploads', 'chat-sessions', 'chunks'), {
+    recursive: true,
+  });
+  mkdirSync(resolveWritableDataPath('uploads', 'chat-sessions', 'assembled'), {
     recursive: true,
   });
   mkdirSync(resolveWritableDataPath('uploads', 'groups'), { recursive: true });
@@ -203,6 +207,7 @@ async function bootstrap() {
   );
   console.log('PORT from env:', process.env.PORT);
   console.log('Resolved server port:', port);
+  console.log('Writable data directory:', getWritableDataDir());
   const server = await app.listen(port, '0.0.0.0');
   server.requestTimeout = 0;
   server.headersTimeout = 0;

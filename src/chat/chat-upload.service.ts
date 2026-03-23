@@ -12,6 +12,7 @@ import {
   rename,
   rm,
   stat,
+  truncate,
   unlink,
   writeFile,
 } from 'fs/promises';
@@ -41,6 +42,7 @@ type UploadSessionRecord = {
   chunkSize: number;
   totalChunks: number;
   uploadedChunks: number[];
+  storageMode: 'chunked' | 'stream';
   status: UploadSessionStatus;
   finalFileName: string | null;
   fileUrl: string | null;
@@ -73,6 +75,14 @@ export class ChatUploadService {
 
   private getSessionChunksDirPath(sessionId: string) {
     return join(this.getSessionRootPath(), 'chunks', sessionId);
+  }
+
+  private getSessionAssembledDirPath() {
+    return join(this.getSessionRootPath(), 'assembled');
+  }
+
+  private getSessionAssembledTempPath(sessionId: string) {
+    return join(this.getSessionAssembledDirPath(), `${sessionId}.part`);
   }
 
   private getSessionMetaPath(sessionId: string) {
@@ -173,6 +183,7 @@ export class ChatUploadService {
   private async writeSessionRecord(record: UploadSessionRecord) {
     await mkdir(this.getSessionMetaDirPath(), { recursive: true });
     await mkdir(this.getSessionChunksDirPath(record.id), { recursive: true });
+    await mkdir(this.getSessionAssembledDirPath(), { recursive: true });
     await writeFile(
       this.getSessionMetaPath(record.id),
       JSON.stringify(record, null, 2),
@@ -207,7 +218,7 @@ export class ChatUploadService {
     );
   }
 
-  private getCompletedChunkCountForAssembledBytes(
+  private getCompletedChunkPrefixForAssembledBytes(
     record: UploadSessionRecord,
     assembledBytes: number,
   ) {
@@ -215,23 +226,102 @@ export class ChatUploadService {
       throw new BadRequestException('Upload assembly is invalid');
     }
 
-    let totalBytes = 0;
+    let completedBytes = 0;
+    let completedChunkCount = 0;
+
     for (let index = 0; index < record.totalChunks; index += 1) {
-      if (assembledBytes === totalBytes) {
-        return index;
+      const nextCompletedBytes =
+        completedBytes + this.getChunkByteLength(record, index);
+      if (assembledBytes < nextCompletedBytes) {
+        break;
       }
 
-      totalBytes += this.getChunkByteLength(record, index);
-      if (assembledBytes === totalBytes) {
-        return index + 1;
-      }
+      completedBytes = nextCompletedBytes;
+      completedChunkCount = index + 1;
     }
 
-    if (assembledBytes === totalBytes) {
-      return record.totalChunks;
+    return {
+      completedBytes,
+      completedChunkCount,
+    };
+  }
+
+  private getCompletedChunkCountForAssembledBytes(
+    record: UploadSessionRecord,
+    assembledBytes: number,
+  ) {
+    const { completedBytes, completedChunkCount } =
+      this.getCompletedChunkPrefixForAssembledBytes(record, assembledBytes);
+
+    if (completedBytes === assembledBytes) {
+      return completedChunkCount;
     }
 
     throw new BadRequestException('Upload assembly is incomplete');
+  }
+
+  private buildUploadedChunkList(count: number) {
+    return Array.from({ length: Math.max(count, 0) }, (_, index) => index);
+  }
+
+  private areUploadedChunkListsEqual(left: number[], right: number[]) {
+    return (
+      left.length === right.length &&
+      left.every((value, index) => value === right[index])
+    );
+  }
+
+  private async syncStreamSessionRecord(record: UploadSessionRecord) {
+    if (record.storageMode !== 'stream') {
+      return record;
+    }
+
+    const assembledTempPath = this.getSessionAssembledTempPath(record.id);
+    const expectedUploadedBytes = this.getUploadedBytes(record);
+
+    let assembledBytes = 0;
+    try {
+      const assembledStat = await stat(assembledTempPath);
+      assembledBytes = assembledStat.size;
+    } catch (error) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        error.code === 'ENOENT'
+      ) {
+        if (record.uploadedChunks.length) {
+          record.uploadedChunks = [];
+          record.updatedAt = new Date().toISOString();
+          await this.writeSessionRecord(record);
+        }
+        return record;
+      }
+      throw error;
+    }
+
+    const { completedBytes, completedChunkCount } =
+      this.getCompletedChunkPrefixForAssembledBytes(record, assembledBytes);
+    const expectedUploadedChunks =
+      this.buildUploadedChunkList(completedChunkCount);
+    const shouldTruncate = assembledBytes !== completedBytes;
+    const shouldRewriteRecord =
+      shouldTruncate ||
+      !this.areUploadedChunkListsEqual(record.uploadedChunks, expectedUploadedChunks) ||
+      expectedUploadedBytes !== completedBytes;
+
+    if (!shouldRewriteRecord) {
+      return record;
+    }
+
+    if (shouldTruncate) {
+      await truncate(assembledTempPath, completedBytes);
+    }
+
+    record.uploadedChunks = expectedUploadedChunks;
+    record.updatedAt = new Date().toISOString();
+    await this.writeSessionRecord(record);
+    return record;
   }
 
   private getNextChunkIndex(record: UploadSessionRecord) {
@@ -262,8 +352,9 @@ export class ChatUploadService {
     };
   }
 
-  private async cleanupChunkFiles(record: UploadSessionRecord) {
+  private async cleanupSessionArtifacts(record: UploadSessionRecord) {
     const chunksDir = this.getSessionChunksDirPath(record.id);
+    const assembledTempPath = this.getSessionAssembledTempPath(record.id);
 
     try {
       const files = await readdir(chunksDir);
@@ -283,6 +374,8 @@ export class ChatUploadService {
         throw error;
       }
     }
+
+    await unlink(assembledTempPath).catch(() => undefined);
   }
 
   async createSession(userId: string, input: CreateUploadSessionInput) {
@@ -326,6 +419,7 @@ export class ChatUploadService {
       chunkSize: CHAT_UPLOAD_CHUNK_SIZE_BYTES,
       totalChunks,
       uploadedChunks: [],
+      storageMode: 'stream',
       status: 'pending',
       finalFileName: null,
       fileUrl: null,
@@ -338,7 +432,9 @@ export class ChatUploadService {
   }
 
   async getSessionStatus(sessionId: string, userId: string) {
-    const record = await this.getOwnedSessionRecord(sessionId, userId);
+    const record = await this.syncStreamSessionRecord(
+      await this.getOwnedSessionRecord(sessionId, userId),
+    );
     return this.serializeSession(record);
   }
 
@@ -355,7 +451,9 @@ export class ChatUploadService {
     let uploadedChunkMoved = false;
     const chunkIndex = this.normalizeChunkIndex(chunkIndexInput);
     try {
-      const record = await this.getOwnedSessionRecord(sessionId, userId);
+      const record = await this.syncStreamSessionRecord(
+        await this.getOwnedSessionRecord(sessionId, userId),
+      );
 
       if (record.status !== 'pending') {
         throw new BadRequestException('Only pending uploads can receive chunks');
@@ -375,11 +473,53 @@ export class ChatUploadService {
         groupId: record.groupId,
       });
 
-      await mkdir(this.getSessionChunksDirPath(record.id), { recursive: true });
-      const chunkPath = this.getChunkPath(record.id, chunkIndex);
-      await unlink(chunkPath).catch(() => undefined);
-      await rename(chunk.path, chunkPath);
-      uploadedChunkMoved = true;
+      if (record.storageMode === 'stream') {
+        if (record.uploadedChunks.includes(chunkIndex)) {
+          return this.serializeSession(record);
+        }
+
+        const nextChunkIndex = this.getNextChunkIndex(record);
+        if (nextChunkIndex === null) {
+          return this.serializeSession(record);
+        }
+        if (chunkIndex !== nextChunkIndex) {
+          throw new BadRequestException('Chunks must be uploaded in order');
+        }
+
+        const assembledTempPath = this.getSessionAssembledTempPath(record.id);
+        const expectedUploadedBytes = this.getUploadedBytes(record);
+
+        if (chunkIndex === 0 && expectedUploadedBytes === 0) {
+          await unlink(assembledTempPath).catch(() => undefined);
+          await rename(chunk.path, assembledTempPath);
+          uploadedChunkMoved = true;
+        } else {
+          const assembledStat = await stat(assembledTempPath).catch(() => null);
+          if (!assembledStat || assembledStat.size !== expectedUploadedBytes) {
+            throw new BadRequestException(
+              'Upload session is out of sync. Please retry the upload.',
+            );
+          }
+
+          await pipeline(
+            createReadStream(chunk.path),
+            createWriteStream(assembledTempPath, { flags: 'a' }),
+          );
+
+          const nextAssembledStat = await stat(assembledTempPath);
+          if (nextAssembledStat.size !== expectedUploadedBytes + expectedSize) {
+            throw new BadRequestException(
+              'Upload session is incomplete. Please retry the upload.',
+            );
+          }
+        }
+      } else {
+        await mkdir(this.getSessionChunksDirPath(record.id), { recursive: true });
+        const chunkPath = this.getChunkPath(record.id, chunkIndex);
+        await unlink(chunkPath).catch(() => undefined);
+        await rename(chunk.path, chunkPath);
+        uploadedChunkMoved = true;
+      }
 
       if (!record.uploadedChunks.includes(chunkIndex)) {
         record.uploadedChunks = [...record.uploadedChunks, chunkIndex].sort(
@@ -398,7 +538,9 @@ export class ChatUploadService {
   }
 
   async finalizeSession(sessionId: string, userId: string) {
-    const record = await this.getOwnedSessionRecord(sessionId, userId);
+    const record = await this.syncStreamSessionRecord(
+      await this.getOwnedSessionRecord(sessionId, userId),
+    );
 
     if (record.status !== 'pending') {
       throw new BadRequestException('Only pending uploads can be finalized');
@@ -423,6 +565,7 @@ export class ChatUploadService {
 
     const finalFileName = record.finalFileName;
     const finalPath = this.getResolvedFinalAttachmentPath(finalFileName);
+    const assembledTempPath = this.getSessionAssembledTempPath(record.id);
     const tempPath = `${finalPath}.part`;
 
     await mkdir(resolveWritableDataPath('uploads', 'chat'), { recursive: true });
@@ -447,7 +590,17 @@ export class ChatUploadService {
       }
     }
 
-    if (!finalFileExists) {
+    if (!finalFileExists && record.storageMode === 'stream') {
+      const assembledStat = await stat(assembledTempPath).catch(() => null);
+      if (!assembledStat || assembledStat.size !== record.fileSize) {
+        throw new BadRequestException('Uploaded file is incomplete');
+      }
+
+      await unlink(finalPath).catch(() => undefined);
+      await rename(assembledTempPath, finalPath);
+    }
+
+    if (!finalFileExists && record.storageMode !== 'stream') {
       let nextChunkIndex = 0;
       try {
         const tempStat = await stat(tempPath);
@@ -536,13 +689,15 @@ export class ChatUploadService {
     record.updatedAt = new Date().toISOString();
 
     await this.writeSessionRecord(record);
-    await this.cleanupChunkFiles(record);
+    await this.cleanupSessionArtifacts(record);
 
     return message;
   }
 
   async cancelSession(sessionId: string, userId: string) {
-    const record = await this.getOwnedSessionRecord(sessionId, userId);
+    const record = await this.syncStreamSessionRecord(
+      await this.getOwnedSessionRecord(sessionId, userId),
+    );
 
     if (record.status === 'completed') {
       throw new BadRequestException('Completed uploads cannot be cancelled');
@@ -551,7 +706,7 @@ export class ChatUploadService {
     record.status = 'cancelled';
     record.updatedAt = new Date().toISOString();
     await this.writeSessionRecord(record);
-    await this.cleanupChunkFiles(record);
+    await this.cleanupSessionArtifacts(record);
 
     return this.serializeSession(record);
   }
