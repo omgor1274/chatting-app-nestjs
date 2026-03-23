@@ -1905,12 +1905,12 @@
       "
     />
 
-    <script src="/runtime-config.js?v=20260323-runtimecfg1"></script>
+    <script src="/runtime-config.js?v=20260323-authfetchfix1"></script>
     <script type="module">
       import {
         hasValidSession,
         loadPublicConfig,
-      } from '/public/runtime.js?v=20260323-runtimecfg1';
+      } from '/public/runtime.js?v=20260323-authfetchfix1';
 
       const loadScript = (src) =>
         new Promise((resolve, reject) => {
@@ -1928,7 +1928,7 @@
         window.location.replace('/auth');
       } else {
         loadScript('https://cdn.socket.io/4.7.2/socket.io.min.js')
-          .then(() => loadScript('/public/app.js?v=20260323-runtimecfg1'))
+          .then(() => loadScript('/public/app.js?v=20260323-authfetchfix1'))
           .catch((error) =>
             console.error('Failed to load chat runtime', error),
           );

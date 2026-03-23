@@ -30,7 +30,7 @@ export class AppService {
 
     return {
       appOrigin,
-      apiUrl: configuredApiUrl || requestOrigin || appOrigin,
+      apiUrl: requestOrigin || configuredApiUrl || appOrigin,
       defaultApiOrigin,
       avatarBaseUrl:
         process.env.UI_AVATAR_BASE_URL || '/icons/default-avatar.svg',

@@ -7,7 +7,7 @@ import {
   hasValidSession,
   loadPublicConfig,
   readJsonResponse,
-} from './runtime.js?v=20260323-runtimecfg1';
+} from './runtime.js?v=20260323-authfetchfix1';
 
 const LAST_CHAT_ROUTE_KEY = 'chat_last_route';
 const NOTIFICATION_PERMISSION_KEY = 'ochat_notification_permission_requested';
@@ -94,8 +94,8 @@ function updateCloseLink() {
 function prefetchChatShell() {
   const hrefs = [
     getLastChatRoute(),
-    '/public/app.js?v=20260323-runtimecfg1',
-    '/public/runtime.js?v=20260323-runtimecfg1',
+    '/public/app.js?v=20260323-authfetchfix1',
+    '/public/runtime.js?v=20260323-authfetchfix1',
     '/public/app.css?v=20260323-layoutlock1',
   ];
 

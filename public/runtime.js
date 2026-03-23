@@ -36,15 +36,11 @@ function getConfigCandidates() {
 
 function resolveHostedApiUrl(candidate, data) {
   const configuredApiUrl = data?.apiUrl;
-  if (configuredApiUrl) {
-    return configuredApiUrl;
-  }
-
   if (isHostedOrigin) {
-    return candidate || window.location.origin;
+    return candidate || configuredApiUrl || window.location.origin;
   }
 
-  return candidate;
+  return configuredApiUrl || candidate;
 }
 
 export function getApiUrl() {
