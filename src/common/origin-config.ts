@@ -18,6 +18,10 @@ export function isAllowedLocalDevOrigin(origin: string) {
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin.trim());
 }
 
+export function isAllowedCloudflareTunnelOrigin(origin: string) {
+  return /^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/i.test(origin.trim());
+}
+
 function getRailwayPublicOrigin() {
   const publicDomain = process.env.RAILWAY_PUBLIC_DOMAIN?.trim();
   if (!publicDomain) {
@@ -61,7 +65,10 @@ export function isAllowedRequestOrigin(
     return true;
   }
 
-  return isAllowedLocalDevOrigin(normalizedOrigin);
+  return (
+    isAllowedLocalDevOrigin(normalizedOrigin) ||
+    isAllowedCloudflareTunnelOrigin(normalizedOrigin)
+  );
 }
 
 export function resolveDefaultAppOrigin() {

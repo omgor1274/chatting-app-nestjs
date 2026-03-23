@@ -1,5 +1,6 @@
 import {
   collectConfiguredOrigins,
+  isAllowedCloudflareTunnelOrigin,
   isAllowedRequestOrigin,
   normalizeOrigin,
   resolveDefaultAppOrigin,
@@ -54,6 +55,22 @@ describe('origin-config', () => {
     expect(
       isAllowedRequestOrigin('https://other.example.com', allowedOrigins),
     ).toBe(false);
+  });
+
+  it('allows Cloudflare trycloudflare tunnel origins', () => {
+    const allowedOrigins = ['https://my-app.up.railway.app'];
+
+    expect(
+      isAllowedCloudflareTunnelOrigin(
+        'https://decorative-dear-unavailable-grande.trycloudflare.com',
+      ),
+    ).toBe(true);
+    expect(
+      isAllowedRequestOrigin(
+        'https://decorative-dear-unavailable-grande.trycloudflare.com',
+        allowedOrigins,
+      ),
+    ).toBe(true);
   });
 
   it('falls back to Railway public domain for app origin', () => {
