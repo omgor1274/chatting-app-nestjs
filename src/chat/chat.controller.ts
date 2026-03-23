@@ -15,7 +15,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage, memoryStorage } from 'multer';
 import { extname } from 'path';
 import { JwtGuard } from '../auth/jwt/jwt.guard';
-import { resolveWritableDataPath } from '../common/app-paths';
+import { createUploadDestination } from '../common/upload-storage';
 import { ChatGateway } from './chat.gateway';
 import {
   CHAT_UPLOAD_CHUNK_SIZE_BYTES,
@@ -194,7 +194,7 @@ export class ChatController {
   @UseInterceptors(
     FileInterceptor('avatar', {
       storage: diskStorage({
-        destination: resolveWritableDataPath('uploads', 'groups'),
+        destination: createUploadDestination('uploads', 'groups'),
         filename: groupAvatarFileName,
       }),
       limits: {
@@ -236,7 +236,7 @@ export class ChatController {
   @UseInterceptors(
     FileInterceptor('avatar', {
       storage: diskStorage({
-        destination: resolveWritableDataPath('uploads', 'groups'),
+        destination: createUploadDestination('uploads', 'groups'),
         filename: groupAvatarFileName,
       }),
       limits: {
@@ -529,7 +529,7 @@ export class ChatController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: diskStorage({
-        destination: resolveWritableDataPath('uploads', 'chat'),
+        destination: createUploadDestination('uploads', 'chat'),
         filename: attachmentFileName,
       }),
       fileFilter: (req, file, callback) => {

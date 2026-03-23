@@ -108,6 +108,7 @@ const NOTIFICATION_PERMISSION_KEY = 'ochat_notification_permission_requested';
 const MESSAGE_ACTION_TOUCH_HOLD_MS = 750;
 const MESSAGE_ACTION_MOVE_TOLERANCE_PX = 6;
 const MESSAGE_ACTION_SCROLL_BLOCK_MS = 700;
+const MAX_ATTACHMENT_UPLOAD_AUTO_RETRIES = 4;
 let messageActionScrollBlockedUntil = 0;
 const MATROSKA_ATTACHMENT_MIME_TYPES = new Set([
   'video/x-matroska',
@@ -2548,6 +2549,23 @@ function createUploadRequestError(
   return error;
 }
 
+function normalizeAttachmentUploadNextChunkIndex(value, fallbackValue = 0) {
+  if (value === null) {
+    return null;
+  }
+
+  if (value === undefined || value === '') {
+    return fallbackValue;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return fallbackValue;
+  }
+
+  return parsed;
+}
+
 function resolveAttachmentMimeType(file) {
   const mimeType = String(file?.type || '').trim().toLowerCase();
   const fileName = String(file?.name || '').trim().toLowerCase();
@@ -2757,6 +2775,48 @@ function getAttachmentQueueCounts() {
   );
 }
 
+function renderAttachmentQueueActionButtons(task) {
+  const taskId = escapeHtml(task.id);
+  const buttonClass =
+    'rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100';
+
+  if (task.status === 'pending-send') {
+    return `<button type="button" onclick="removeAttachmentUploadTask('${taskId}')" class="${buttonClass}">Remove</button>`;
+  }
+
+  if (task.status === 'failed') {
+    return `
+      <div class="flex items-center gap-2">
+        <button type="button" onclick="retryAttachmentUpload('${taskId}')" class="${buttonClass}">Retry</button>
+        <button type="button" onclick="removeAttachmentUploadTask('${taskId}')" class="${buttonClass}">Remove</button>
+      </div>
+    `;
+  }
+
+  if (task.status === 'paused') {
+    return `
+      <div class="flex items-center gap-2">
+        <button type="button" onclick="resumeAttachmentUpload('${taskId}')" class="${buttonClass}">Resume</button>
+        <button type="button" onclick="cancelAttachmentUpload('${taskId}')" class="${buttonClass}">Stop</button>
+      </div>
+    `;
+  }
+
+  if (task.status === 'queued' || task.status === 'uploading' || task.status === 'retrying') {
+    return `<button type="button" onclick="cancelAttachmentUpload('${taskId}')" class="${buttonClass}">Stop</button>`;
+  }
+
+  if (task.status === 'cancelled' || task.status === 'completed') {
+    return `<button type="button" onclick="removeAttachmentUploadTask('${taskId}')" class="${buttonClass}">Remove</button>`;
+  }
+
+  if (task.status === 'finalizing') {
+    return '<span class="inline-flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">Finishing...</span>';
+  }
+
+  return `<button type="button" onclick="removeAttachmentUploadTask('${taskId}')" class="${buttonClass}">Remove</button>`;
+}
+
 function syncChatSendStatus() {
   const sendStatus = document.getElementById('chat-send-status');
   if (!sendStatus || composerSendInFlight) {
@@ -2851,10 +2911,6 @@ function renderAttachmentUploadQueue() {
     .map((task) => {
       const isDone = task.status === 'completed';
       const isFailed = task.status === 'failed';
-      const isActivelyUploading = ['uploading', 'retrying'].includes(task.status);
-      const isBusy = ['uploading', 'retrying', 'finalizing'].includes(
-        task.status,
-      );
       const percentage = task.file?.size
         ? Math.max(
             0,
@@ -2865,26 +2921,20 @@ function renderAttachmentUploadQueue() {
         ? 'Ready in chat'
         : isFailed
           ? task.errorMessage || 'Upload paused'
+        : task.status === 'cancelled'
+          ? 'Upload stopped'
         : task.status === 'paused'
           ? 'Paused'
-          : task.status === 'pending-send'
+        : task.status === 'pending-send'
             ? 'Ready to send'
           : task.status === 'queued'
             ? 'Waiting in queue'
+            : task.status === 'retrying'
+              ? task.errorMessage || 'Retrying upload...'
             : task.status === 'finalizing'
               ? 'Finalizing file...'
               : formatUploadProgress(task.progressBytes, task.file.size);
-      const actionButton = task.status === 'pending-send'
-        ? `<button type="button" onclick="removeAttachmentUploadTask('${escapeHtml(task.id)}')" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">Remove</button>`
-        : isFailed
-        ? `<button type="button" onclick="retryAttachmentUpload('${escapeHtml(task.id)}')" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">Retry</button>`
-        : task.status === 'paused'
-        ? `<button type="button" onclick="resumeAttachmentUpload('${escapeHtml(task.id)}')" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">Resume</button>`
-        : isDone
-          ? `<button type="button" onclick="removeAttachmentUploadTask('${escapeHtml(task.id)}')" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">Remove</button>`
-          : task.status === 'finalizing'
-            ? `<span class="inline-flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">Finishing...</span>`
-            : `<button type="button" onclick="${isActivelyUploading ? `pauseAttachmentUpload('${escapeHtml(task.id)}')` : `cancelAttachmentUpload('${escapeHtml(task.id)}')`}" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">${isActivelyUploading ? 'Pause' : isBusy ? 'Working...' : 'Remove'}</button>`;
+      const actionButton = renderAttachmentQueueActionButtons(task);
 
       return `
         <div class="rounded-[20px] border border-slate-200 bg-white px-3 py-3 shadow-sm">
@@ -2947,11 +2997,14 @@ async function createAttachmentUploadSession(task) {
   }
 
   task.sessionId = data.sessionId;
-  task.chunkSize = data.chunkSize || 0;
-  task.totalChunks = data.totalChunks || 0;
-  task.uploadedBytes = data.uploadedBytes || 0;
+  task.chunkSize = data.chunkSize ?? 0;
+  task.totalChunks = data.totalChunks ?? 0;
+  task.uploadedBytes = data.uploadedBytes ?? 0;
   task.progressBytes = task.uploadedBytes;
-  task.nextChunkIndex = data.nextChunkIndex || 0;
+  task.nextChunkIndex = normalizeAttachmentUploadNextChunkIndex(
+    data.nextChunkIndex,
+    0,
+  );
   return data;
 }
 
@@ -2976,11 +3029,14 @@ async function syncAttachmentUploadSession(task) {
     );
   }
 
-  task.chunkSize = data.chunkSize || task.chunkSize || 0;
-  task.totalChunks = data.totalChunks || task.totalChunks || 0;
-  task.uploadedBytes = data.uploadedBytes || 0;
+  task.chunkSize = data.chunkSize ?? task.chunkSize ?? 0;
+  task.totalChunks = data.totalChunks ?? task.totalChunks ?? 0;
+  task.uploadedBytes = data.uploadedBytes ?? 0;
   task.progressBytes = task.uploadedBytes;
-  task.nextChunkIndex = data.nextChunkIndex || 0;
+  task.nextChunkIndex = normalizeAttachmentUploadNextChunkIndex(
+    data.nextChunkIndex,
+    0,
+  );
   return data;
 }
 
@@ -3022,6 +3078,14 @@ async function cancelAttachmentUploadSession(task) {
 }
 
 function scheduleAttachmentUploadRetry(task) {
+  if (task.autoRetryCount >= MAX_ATTACHMENT_UPLOAD_AUTO_RETRIES) {
+    task.status = 'failed';
+    task.errorMessage =
+      'Upload stopped after repeated connection problems. Press Retry to continue.';
+    renderAttachmentUploadQueue();
+    return;
+  }
+
   task.autoRetryCount += 1;
   task.status = 'retrying';
   task.errorMessage = `Reconnecting upload${task.autoRetryCount > 1 ? ` (attempt ${task.autoRetryCount})` : ''}...`;
@@ -3058,10 +3122,16 @@ async function uploadAttachmentTask(task) {
   }
 
   const chunkSize = task.chunkSize || 5 * 1024 * 1024;
-  let nextChunkIndex = Number(task.nextChunkIndex || 0);
+  let nextChunkIndex = normalizeAttachmentUploadNextChunkIndex(
+    task.nextChunkIndex,
+    0,
+  );
   task.progressBytes = task.uploadedBytes || 0;
 
-  while (nextChunkIndex < Math.max(task.totalChunks || 0, 1)) {
+  while (
+    nextChunkIndex !== null &&
+    nextChunkIndex < Math.max(task.totalChunks || 0, 1)
+  ) {
     if (task.pauseRequested) {
       throw new Error('Upload paused');
     }
@@ -3084,10 +3154,18 @@ async function uploadAttachmentTask(task) {
       },
     );
 
-    task.uploadedBytes = data.uploadedBytes || end;
+    task.uploadedBytes = data.uploadedBytes ?? end;
     task.progressBytes = task.uploadedBytes;
-    task.nextChunkIndex = data.nextChunkIndex ?? nextChunkIndex + 1;
-    nextChunkIndex = Number(task.nextChunkIndex || nextChunkIndex + 1);
+    task.autoRetryCount = 0;
+    task.nextChunkIndex = normalizeAttachmentUploadNextChunkIndex(
+      data.nextChunkIndex,
+      nextChunkIndex + 1,
+    );
+    nextChunkIndex = task.nextChunkIndex;
+    if (nextChunkIndex === null) {
+      task.uploadedBytes = task.file.size;
+      task.progressBytes = task.file.size;
+    }
     renderAttachmentUploadQueue();
   }
 
@@ -3149,7 +3227,7 @@ async function processAttachmentUploadQueue() {
       String(error?.message || '').toLowerCase().includes('cancel')
     ) {
       nextTask.status = 'cancelled';
-      nextTask.errorMessage = '';
+      nextTask.errorMessage = 'Upload stopped';
     } else if (isRecoverableUploadError(error)) {
       try {
         await syncAttachmentUploadSession(nextTask);
@@ -3217,6 +3295,7 @@ async function retryAttachmentUpload(taskId) {
   task.status = 'queued';
   task.errorMessage = '';
   task.pauseRequested = false;
+  task.autoRetryCount = 0;
   renderAttachmentUploadQueue();
   await processAttachmentUploadQueue();
 }

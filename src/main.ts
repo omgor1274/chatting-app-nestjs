@@ -15,6 +15,7 @@ import {
   collectConfiguredOrigins,
   isAllowedRequestOrigin,
 } from './common/origin-config';
+import { resolveRateLimitClientKey } from './common/rate-limit-client-key';
 
 loadEnv({ path: getEnvFilePath(), override: false });
 
@@ -141,6 +142,7 @@ async function bootstrap() {
       limit: readEnvNumber('RATE_LIMIT_MAX', 400),
       standardHeaders: 'draft-8',
       legacyHeaders: false,
+      keyGenerator: resolveRateLimitClientKey,
       skip: (req) =>
         req.path === '/health' ||
         req.path.startsWith('/uploads/') ||
@@ -157,6 +159,7 @@ async function bootstrap() {
       limit: readEnvNumber('AUTH_RATE_LIMIT_MAX', 20),
       standardHeaders: 'draft-8',
       legacyHeaders: false,
+      keyGenerator: resolveRateLimitClientKey,
       message: {
         message: 'Too many authentication attempts. Please wait and try again.',
       },
