@@ -95,6 +95,7 @@ let blockedUsers = [];
 let ignoredPresenceUserIds = new Set();
 let sessionExpiryHandled = false;
 let messageActionTarget = null;
+let requestActionInFlight = '';
 let manageGroupAvatarShouldClear = false;
 let presenceRefreshPromise = null;
 let groupDetailsCache = new Map();
@@ -1514,11 +1515,92 @@ function startReplyToSelectedMessage() {
   getById('msg-input')?.focus();
 }
 
+function getMessageBubbleElement(messageId) {
+  return getById(`message-${messageId}`)?.querySelector('.message-bubble-shell');
+}
+
+function pulseMessageBubble(messageId, className = 'message-bubble-commit') {
+  if (!messageId) {
+    return;
+  }
+
+  window.requestAnimationFrame(() => {
+    triggerMotionClass(getMessageBubbleElement(messageId), className, 460);
+  });
+}
+
+function animateMessageShellExit(messageId, durationMs = 220) {
+  return new Promise((resolve) => {
+    const shell = getById(`message-${messageId}`);
+    if (!shell) {
+      resolve(false);
+      return;
+    }
+
+    shell.classList.add('message-shell-exit');
+    window.setTimeout(() => {
+      resolve(true);
+    }, durationMs);
+  });
+}
+
+function setMessageActionButtonLabel(button, label) {
+  if (!button) {
+    return;
+  }
+
+  const target = button.querySelector('span') || button;
+  if (!button.dataset.idleLabel) {
+    button.dataset.idleLabel = target.textContent.trim();
+  }
+
+  target.textContent = label || button.dataset.idleLabel;
+}
+
+function setMessageActionsBusyState(isBusy, options = {}) {
+  const menu = getById('message-actions-menu');
+  if (!menu) {
+    return;
+  }
+
+  const buttons = Array.from(menu.querySelectorAll('button'));
+  const reactionButtons = Array.from(
+    menu.querySelectorAll('.message-reaction-option'),
+  );
+
+  menu.classList.toggle('message-actions-busy', isBusy);
+  buttons.forEach((button) => {
+    setMessageActionButtonLabel(button);
+    button.disabled = Boolean(isBusy);
+  });
+  reactionButtons.forEach((button) => {
+    button.disabled = Boolean(isBusy);
+  });
+
+  if (!isBusy) {
+    return;
+  }
+
+  if (options.buttonId) {
+    const busyButton = getById(options.buttonId);
+    if (busyButton) {
+      busyButton.disabled = true;
+      setMessageActionButtonLabel(busyButton, options.label || 'Working...');
+    }
+  }
+}
+
 function toggleSelectedMessageReaction(emoji) {
   if (!messageActionTarget?.id || !emoji) {
     return;
   }
 
+  const messageId = messageActionTarget.id;
+  triggerMotionClass(
+    getMessageBubbleElement(messageId),
+    'message-bubble-processing',
+    300,
+  );
   if (getMessageReaction(messageActionTarget.id) === emoji) {
     messageReactionsById.delete(messageActionTarget.id);
   } else {
@@ -1534,6 +1616,7 @@ function toggleSelectedMessageReaction(emoji) {
   renderStarredMessages();
   renderSidebarStarredHub();
   closeMessageActions();
+  pulseMessageBubble(messageId);
 }
 
 function getSidebarPinnedConversations() {
@@ -4272,24 +4355,31 @@ function toggleSelectedMessageStar() {
     return;
   }
 
-  if (isMessageStarred(messageActionTarget.id)) {
-    starredMessagesById.delete(messageActionTarget.id);
+  const messageId = messageActionTarget.id;
+  triggerMotionClass(
+    getMessageBubbleElement(messageId),
+    'message-bubble-processing',
+    300,
+  );
+  if (isMessageStarred(messageId)) {
+    starredMessagesById.delete(messageId);
   } else {
     starredMessagesById.set(
-      messageActionTarget.id,
+      messageId,
       buildStarredMessageEntry(messageActionTarget),
     );
   }
 
   persistStarredMessages();
-  if (conversationMessages.has(messageActionTarget.id)) {
+  if (conversationMessages.has(messageId)) {
     replaceRenderedMessage(
-      conversationMessages.get(messageActionTarget.id) || messageActionTarget,
+      conversationMessages.get(messageId) || messageActionTarget,
     );
   }
   renderStarredMessages();
   renderSidebarStarredHub();
   closeMessageActions();
+  pulseMessageBubble(messageId);
 }
 
 async function loadSharedMediaForSelectedConversation() {
@@ -6540,6 +6630,46 @@ async function ensureChatPermissionReady(user = selectedUser) {
   return Boolean(permission?.canChat);
 }
 
+function applyRequestActionProgressState(actionBtn, rejectBtn) {
+  [actionBtn, rejectBtn].filter(Boolean).forEach((button) => {
+    button.classList.remove('request-action-busy');
+    button.classList.remove('cursor-wait');
+  });
+
+  if (!requestActionInFlight) {
+    return;
+  }
+
+  actionBtn.disabled = true;
+  rejectBtn.disabled = true;
+
+  if (requestActionInFlight === 'send') {
+    actionBtn.classList.remove('hidden');
+    actionBtn.textContent = 'Sending...';
+    actionBtn.classList.add('request-action-busy', 'cursor-wait');
+    return;
+  }
+
+  if (requestActionInFlight === 'accept') {
+    actionBtn.classList.remove('hidden');
+    actionBtn.textContent = 'Accepting...';
+    actionBtn.classList.add('request-action-busy', 'cursor-wait');
+    rejectBtn.classList.remove('hidden');
+    return;
+  }
+
+  rejectBtn.classList.remove('hidden');
+  rejectBtn.textContent =
+    requestActionInFlight === 'withdraw' ? 'Withdrawing...' : 'Rejecting...';
+  rejectBtn.classList.add('request-action-busy', 'cursor-wait');
+}
+
+function pulseRequestActionSurface() {
+  triggerMotionClass(getById('request-action-btn'), 'request-action-success', 460);
+  triggerMotionClass(getById('request-reject-btn'), 'request-action-success', 460);
+  triggerMotionClass(getById('chat-header'), 'chat-chrome-enter', 320);
+}
+
 function updateChatAccessUI() {
   const input = document.getElementById('msg-input');
   const fileInput = document.getElementById('file-input');
@@ -6620,6 +6750,7 @@ function updateChatAccessUI() {
   };
 
   const finalizeAccessUI = () => {
+    applyRequestActionProgressState(actionBtn, rejectBtn);
     syncHeaderActionsVisibility();
     updateChatContactPanel();
   };
@@ -7218,45 +7349,61 @@ async function handleRequestAction() {
   if (!selectedUser) return;
 
   if (chatPermission.incomingRequestId) {
-    const res = await api('/chat/accept', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        requestId: chatPermission.incomingRequestId,
-      }),
-    });
-    const data = await readJsonResponse(
-      res,
-      {},
-      'Failed to accept the chat request.',
-    );
-    if (!res.ok) {
-      alert(data.message || 'Failed to accept request');
+    requestActionInFlight = 'accept';
+    updateChatAccessUI();
+    try {
+      const res = await api('/chat/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestId: chatPermission.incomingRequestId,
+        }),
+      });
+      const data = await readJsonResponse(
+        res,
+        {},
+        'Failed to accept the chat request.',
+      );
+      if (!res.ok) {
+        alert(data.message || 'Failed to accept request');
+        return;
+      }
+      await loadChatPermission();
+      pulseRequestActionSurface();
       return;
+    } finally {
+      requestActionInFlight = '';
+      updateChatAccessUI();
     }
-    await loadChatPermission();
-    return;
   }
 
   if (chatPermission.outgoingRequestId) {
     return;
   }
 
-  const res = await api('/chat/request', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ receiverEmail: selectedUser.email }),
-  });
-  const data = await readJsonResponse(
-    res,
-    {},
-    'Failed to send the chat request.',
-  );
-  if (!res.ok) {
-    alert(data.message || 'Failed to send request');
-    return;
+  requestActionInFlight = 'send';
+  updateChatAccessUI();
+  try {
+    const res = await api('/chat/request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ receiverEmail: selectedUser.email }),
+    });
+    const data = await readJsonResponse(
+      res,
+      {},
+      'Failed to send the chat request.',
+    );
+    if (!res.ok) {
+      alert(data.message || 'Failed to send request');
+      return;
+    }
+    await loadChatPermission();
+    pulseRequestActionSurface();
+  } finally {
+    requestActionInFlight = '';
+    updateChatAccessUI();
   }
-  await loadChatPermission();
 }
 
 async function rejectIncomingRequest() {
@@ -7266,26 +7413,34 @@ async function rejectIncomingRequest() {
 
   const isOutgoing = Boolean(chatPermission.outgoingRequestId);
   const endpoint = isOutgoing ? '/chat/withdraw' : '/chat/reject';
-  const res = await api(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ requestId }),
-  });
-  const data = await readJsonResponse(
-    res,
-    {},
-    isOutgoing
-      ? 'Failed to withdraw the chat request.'
-      : 'Failed to reject the chat request.',
-  );
-  if (!res.ok) {
-    alert(
-      data.message ||
-        (isOutgoing ? 'Failed to withdraw request' : 'Failed to reject request'),
+  requestActionInFlight = isOutgoing ? 'withdraw' : 'reject';
+  updateChatAccessUI();
+  try {
+    const res = await api(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestId }),
+    });
+    const data = await readJsonResponse(
+      res,
+      {},
+      isOutgoing
+        ? 'Failed to withdraw the chat request.'
+        : 'Failed to reject the chat request.',
     );
-    return;
+    if (!res.ok) {
+      alert(
+        data.message ||
+          (isOutgoing ? 'Failed to withdraw request' : 'Failed to reject request'),
+      );
+      return;
+    }
+    await loadChatPermission();
+    pulseRequestActionSurface();
+  } finally {
+    requestActionInFlight = '';
+    updateChatAccessUI();
   }
-  await loadChatPermission();
 }
 
 async function openCreateGroupModal() {
@@ -7726,6 +7881,7 @@ function areMessageActionsBlockedByScroll() {
 
 function closeMessageActions() {
   const menu = document.getElementById('message-actions-menu');
+  setMessageActionsBusyState(false);
   menu.classList.add('hidden');
   menu.style.left = '';
   menu.style.top = '';
@@ -7738,17 +7894,29 @@ async function deleteSelectedMessageForMe() {
   if (!messageActionTarget) {
     return;
   }
+  const messageId = messageActionTarget.id;
+  setMessageActionsBusyState(true, {
+    buttonId: 'message-action-delete-me',
+    label: 'Deleting...',
+  });
+  triggerMotionClass(
+    getMessageBubbleElement(messageId),
+    'message-bubble-processing',
+    420,
+  );
   const res = await api('/chat/messages/delete-for-me', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messageId: messageActionTarget.id }),
+    body: JSON.stringify({ messageId }),
   });
   const data = await readJsonResponse(res, {}, 'Failed to delete message.');
   if (!res.ok) {
+    setMessageActionsBusyState(false);
     alert(data.message || 'Failed to delete message');
     return;
   }
-  hideMessageLocally(messageActionTarget.id);
+  await animateMessageShellExit(messageId);
+  hideMessageLocally(messageId);
   closeMessageActions();
 }
 
@@ -7756,18 +7924,30 @@ async function deleteSelectedMessageForEveryone() {
   if (!messageActionTarget) {
     return;
   }
+  const messageId = messageActionTarget.id;
+  setMessageActionsBusyState(true, {
+    buttonId: 'message-action-delete-all',
+    label: 'Unsending...',
+  });
+  triggerMotionClass(
+    getMessageBubbleElement(messageId),
+    'message-bubble-processing',
+    460,
+  );
   const res = await api('/chat/messages/delete-for-everyone', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messageId: messageActionTarget.id }),
+    body: JSON.stringify({ messageId }),
   });
   const data = await readJsonResponse(res, {}, 'Failed to unsend message.');
   if (!res.ok) {
+    setMessageActionsBusyState(false);
     alert(data.message || 'Failed to unsend message');
     return;
   }
   handleMessageUpdated(data);
   closeMessageActions();
+  pulseMessageBubble(messageId);
 }
 
 async function handleAttachmentSelected() {

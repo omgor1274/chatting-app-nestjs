@@ -469,6 +469,47 @@ img {
   }
 }
 
+@keyframes message-bubble-processing {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(0.985);
+    opacity: 0.72;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes action-commit-pop {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+
+  40% {
+    transform: translateY(-2px) scale(1.025);
+  }
+
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes request-button-busy {
+  0% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.18);
+  }
+
+  100% {
+    box-shadow: 0 0 0 8px rgba(37, 99, 235, 0);
+  }
+}
+
 @keyframes surface-refresh-sheen {
   from {
     transform: translate3d(-115%, 0, 0);
@@ -763,6 +804,36 @@ body.chat-page #message-container {
 .message-bubble-shell:hover {
   transform: translateY(-1px);
   box-shadow: 0 16px 30px rgba(15, 23, 42, 0.08);
+}
+
+.message-bubble-processing {
+  animation: message-bubble-processing 420ms var(--motion-silk);
+}
+
+.message-bubble-commit {
+  animation: action-commit-pop 420ms var(--motion-bounce);
+}
+
+.message-shell-exit {
+  pointer-events: none;
+  animation: chat-message-enter 220ms reverse both;
+}
+
+.message-actions-busy button {
+  opacity: 0.68;
+}
+
+.message-actions-busy .message-reaction-option,
+.message-actions-busy button {
+  cursor: wait;
+}
+
+.request-action-busy {
+  animation: request-button-busy 950ms ease infinite;
+}
+
+.request-action-success {
+  animation: action-commit-pop 420ms var(--motion-bounce);
 }
 
 .chat-list-card {
