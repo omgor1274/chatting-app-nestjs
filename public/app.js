@@ -142,7 +142,7 @@ let sharedMediaErrorMessage = '';
 let sharedMediaBrowserKind = 'image';
 const OFFLINE_QUEUE_KEY = 'ochat_offline_message_queue';
 const RINGTONE_PREFERENCE_KEY = 'ochat_ringtone_preference';
-const CLIENT_CACHE_VERSION = '20260323-smooth21';
+const CLIENT_CACHE_VERSION = '20260323-smooth22';
 const CHAT_SHELL_CACHE_TTL_MS = 2 * 60 * 1000;
 const CHAT_SHELL_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const CONVERSATION_CACHE_TTL_MS = 90 * 1000;
@@ -2619,7 +2619,7 @@ function uploadFormDataWithProgress(path, formData, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${API_URL}${path}`);
-    xhr.timeout = 90 * 1000;
+    xhr.timeout = 0;
 
     if (token) {
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
@@ -2788,7 +2788,7 @@ function uploadChunkWithProgress(sessionId, chunkIndex, chunkBlob, onProgress) {
     formData.append('chunk', chunkBlob, `chunk-${chunkIndex}.part`);
     formData.append('chunkIndex', String(chunkIndex));
     xhr.open('POST', `${API_URL}/chat/uploads/sessions/${encodeURIComponent(sessionId)}/chunks`);
-    xhr.timeout = 90 * 1000;
+    xhr.timeout = 0;
 
     if (token) {
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);

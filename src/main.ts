@@ -145,6 +145,8 @@ async function bootstrap() {
       keyGenerator: resolveRateLimitClientKey,
       skip: (req) =>
         req.path === '/health' ||
+        req.path.startsWith('/chat/uploads/') ||
+        req.path === '/chat/attachments' ||
         req.path.startsWith('/uploads/') ||
         req.path === '/sw.js',
       message: {
@@ -201,7 +203,9 @@ async function bootstrap() {
   );
   console.log('PORT from env:', process.env.PORT);
   console.log('Resolved server port:', port);
-  await app.listen(port, '0.0.0.0');
+  const server = await app.listen(port, '0.0.0.0');
+  server.requestTimeout = 0;
+  server.headersTimeout = 0;
   console.log(`O-chat server listening on 0.0.0.0:${port}`);
 }
 bootstrap();
