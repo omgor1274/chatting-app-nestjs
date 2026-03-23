@@ -142,7 +142,7 @@ let sharedMediaErrorMessage = '';
 let sharedMediaBrowserKind = 'image';
 const OFFLINE_QUEUE_KEY = 'ochat_offline_message_queue';
 const RINGTONE_PREFERENCE_KEY = 'ochat_ringtone_preference';
-const CLIENT_CACHE_VERSION = '20260324-smooth24';
+const CLIENT_CACHE_VERSION = '20260324-smooth25';
 const CHAT_SHELL_CACHE_TTL_MS = 2 * 60 * 1000;
 const CHAT_SHELL_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const CONVERSATION_CACHE_TTL_MS = 90 * 1000;
@@ -2601,6 +2601,18 @@ async function readJsonResponse(
 
     return fallbackValue;
   }
+}
+
+function getApiErrorMessage(data, fallbackMessage) {
+  if (Array.isArray(data?.message)) {
+    return data.message.join(', ');
+  }
+
+  if (typeof data?.message === 'string' && data.message.trim()) {
+    return data.message.trim();
+  }
+
+  return fallbackMessage;
 }
 
 async function api(path, options = {}) {
@@ -6279,25 +6291,64 @@ async function loadUsers() {
 
   setSurfaceRefreshState('users-list', true, 140);
   loadUsersPromise = (async () => {
-    const [recentRes, invitesRes] = await Promise.all([
+    const [recentResult, invitesResult] = await Promise.allSettled([
       api('/chat/recent'),
       api('/chat/groups/invites'),
     ]);
 
-    if (!recentRes.ok || !invitesRes.ok) {
-      throw new Error('Failed to load users');
+    if (recentResult.status !== 'fulfilled') {
+      throw new Error(
+        recentResult.reason?.message ||
+          'Failed to load recent chats. Please try again.',
+      );
     }
 
-    const recentUsers = await readJsonResponse(
+    const recentRes = recentResult.value;
+    const recentUsersData = await readJsonResponse(
       recentRes,
       [],
       'Failed to load recent chats.',
     );
-    groupInvites = await readJsonResponse(
-      invitesRes,
-      [],
-      'Failed to load group invites.',
-    );
+
+    if (recentRes.status === 401) {
+      throw new Error('Your session expired. Please log in again.');
+    }
+    if (!recentRes.ok) {
+      throw new Error(
+        getApiErrorMessage(recentUsersData, 'Failed to load recent chats.'),
+      );
+    }
+
+    const recentUsers = Array.isArray(recentUsersData) ? recentUsersData : [];
+
+    groupInvites = [];
+    if (invitesResult.status === 'fulfilled') {
+      const invitesRes = invitesResult.value;
+      const invitesData = await readJsonResponse(
+        invitesRes,
+        [],
+        'Failed to load group invites.',
+      );
+
+      if (invitesRes.status === 401) {
+        throw new Error('Your session expired. Please log in again.');
+      }
+
+      if (invitesRes.ok) {
+        groupInvites = Array.isArray(invitesData) ? invitesData : [];
+      } else {
+        console.warn(
+          'Failed to load group invites without blocking recent chats',
+          invitesRes.status,
+          invitesData,
+        );
+      }
+    } else {
+      console.warn(
+        'Failed to request group invites without blocking recent chats',
+        invitesResult.reason,
+      );
+    }
 
     const existingByKey = new Map(
       users.map((user) => [`${user.chatType || 'direct'}:${user.id}`, user]),
