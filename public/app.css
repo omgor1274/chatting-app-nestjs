@@ -120,12 +120,10 @@ img {
   box-shadow: 0 16px 36px rgba(59, 130, 246, 0.12);
 }
 
-#users-list > li,
 #messages-list > div {
   content-visibility: auto;
 }
 
-#users-list,
 #messages-list {
   contain: layout paint;
 }
@@ -134,10 +132,6 @@ img {
 #message-container {
   position: relative;
   isolation: isolate;
-}
-
-#users-list > li {
-  contain-intrinsic-size: 72px;
 }
 
 #messages-list > div {
@@ -1007,8 +1001,8 @@ body.chat-page #message-container {
   }
 
   .mobile-chat-scroll {
-    padding-left: 0.45rem;
-    padding-right: 0.45rem;
+    padding-left: 0.2rem;
+    padding-right: 0.2rem;
     padding-top: 0.45rem;
   }
 
@@ -1086,7 +1080,7 @@ body.chat-page #message-container {
   }
 
   #messages-list > div > div {
-    max-width: min(88vw, 20rem) !important;
+    max-width: min(calc(100vw - 1rem), 22rem) !important;
   }
 
   #messages-list video,
@@ -1295,24 +1289,20 @@ body.chat-page #message-container {
     border-top-color: rgba(226, 232, 240, 0.96) !important;
   }
 
-  #messages-list {
-    width: min(100%, 62rem);
-    margin: 0 auto;
-  }
+#messages-list {
+  width: 100%;
+  margin: 0;
+}
 
-  #messages-list > div > div {
-    max-width: min(42rem, 72%) !important;
-    border-radius: 18px !important;
-  }
+#messages-list > div > div {
+  max-width: min(46rem, 82%) !important;
+  border-radius: 18px !important;
+}
 
-  .message-bubble-shell {
-    min-width: min(14rem, 30vw);
-  }
-
-  .message-bubble-footer {
-    flex-wrap: nowrap;
-    white-space: nowrap;
-  }
+.message-bubble-footer {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
 
   #empty-state {
     background:

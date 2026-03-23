@@ -93,9 +93,9 @@ function updateCloseLink() {
 function prefetchChatShell() {
   const hrefs = [
     getLastChatRoute(),
-    '/public/app.js?v=20260323-smooth8',
+    '/public/app.js?v=20260323-smooth10',
     '/public/runtime.js?v=20260323-smooth1',
-    '/public/app.css?v=20260323-smooth7',
+    '/public/app.css?v=20260323-smooth9',
   ];
 
   hrefs.forEach((href) => {

@@ -147,6 +147,7 @@ let backgroundUsersRefreshTimer = 0;
 let backgroundUsersRefreshPromise = null;
 let conversationDraftPersistTimer = 0;
 const surfaceRefreshTimers = new Map();
+let pendingUserListPreviewSyncTimer = 0;
 
 function getConfigCandidates() {
   const candidates = [
@@ -825,7 +826,7 @@ function saveConversationDraft(user = selectedUser, text = '') {
     conversationDrafts.delete(key);
   }
   schedulePersistConversationDrafts();
-  syncUserListDraftPreview(user);
+  scheduleUserListDraftPreviewSync(user, { immediate: !trimmed });
 }
 
 function restoreComposerDraft(user = selectedUser) {
@@ -5624,6 +5625,30 @@ function getUserListPreviewMeta(user) {
   };
 }
 
+function scheduleUserListDraftPreviewSync(
+  user = selectedUser,
+  options = {},
+) {
+  if (pendingUserListPreviewSyncTimer) {
+    window.clearTimeout(pendingUserListPreviewSyncTimer);
+    pendingUserListPreviewSyncTimer = 0;
+  }
+
+  if (!user) {
+    return;
+  }
+
+  if (options.immediate) {
+    syncUserListDraftPreview(user);
+    return;
+  }
+
+  pendingUserListPreviewSyncTimer = window.setTimeout(() => {
+    pendingUserListPreviewSyncTimer = 0;
+    syncUserListDraftPreview(user);
+  }, 140);
+}
+
 function createUserListElement(user, index = 0) {
   const item = document.createElement('li');
   const isSelected = selectedUser?.id === user.id;
@@ -5710,8 +5735,15 @@ function syncUserListDraftPreview(user = selectedUser) {
   }
 
   const { previewText, previewToneClass } = getUserListPreviewMeta(user);
-  preview.textContent = previewText;
-  preview.className = `user-list-preview mt-0.5 truncate text-[11px] leading-4 ${previewToneClass}`;
+  if (preview.textContent !== previewText) {
+    preview.textContent = previewText;
+  }
+
+  const nextPreviewClassName =
+    `user-list-preview mt-0.5 truncate text-[11px] leading-4 ${previewToneClass}`;
+  if (preview.className !== nextPreviewClassName) {
+    preview.className = nextPreviewClassName;
+  }
   renderedUserSignatures.set(key, getUserRenderSignature(user));
 }
 
@@ -8793,7 +8825,7 @@ function createMessageElement(message, options = {}) {
 
   if (message.deletedForEveryoneAt) {
     div.innerHTML = `
-            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,36rem)] px-3.5 py-2.5 text-[13px] italic opacity-80">
+            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,40rem)] px-3 py-2 text-[13px] italic opacity-80">
               ${escapeHtml(message.senderId === currentUser.id ? 'You unsent this message.' : 'This message was deleted.')}
               ${footer}
               ${reactionChip}
@@ -8801,7 +8833,7 @@ function createMessageElement(message, options = {}) {
           `;
   } else if (message.messageType === 'IMAGE' && message.fileUrl) {
     div.innerHTML = `
-            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,36rem)] overflow-hidden p-2.5">
+            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,40rem)] overflow-hidden p-2">
               ${replySnippet}
               <a href="${API_URL}${message.fileUrl}" target="_blank" rel="noopener noreferrer">
                 <img src="${API_URL}${message.fileUrl}" loading="lazy" decoding="async" class="mb-2 max-h-80 w-auto rounded-2xl border border-black/5">
@@ -8816,7 +8848,7 @@ function createMessageElement(message, options = {}) {
           `;
   } else if (message.messageType === 'AUDIO' && message.fileUrl) {
     div.innerHTML = `
-            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,36rem)] p-3">
+            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,40rem)] px-3 py-2.5">
               <div class="space-y-3">
                 ${replySnippet}
                 <p class="text-sm font-semibold">${escapeHtml(message.fileName || 'Voice message')}</p>
@@ -8831,7 +8863,7 @@ function createMessageElement(message, options = {}) {
     String(message.fileMimeType || '').startsWith('video/')
   ) {
     div.innerHTML = `
-            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,36rem)] overflow-hidden p-2.5">
+            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,40rem)] overflow-hidden p-2">
               <div class="space-y-3">
                 ${replySnippet}
                 <video controls playsinline preload="metadata" class="max-h-80 w-full rounded-2xl border border-black/5 bg-black">
@@ -8849,7 +8881,7 @@ function createMessageElement(message, options = {}) {
           `;
   } else if (message.messageType === 'DOCUMENT' && message.fileUrl) {
     div.innerHTML = `
-            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,36rem)] p-3">
+            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,40rem)] px-3 py-2.5">
               <div class="space-y-2">
                 ${replySnippet}
                 <p class="text-sm font-semibold">${escapeHtml(message.fileName || 'Document')}</p>
@@ -8865,7 +8897,7 @@ function createMessageElement(message, options = {}) {
           `;
   } else {
     div.innerHTML = `
-            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,36rem)] px-3.5 py-2.5 text-[14px] leading-6">
+            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,40rem)] px-3 py-2 text-[14px] leading-[1.55]">
               ${replySnippet}
               ${escapeHtml(getResolvedMessageText(message))}
               ${footer}

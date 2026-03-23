@@ -28,7 +28,7 @@
     <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="./public/app.css?v=20260323-smooth7" />
+    <link rel="stylesheet" href="./public/app.css?v=20260323-smooth9" />
   </head>
 
   <body class="chat-page mobile-page min-h-screen bg-slate-100 text-slate-900 lg:p-3">
@@ -598,7 +598,7 @@
 
         <div
           id="message-container"
-          class="mobile-chat-scroll hidden flex-1 overflow-y-auto chat-bg px-2 py-2.5 sm:px-3 lg:px-5"
+          class="mobile-chat-scroll hidden flex-1 overflow-y-auto chat-bg px-1.5 py-2 sm:px-2 lg:px-2.5"
           onscroll="handleMessageContainerScroll()"
         >
           <div
@@ -614,15 +614,15 @@
           </div>
           <div
             id="messages-list"
-            class="mx-auto flex w-full max-w-[46rem] flex-col space-y-2.5"
+            class="flex w-full flex-col gap-2"
           ></div>
         </div>
 
         <div
           id="input-area"
-          class="mobile-chat-composer hidden border-t border-slate-200 bg-white/90 px-2 py-2 backdrop-blur sm:px-3 sm:py-2.5 lg:px-5"
+          class="mobile-chat-composer hidden border-t border-slate-200 bg-white/90 px-1.5 py-2 backdrop-blur sm:px-2 sm:py-2.5 lg:px-2.5"
         >
-          <div class="mx-auto flex w-full max-w-[46rem] flex-col gap-2">
+          <div class="flex w-full flex-col gap-2">
             <div
               id="reply-preview"
               class="hidden rounded-[24px] border border-slate-200 bg-white px-4 py-3 shadow-sm"
@@ -2155,7 +2155,7 @@
         window.location.replace('/auth');
       } else {
         loadScript('https://cdn.socket.io/4.7.2/socket.io.min.js')
-          .then(() => loadScript('/public/app.js?v=20260323-smooth8'))
+          .then(() => loadScript('/public/app.js?v=20260323-smooth10'))
           .catch((error) =>
             console.error('Failed to load chat runtime', error),
           );
