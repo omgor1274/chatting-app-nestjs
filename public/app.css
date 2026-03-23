@@ -130,8 +130,14 @@ img {
   contain: layout paint;
 }
 
+#users-list,
+#message-container {
+  position: relative;
+  isolation: isolate;
+}
+
 #users-list > li {
-  contain-intrinsic-size: 84px;
+  contain-intrinsic-size: 72px;
 }
 
 #messages-list > div {
@@ -469,6 +475,16 @@ img {
   }
 }
 
+@keyframes surface-refresh-sheen {
+  from {
+    transform: translate3d(-115%, 0, 0);
+  }
+
+  to {
+    transform: translate3d(115%, 0, 0);
+  }
+}
+
 .sidebar-panel {
   transition:
     transform var(--motion-slow) var(--motion-silk),
@@ -746,8 +762,8 @@ body.chat-page #message-container {
 }
 
 #users-list > li:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.07);
 }
 
 .message-bubble-shell:hover {
@@ -756,8 +772,8 @@ body.chat-page #message-container {
 }
 
 .chat-list-card {
-  animation: chat-card-enter var(--motion-mid) var(--motion-bounce) both;
-  animation-delay: calc(var(--motion-index, 0) * 18ms);
+  animation: chat-card-enter 240ms var(--motion-bounce) both;
+  animation-delay: calc(var(--motion-index, 0) * 14ms);
 }
 
 .chat-message-enter {
@@ -766,6 +782,31 @@ body.chat-page #message-container {
 
 .chat-chrome-enter {
   animation: chat-panel-enter 280ms var(--motion-bounce);
+}
+
+#users-list.surface-refreshing > li,
+#message-container.surface-refreshing > *:not(#message-loading-indicator) {
+  opacity: 0.82;
+  filter: saturate(0.96);
+  transition:
+    opacity var(--motion-fast) ease,
+    filter var(--motion-fast) ease;
+}
+
+#users-list.surface-refreshing::after,
+#message-container.surface-refreshing::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    110deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.5) 38%,
+    rgba(255, 255, 255, 0) 68%
+  );
+  animation: surface-refresh-sheen 1050ms linear infinite;
+  z-index: 2;
 }
 
 .contact-panel-action[disabled] {
@@ -854,8 +895,8 @@ body.chat-page #message-container {
   }
 
   .mobile-chat-sidebar {
-    width: min(90vw, 23rem);
-    max-width: 23rem;
+    width: min(84vw, 20.5rem);
+    max-width: 20.5rem;
     border-right: 0;
     box-shadow: 0 18px 42px rgba(15, 23, 42, 0.18);
   }
@@ -1179,8 +1220,8 @@ body.chat-page #message-container {
   }
 
   #sidebar {
-    width: 25.5rem !important;
-    max-width: 25.5rem !important;
+    width: 20.75rem !important;
+    max-width: 20.75rem !important;
     border-right-color: rgba(226, 232, 240, 0.98) !important;
     background: rgba(248, 250, 252, 0.96) !important;
   }
@@ -1203,13 +1244,13 @@ body.chat-page #message-container {
   }
 
   #users-list {
-    padding: 0.45rem 0.5rem 0.85rem;
+    padding: 0.35rem 0.4rem 0.7rem;
     background: rgba(248, 250, 252, 0.92);
   }
 
   #users-list > li {
-    border-radius: 18px !important;
-    padding: 0.8rem 0.9rem !important;
+    border-radius: 16px !important;
+    padding: 0.45rem 0.5rem !important;
   }
 
   #users-list > li:hover {
@@ -1601,6 +1642,16 @@ body.dark-mode li {
 
 body.dark-mode #users-list li:hover {
   background: rgba(23, 32, 54, 0.96) !important;
+}
+
+body.dark-mode #users-list.surface-refreshing::after,
+body.dark-mode #message-container.surface-refreshing::after {
+  background: linear-gradient(
+    110deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(148, 163, 184, 0.16) 38%,
+    rgba(255, 255, 255, 0) 68%
+  );
 }
 
 body.dark-mode #message-container a {

@@ -146,7 +146,7 @@ let conversationCachePersistTimer = 0;
 let backgroundUsersRefreshTimer = 0;
 let backgroundUsersRefreshPromise = null;
 let conversationDraftPersistTimer = 0;
-let draftSidebarRefreshTimer = 0;
+const surfaceRefreshTimers = new Map();
 
 function getConfigCandidates() {
   const candidates = [
@@ -179,6 +179,36 @@ function resolveHostedApiUrl(candidate, data) {
 
 function getById(id) {
   return document.getElementById(id);
+}
+
+function setSurfaceRefreshState(id, isRefreshing, delayMs = 120) {
+  const element = getById(id);
+  if (!element) {
+    return;
+  }
+
+  const timerKey = `${id}:refresh`;
+  const existingTimer = surfaceRefreshTimers.get(timerKey);
+  if (existingTimer) {
+    window.clearTimeout(existingTimer);
+    surfaceRefreshTimers.delete(timerKey);
+  }
+
+  if (!isRefreshing) {
+    element.classList.remove('surface-refreshing');
+    return;
+  }
+
+  if (delayMs <= 0) {
+    element.classList.add('surface-refreshing');
+    return;
+  }
+
+  const timer = window.setTimeout(() => {
+    element.classList.add('surface-refreshing');
+    surfaceRefreshTimers.delete(timerKey);
+  }, delayMs);
+  surfaceRefreshTimers.set(timerKey, timer);
 }
 
 function readStorageJson(storage, key, fallbackValue) {
@@ -795,6 +825,7 @@ function saveConversationDraft(user = selectedUser, text = '') {
     conversationDrafts.delete(key);
   }
   schedulePersistConversationDrafts();
+  syncUserListDraftPreview(user);
 }
 
 function restoreComposerDraft(user = selectedUser) {
@@ -2202,6 +2233,7 @@ function setMessageLoadingState(isLoading, label = 'Loading messages...') {
     text.textContent = label;
   }
   indicator.classList.toggle('hidden', !isLoading);
+  setSurfaceRefreshState('message-container', isLoading, 130);
 }
 
 function handleComposerKeydown(event) {
@@ -3234,17 +3266,6 @@ function scheduleRenderUsers() {
     usersRenderFrame = 0;
     renderUsers();
   });
-}
-
-function scheduleDraftSidebarRefresh() {
-  if (draftSidebarRefreshTimer) {
-    return;
-  }
-
-  draftSidebarRefreshTimer = window.setTimeout(() => {
-    draftSidebarRefreshTimer = 0;
-    scheduleRenderUsers();
-  }, 90);
 }
 
 function scheduleHeaderUpdate() {
@@ -5277,6 +5298,7 @@ async function loadUsers() {
     return loadUsersPromise;
   }
 
+  setSurfaceRefreshState('users-list', true, 140);
   loadUsersPromise = (async () => {
     const [recentRes, invitesRes] = await Promise.all([
       api('/chat/recent'),
@@ -5394,6 +5416,7 @@ async function loadUsers() {
     await loadUsersPromise;
   } finally {
     loadUsersPromise = null;
+    setSurfaceRefreshState('users-list', false);
   }
 
   if (reloadUsersAfterCurrentLoad) {
@@ -5480,6 +5503,38 @@ async function refreshUsersForPresence(ids) {
   await presenceRefreshPromise;
 }
 
+function applyOnlineUsersSnapshot(ids) {
+  onlineUserIds = new Set(
+    (Array.isArray(ids) ? ids : []).filter((userId) => Boolean(userId)),
+  );
+  scheduleRenderUsers();
+  scheduleHeaderUpdate();
+  void refreshUsersForPresence(Array.from(onlineUserIds)).catch((error) => {
+    console.error('Failed to refresh users after presence snapshot', error);
+  });
+}
+
+function applyPresenceUpdate(userId, isOnline) {
+  if (!userId) {
+    return;
+  }
+
+  if (isOnline) {
+    onlineUserIds.add(userId);
+  } else {
+    onlineUserIds.delete(userId);
+  }
+
+  scheduleRenderUsers();
+  scheduleHeaderUpdate();
+
+  if (isOnline) {
+    void refreshUsersForPresence([userId]).catch((error) => {
+      console.error('Failed to refresh users after presence update', error);
+    });
+  }
+}
+
 function getSortedUsers() {
   const query = document
     .getElementById('user-search')
@@ -5552,26 +5607,31 @@ function getUserRenderSignature(user) {
   ].join('::');
 }
 
-function createUserListElement(user, index = 0) {
-  const item = document.createElement('li');
-  const isSelected = selectedUser?.id === user.id;
-  const isOnline = !isGroupConversation(user) && onlineUserIds.has(user.id);
+function getUserListPreviewMeta(user) {
   const state = recentActivity.get(user.id) || {
     preview: '',
     unread: 0,
   };
   const draft = getConversationDraft(user);
+  return {
+    state,
+    previewText: draft ? `Draft: ${draft}` : state.preview || 'No recent messages yet',
+    previewToneClass: draft
+      ? 'font-semibold text-amber-600'
+      : state.unread
+        ? 'font-semibold text-slate-700'
+        : 'text-slate-400',
+  };
+}
+
+function createUserListElement(user, index = 0) {
+  const item = document.createElement('li');
+  const isSelected = selectedUser?.id === user.id;
+  const isOnline = !isGroupConversation(user) && onlineUserIds.has(user.id);
+  const { state, previewText, previewToneClass } = getUserListPreviewMeta(user);
   const missedCalls = Number(
     missedCallCountsByConversation.get(getConversationCacheKey(user)) || 0,
   );
-  const previewText = draft
-    ? `Draft: ${draft}`
-    : state.preview || 'No recent messages yet';
-  const previewTone = draft
-    ? 'font-semibold text-amber-600'
-    : state.unread
-      ? 'font-semibold text-slate-700'
-      : 'text-slate-400';
   const badges = [
     isConversationPinned(user)
       ? '<span class="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700">Pinned</span>'
@@ -5588,7 +5648,7 @@ function createUserListElement(user, index = 0) {
 
   item.dataset.userKey = userListKey(user);
   item.style.setProperty('--motion-index', String(index % 10));
-  item.className = `cursor-pointer rounded-[26px] border p-2.5 transition-all ${
+  item.className = `cursor-pointer rounded-[20px] border px-1.5 py-1 transition-all ${
     isSelected
       ? 'border-blue-200 bg-blue-50 shadow-sm'
       : 'border-transparent bg-white/70 hover:border-slate-200 hover:bg-white'
@@ -5596,36 +5656,63 @@ function createUserListElement(user, index = 0) {
   item.classList.add('chat-list-card');
   item.onclick = () => selectUser(user.id);
   item.innerHTML = `
-        <div class="flex items-center gap-3 rounded-[22px] p-2">
+        <div class="flex items-center gap-2.5 rounded-[16px] p-1.5">
           <div class="relative shrink-0">
-            <img src="${userAvatar(user)}" loading="lazy" decoding="async" class="h-12 w-12 rounded-2xl object-cover shadow-sm">
+            <img src="${userAvatar(user)}" loading="lazy" decoding="async" class="h-10 w-10 rounded-[14px] object-cover shadow-sm">
             ${
               isGroupConversation(user)
-                ? `<span class="absolute -bottom-1 -right-1 rounded-full border-2 border-white bg-slate-900 px-1.5 py-[2px] text-[10px] font-bold uppercase tracking-wide text-white">G</span>`
-                : `<span class="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-white ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}"></span>`
+                ? `<span class="absolute -bottom-1 -right-1 rounded-full border-2 border-white bg-slate-900 px-1 py-[1px] text-[9px] font-bold uppercase tracking-wide text-white">G</span>`
+                : `<span class="absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-white ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}"></span>`
             }
           </div>
           <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2">
-              <p class="min-w-0 flex-1 truncate text-sm font-bold text-slate-900">${escapeHtml(displayName(user))}</p>
+            <div class="flex items-center gap-1.5">
+              <p class="min-w-0 flex-1 truncate text-[0.82rem] font-bold text-slate-900">${escapeHtml(displayName(user))}</p>
               ${badges}
             </div>
-            <p class="mt-1 truncate text-xs ${previewTone}">
+            <p class="user-list-preview mt-0.5 truncate text-[11px] leading-4 ${previewToneClass}">
               ${escapeHtml(previewText)}
             </p>
           </div>
           <div class="flex flex-col items-end gap-1">
             ${
               missedCalls
-                ? `<span class="rounded-full bg-rose-500 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white">${missedCalls} missed</span>`
+                ? `<span class="rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">${missedCalls} missed</span>`
                 : ''
             }
-            ${state.unread ? `<span class="flex h-7 min-w-7 items-center justify-center rounded-full bg-blue-600 px-2 text-xs font-bold text-white">${state.unread}</span>` : ''}
+            ${state.unread ? `<span class="flex h-6 min-w-6 items-center justify-center rounded-full bg-blue-600 px-1.5 text-[11px] font-bold text-white">${state.unread}</span>` : ''}
           </div>
         </div>
       `;
 
   return item;
+}
+
+function syncUserListDraftPreview(user = selectedUser) {
+  if (!user) {
+    return;
+  }
+
+  const list = getById('users-list');
+  if (!list) {
+    return;
+  }
+
+  const key = userListKey(user);
+  const item = Array.from(list.children).find((child) => child.dataset.userKey === key);
+  if (!item) {
+    return;
+  }
+
+  const preview = item.querySelector('.user-list-preview');
+  if (!preview) {
+    return;
+  }
+
+  const { previewText, previewToneClass } = getUserListPreviewMeta(user);
+  preview.textContent = previewText;
+  preview.className = `user-list-preview mt-0.5 truncate text-[11px] leading-4 ${previewToneClass}`;
+  renderedUserSignatures.set(key, getUserRenderSignature(user));
 }
 
 function renderUsers() {
@@ -5808,11 +5895,16 @@ function connectSocket() {
     });
   });
 
-  socket.on('onlineUsers', async (ids) => {
-    onlineUserIds = new Set(ids);
-    await refreshUsersForPresence(ids);
-    scheduleRenderUsers();
-    scheduleHeaderUpdate();
+  socket.on('onlineUsers', (ids) => {
+    applyOnlineUsersSnapshot(ids);
+  });
+
+  socket.on('presence:update', (payload) => {
+    if (!payload?.userId) {
+      return;
+    }
+
+    applyPresenceUpdate(payload.userId, Boolean(payload.isOnline));
   });
 
   socket.on('request:update', async (payload) => {
@@ -9304,7 +9396,6 @@ document.addEventListener('input', (event) => {
 
   markComposerDraftDirty();
   saveConversationDraft(selectedUser, event.target.value);
-  scheduleDraftSidebarRefresh();
 
   if (!socket) {
     return;

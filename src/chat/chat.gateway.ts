@@ -102,6 +102,9 @@ export class ChatGateway
       }
 
       if (channel === this.presenceChannel) {
+        if (payload.type === 'presence-update' && payload.userId) {
+          this.emitPresenceUpdate(payload.userId, Boolean(payload.isOnline));
+        }
         await this.broadcastOnlineUsers();
         return;
       }
@@ -166,7 +169,17 @@ export class ChatGateway
     this.server.emit('onlineUsers', await this.getOnlineUserIds());
   }
 
-  private async publishPresenceUpdate() {
+  private emitPresenceUpdate(userId: string, isOnline: boolean) {
+    this.server.emit('presence:update', {
+      userId,
+      isOnline,
+    });
+  }
+
+  private async publishPresenceUpdate(payload?: {
+    userId?: string;
+    isOnline?: boolean;
+  }) {
     const redis = await this.getRedisClient();
     if (!redis) {
       return;
@@ -174,7 +187,16 @@ export class ChatGateway
 
     await redis.publish(
       this.presenceChannel,
-      JSON.stringify({ instanceId: this.instanceId, type: 'refresh' }),
+      JSON.stringify(
+        payload?.userId
+          ? {
+              instanceId: this.instanceId,
+              type: 'presence-update',
+              userId: payload.userId,
+              isOnline: Boolean(payload.isOnline),
+            }
+          : { instanceId: this.instanceId, type: 'refresh' },
+      ),
     );
   }
 
@@ -578,7 +600,11 @@ export class ChatGateway
     this.onlineUsers.set(user.userId, sockets);
     if (sockets.size === 1) {
       await this.markUserOnline(user.userId);
-      await this.publishPresenceUpdate();
+      this.emitPresenceUpdate(user.userId, true);
+      await this.publishPresenceUpdate({
+        userId: user.userId,
+        isOnline: true,
+      });
     }
     await this.broadcastOnlineUsers();
   }
@@ -598,7 +624,11 @@ export class ChatGateway
     if (sockets.size === 0) {
       this.onlineUsers.delete(user.userId);
       await this.markUserOffline(user.userId);
-      await this.publishPresenceUpdate();
+      this.emitPresenceUpdate(user.userId, false);
+      await this.publishPresenceUpdate({
+        userId: user.userId,
+        isOnline: false,
+      });
     } else {
       this.onlineUsers.set(user.userId, sockets);
     }
