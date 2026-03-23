@@ -86,6 +86,10 @@ export class ChatUploadService {
     );
   }
 
+  private getResolvedFinalAttachmentPath(finalFileName: string) {
+    return resolveWritableDataPath('uploads', 'chat', finalFileName);
+  }
+
   private getFinalAttachmentPath(fileName: string, userId: string) {
     const safeBaseName = basename(fileName || 'attachment').replace(
       /[^a-zA-Z0-9._-]/g,
@@ -201,6 +205,33 @@ export class ChatUploadService {
       (total, chunkIndex) => total + this.getChunkByteLength(record, chunkIndex),
       0,
     );
+  }
+
+  private getCompletedChunkCountForAssembledBytes(
+    record: UploadSessionRecord,
+    assembledBytes: number,
+  ) {
+    if (!Number.isFinite(assembledBytes) || assembledBytes < 0) {
+      throw new BadRequestException('Upload assembly is invalid');
+    }
+
+    let totalBytes = 0;
+    for (let index = 0; index < record.totalChunks; index += 1) {
+      if (assembledBytes === totalBytes) {
+        return index;
+      }
+
+      totalBytes += this.getChunkByteLength(record, index);
+      if (assembledBytes === totalBytes) {
+        return index + 1;
+      }
+    }
+
+    if (assembledBytes === totalBytes) {
+      return record.totalChunks;
+    }
+
+    throw new BadRequestException('Upload assembly is incomplete');
   }
 
   private getNextChunkIndex(record: UploadSessionRecord) {
@@ -383,37 +414,109 @@ export class ChatUploadService {
       groupId: record.groupId,
     });
 
-    const { finalFileName, finalPath } = this.getFinalAttachmentPath(
-      record.fileName,
-      userId,
-    );
+    if (!record.finalFileName) {
+      const { finalFileName } = this.getFinalAttachmentPath(record.fileName, userId);
+      record.finalFileName = finalFileName;
+      record.updatedAt = new Date().toISOString();
+      await this.writeSessionRecord(record);
+    }
+
+    const finalFileName = record.finalFileName;
+    const finalPath = this.getResolvedFinalAttachmentPath(finalFileName);
     const tempPath = `${finalPath}.part`;
 
     await mkdir(resolveWritableDataPath('uploads', 'chat'), { recursive: true });
-    await writeFile(tempPath, Buffer.alloc(0));
-
+    let finalFileExists = false;
     try {
-      for (let chunkIndex = 0; chunkIndex < record.totalChunks; chunkIndex += 1) {
-        const chunkPath = this.getChunkPath(record.id, chunkIndex);
-        const chunkStat = await stat(chunkPath);
-        const expectedSize = this.getChunkByteLength(record, chunkIndex);
+      const finalStat = await stat(finalPath);
+      if (finalStat.size !== record.fileSize) {
+        await unlink(finalPath).catch(() => undefined);
+      } else {
+        finalFileExists = true;
+      }
+    } catch (error) {
+      if (
+        !(
+          error &&
+          typeof error === 'object' &&
+          'code' in error &&
+          error.code === 'ENOENT'
+        )
+      ) {
+        throw error;
+      }
+    }
 
-        if (chunkStat.size !== expectedSize) {
-          throw new BadRequestException(
-            'One or more uploaded chunks are incomplete',
+    if (!finalFileExists) {
+      let nextChunkIndex = 0;
+      try {
+        const tempStat = await stat(tempPath);
+        if (tempStat.size > 0) {
+          nextChunkIndex = this.getCompletedChunkCountForAssembledBytes(
+            record,
+            tempStat.size,
           );
+        } else {
+          await unlink(tempPath).catch(() => undefined);
         }
-
-        await pipeline(
-          createReadStream(chunkPath),
-          createWriteStream(tempPath, { flags: 'a' }),
-        );
+      } catch (error) {
+        if (
+          !(
+            error &&
+            typeof error === 'object' &&
+            'code' in error &&
+            error.code === 'ENOENT'
+          )
+        ) {
+          throw error;
+        }
       }
 
-      await rename(tempPath, finalPath);
-    } catch (error) {
-      await unlink(tempPath).catch(() => undefined);
-      throw error;
+      try {
+        if (nextChunkIndex === 0 && record.totalChunks > 0) {
+          const firstChunkPath = this.getChunkPath(record.id, 0);
+          const firstChunkStat = await stat(firstChunkPath);
+          const expectedSize = this.getChunkByteLength(record, 0);
+          if (firstChunkStat.size !== expectedSize) {
+            throw new BadRequestException(
+              'One or more uploaded chunks are incomplete',
+            );
+          }
+
+          await unlink(tempPath).catch(() => undefined);
+          await rename(firstChunkPath, tempPath);
+          nextChunkIndex = 1;
+        }
+
+        for (
+          let chunkIndex = nextChunkIndex;
+          chunkIndex < record.totalChunks;
+          chunkIndex += 1
+        ) {
+          const chunkPath = this.getChunkPath(record.id, chunkIndex);
+          const chunkStat = await stat(chunkPath);
+          const expectedSize = this.getChunkByteLength(record, chunkIndex);
+
+          if (chunkStat.size !== expectedSize) {
+            throw new BadRequestException(
+              'One or more uploaded chunks are incomplete',
+            );
+          }
+
+          await pipeline(
+            createReadStream(chunkPath),
+            createWriteStream(tempPath, { flags: 'a' }),
+          );
+          await unlink(chunkPath).catch(() => undefined);
+        }
+
+        await rename(tempPath, finalPath);
+      } catch (error) {
+        const finalStat = await stat(finalPath).catch(() => null);
+        if (!finalStat || finalStat.size !== record.fileSize) {
+          throw error;
+        }
+      }
     }
 
     const message = await this.chatService.createEncryptedMessage({
