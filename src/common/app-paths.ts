@@ -2,6 +2,7 @@ import { accessSync, constants, mkdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { isAbsolute, join, resolve } from 'path';
 
+const FALLBACK_WRITABLE_DATA_DIR = join(tmpdir(), 'ochat-data');
 let cachedWritableDataDir: string | null = null;
 let cachedWritableDataDirSource: string | null = null;
 let loggedWritableDataDirFallback = false;
@@ -14,6 +15,36 @@ function ensureWritableDirectory(targetPath: string) {
   mkdirSync(targetPath, { recursive: true });
   accessSync(targetPath, constants.W_OK);
   return targetPath;
+}
+
+function describeStorageError(error: unknown) {
+  return error instanceof Error ? error.message : 'Unknown filesystem error';
+}
+
+function canFallbackFromStorageError(error: unknown) {
+  if (!error || typeof error !== 'object' || !('code' in error)) {
+    return false;
+  }
+
+  return ['ENOSPC', 'EACCES', 'EPERM', 'EROFS'].includes(
+    String(error.code || '').toUpperCase(),
+  );
+}
+
+function applyWritableDataFallback(reason?: unknown, failedPath?: string) {
+  cachedWritableDataDir = ensureWritableDirectory(FALLBACK_WRITABLE_DATA_DIR);
+  process.env.APP_DATA_DIR = cachedWritableDataDir;
+  cachedWritableDataDirSource = cachedWritableDataDir;
+
+  if (!loggedWritableDataDirFallback) {
+    loggedWritableDataDirFallback = true;
+    const pathNote = failedPath ? ` after failing to use "${failedPath}"` : '';
+    console.warn(
+      `Writable app storage is unavailable${pathNote}. Falling back to "${cachedWritableDataDir}". ${describeStorageError(reason)}`,
+    );
+  }
+
+  return cachedWritableDataDir;
 }
 
 export function getAppRootDir() {
@@ -37,19 +68,10 @@ export function getWritableDataDir() {
   try {
     cachedWritableDataDir = ensureWritableDirectory(preferredPath);
   } catch (preferredError) {
-    const fallbackPath = join(tmpdir(), 'ochat-data');
-    cachedWritableDataDir = ensureWritableDirectory(fallbackPath);
-
-    if (!loggedWritableDataDirFallback) {
-      loggedWritableDataDirFallback = true;
-      const reason =
-        preferredError instanceof Error
-          ? preferredError.message
-          : 'Unknown filesystem error';
-      console.warn(
-        `APP_DATA_DIR "${preferredPath}" is not writable. Falling back to "${fallbackPath}". ${reason}`,
-      );
-    }
+    cachedWritableDataDir = applyWritableDataFallback(
+      preferredError,
+      preferredPath,
+    );
   }
 
   process.env.APP_DATA_DIR = cachedWritableDataDir;
@@ -67,4 +89,15 @@ export function resolveAppRootPath(...segments: string[]) {
 
 export function resolveWritableDataPath(...segments: string[]) {
   return join(getWritableDataDir(), ...segments);
+}
+
+export function recoverWritableDataDirFromError(
+  error: unknown,
+  failedPath?: string,
+) {
+  if (!canFallbackFromStorageError(error)) {
+    return null;
+  }
+
+  return applyWritableDataFallback(error, failedPath);
 }

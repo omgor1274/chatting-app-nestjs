@@ -10,6 +10,7 @@ import {
   getEnvFilePath,
   resolveAppRootPath,
   getWritableDataDir,
+  recoverWritableDataDirFromError,
   resolveWritableDataPath,
 } from './common/app-paths';
 import {
@@ -64,22 +65,37 @@ function setStaticAssetHeaders(
 }
 
 async function bootstrap() {
-  mkdirSync(resolveWritableDataPath('uploads', 'avatars'), { recursive: true });
-  mkdirSync(resolveWritableDataPath('uploads', 'chat'), { recursive: true });
-  mkdirSync(resolveWritableDataPath('uploads', 'chat-sessions', 'meta'), {
-    recursive: true,
-  });
-  mkdirSync(resolveWritableDataPath('uploads', 'chat-sessions', 'chunks'), {
-    recursive: true,
-  });
-  mkdirSync(resolveWritableDataPath('uploads', 'chat-sessions', 'assembled'), {
-    recursive: true,
-  });
-  mkdirSync(resolveWritableDataPath('uploads', 'groups'), { recursive: true });
-  mkdirSync(resolveWritableDataPath('uploads', 'chat-themes'), {
-    recursive: true,
-  });
-  mkdirSync(resolveWritableDataPath('backups'), { recursive: true });
+  const writableDirectories: string[][] = [
+    ['uploads', 'avatars'],
+    ['uploads', 'chat'],
+    ['uploads', 'chat-sessions', 'meta'],
+    ['uploads', 'chat-sessions', 'chunks'],
+    ['uploads', 'chat-sessions', 'assembled'],
+    ['uploads', 'groups'],
+    ['uploads', 'chat-themes'],
+    ['backups'],
+  ];
+  const ensureWritableDirectories = () => {
+    for (const segments of writableDirectories) {
+      mkdirSync(resolveWritableDataPath(...segments), { recursive: true });
+    }
+  };
+
+  try {
+    ensureWritableDirectories();
+  } catch (error) {
+    const failedPath =
+      error &&
+      typeof error === 'object' &&
+      'path' in error &&
+      typeof error.path === 'string'
+        ? error.path
+        : getWritableDataDir();
+    if (!recoverWritableDataDirFromError(error, failedPath)) {
+      throw error;
+    }
+    ensureWritableDirectories();
+  }
 
   const app = await NestFactory.create(AppModule);
   const expressApp = app.getHttpAdapter().getInstance();

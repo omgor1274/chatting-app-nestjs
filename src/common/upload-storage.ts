@@ -1,5 +1,8 @@
 import { mkdirSync } from 'fs';
-import { resolveWritableDataPath } from './app-paths';
+import {
+  recoverWritableDataDirFromError,
+  resolveWritableDataPath,
+} from './app-paths';
 
 export function createUploadDestination(...segments: string[]) {
   return (
@@ -8,8 +11,19 @@ export function createUploadDestination(...segments: string[]) {
     callback: (error: Error | null, destination: string) => void,
   ) => {
     try {
-      const destination = resolveWritableDataPath(...segments);
-      mkdirSync(destination, { recursive: true });
+      let destination = resolveWritableDataPath(...segments);
+
+      try {
+        mkdirSync(destination, { recursive: true });
+      } catch (error) {
+        if (!recoverWritableDataDirFromError(error, destination)) {
+          throw error;
+        }
+
+        destination = resolveWritableDataPath(...segments);
+        mkdirSync(destination, { recursive: true });
+      }
+
       callback(null, destination);
     } catch (error) {
       callback(

@@ -142,7 +142,7 @@ let sharedMediaErrorMessage = '';
 let sharedMediaBrowserKind = 'image';
 const OFFLINE_QUEUE_KEY = 'ochat_offline_message_queue';
 const RINGTONE_PREFERENCE_KEY = 'ochat_ringtone_preference';
-const CLIENT_CACHE_VERSION = '20260323-smooth23';
+const CLIENT_CACHE_VERSION = '20260324-smooth24';
 const CHAT_SHELL_CACHE_TTL_MS = 2 * 60 * 1000;
 const CHAT_SHELL_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const CONVERSATION_CACHE_TTL_MS = 90 * 1000;
@@ -435,6 +435,10 @@ function keyBackupRuntime() {
 
 function readKeyBackupUnlockMaterial(userId) {
   return keyBackupRuntime().readKeyBackupUnlockMaterial?.(userId) || '';
+}
+
+function storeKeyBackupUnlockMaterial(userId, unlockMaterial) {
+  keyBackupRuntime().storeKeyBackupUnlockMaterial?.(userId, unlockMaterial);
 }
 
 function clearKeyBackupUnlockMaterial(userId) {
@@ -5912,6 +5916,23 @@ async function handleAuth() {
 
     const authToken = data.token || data.access_token;
     if (authToken) {
+      if (data.user?.id && password) {
+        try {
+          const unlockMaterial =
+            await keyBackupRuntime().deriveKeyBackupUnlockMaterial?.(
+              password,
+              data.user.id,
+            );
+          if (unlockMaterial) {
+            storeKeyBackupUnlockMaterial(data.user.id, unlockMaterial);
+          }
+        } catch (error) {
+          console.warn(
+            'Failed to prepare message key backup unlock material',
+            error,
+          );
+        }
+      }
       token = authToken;
       localStorage.setItem('chat_token', token);
       showAuthFeedback('', 'info');
@@ -10537,10 +10558,16 @@ async function restoreSession() {
       message.includes('expired') ||
       message.includes('unauthorized') ||
       message.includes('invalid token');
+    const requiresFreshLogin =
+      message.includes('log in again on this device') ||
+      message.includes('unlock your encrypted messages');
 
-    if (isAuthFailure) {
+    if (isAuthFailure || requiresFreshLogin) {
       token = null;
       localStorage.removeItem('chat_token');
+      if (requiresFreshLogin && error?.message) {
+        alert(error.message);
+      }
       if (!isFileOrigin && window.location.pathname.startsWith('/chat')) {
         window.location.replace('/auth');
       }
