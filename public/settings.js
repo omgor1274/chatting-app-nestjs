@@ -17,6 +17,10 @@ import {
 const LAST_CHAT_ROUTE_KEY = 'chat_last_route';
 let currentProfileId = '';
 let currentProfile = null;
+let adminUsersPayload = {
+  summary: {},
+  users: [],
+};
 
 function getById(id) {
   return document.getElementById(id);
@@ -80,15 +84,53 @@ function formatDateTime(value) {
   return parsed.toLocaleString();
 }
 
-function renderAdminUsers(payload) {
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function filterAdminUsers(users, query) {
+  const normalizedQuery = String(query || '').trim().toLowerCase();
+  if (!normalizedQuery) {
+    return users;
+  }
+
+  const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
+  return users.filter((user) => {
+    const searchText = [
+      user.id,
+      user.name,
+      user.email,
+      user.role,
+      user.status,
+      user.isApproved ? 'approved' : 'pending',
+      user.isBanned ? 'banned' : 'not-banned',
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    return tokens.every((token) => searchText.includes(token));
+  });
+}
+
+function renderAdminUsers(payload = adminUsersPayload) {
   const summary = getById('settings-admin-summary');
   const container = getById('settings-admin-users');
   if (!summary || !container) {
     return;
   }
 
+  adminUsersPayload = payload || adminUsersPayload;
+
   const stats = payload?.summary || {};
   const users = Array.isArray(payload?.users) ? payload.users : [];
+  const searchQuery = getById('settings-admin-search-input')?.value?.trim() || '';
+  const filteredUsers = filterAdminUsers(users, searchQuery);
 
   summary.innerHTML = `
     <div class="flex flex-wrap gap-3 text-sm font-medium text-slate-700">
@@ -97,6 +139,7 @@ function renderAdminUsers(payload) {
       <span class="rounded-full bg-emerald-100 px-3 py-2 text-emerald-800">Active ${stats.activeUsers || 0}</span>
       <span class="rounded-full bg-rose-100 px-3 py-2 text-rose-800">Banned ${stats.bannedUsers || 0}</span>
       <span class="rounded-full bg-slate-900 px-3 py-2 text-white">Admins ${stats.adminUsers || 0}</span>
+      <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-slate-600">Showing ${filteredUsers.length} of ${users.length}</span>
     </div>
   `;
 
@@ -105,7 +148,15 @@ function renderAdminUsers(payload) {
     return;
   }
 
-  container.innerHTML = users
+  if (!filteredUsers.length) {
+    setAdminUsersState(
+      `No users match "${escapeHtml(searchQuery)}".`,
+      'empty',
+    );
+    return;
+  }
+
+  container.innerHTML = filteredUsers
     .map((user) => {
       const statusTone =
         user.status === 'banned'
@@ -154,12 +205,13 @@ function renderAdminUsers(payload) {
           <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div class="min-w-0 space-y-2">
               <div class="flex flex-wrap items-center gap-2">
-                <p class="truncate text-base font-bold text-slate-900">${user.name || user.email || 'User'}</p>
-                <span class="rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone}">${user.status}</span>
-                <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">${user.role}</span>
+                <p class="truncate text-base font-bold text-slate-900">${escapeHtml(user.name || user.email || 'User')}</p>
+                <span class="rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone}">${escapeHtml(user.status)}</span>
+                <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">${escapeHtml(user.role)}</span>
                 ${isCurrentAdmin ? '<span class="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">You</span>' : ''}
               </div>
-              <p class="truncate text-sm text-slate-500">${user.email || ''}</p>
+              <p class="truncate text-sm text-slate-500">${escapeHtml(user.email || '')}</p>
+              <p class="truncate text-xs text-slate-400">User ID: ${escapeHtml(user.id || '')}</p>
               <div class="grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
                 <p>Created: ${formatDateTime(user.createdAt)}</p>
                 <p>Approved: ${formatDateTime(user.approvedAt)}</p>
@@ -337,7 +389,8 @@ async function loadAdminUsers() {
       throw new Error(data.message || 'Failed to load admin users');
     }
 
-    renderAdminUsers(data);
+    adminUsersPayload = data;
+    renderAdminUsers();
   } finally {
     if (refreshButton) {
       refreshButton.disabled = false;
@@ -754,6 +807,9 @@ async function boot() {
       );
       showFeedback(error?.message || 'Failed to load admin users.', 'error');
     }
+  });
+  getById('settings-admin-search-input')?.addEventListener('input', () => {
+    renderAdminUsers();
   });
   getById('settings-admin-users')?.addEventListener('click', async (event) => {
     const button = event.target.closest('[data-admin-action]');

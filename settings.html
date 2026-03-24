@@ -294,6 +294,26 @@
             Refresh Users
           </button>
         </div>
+        <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_0.8fr]">
+          <label class="block">
+            <span
+              class="mb-2 block text-xs font-semibold uppercase tracking-[0.24em] text-slate-400"
+            >
+              Find user
+            </span>
+            <input
+              id="settings-admin-search-input"
+              type="search"
+              placeholder="Search by name, email, status, role, or user id"
+              class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+            />
+          </label>
+          <div
+            class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900"
+          >
+            New registrations stay pending until an admin approves them here.
+          </div>
+        </div>
         <div
           id="settings-admin-summary"
           class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600"
@@ -307,7 +327,7 @@
     <script src="/runtime-config.js?v=20260323-smooth1"></script>
     <script
       type="module"
-      src="/public/settings.js?v=20260324-admin1"
+      src="/public/settings.js?v=20260324-admin2"
     ></script>
   </body>
 </html>
