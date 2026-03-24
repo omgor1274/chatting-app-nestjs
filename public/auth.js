@@ -6,7 +6,7 @@ import {
   readJsonResponse,
   setToken,
   storeKeyBackupUnlockMaterial,
-} from './runtime.js?v=20260323-smooth2';
+} from './runtime.js?v=20260324-admin1';
 
 let isLogin = true;
 let pendingVerificationEmail = '';

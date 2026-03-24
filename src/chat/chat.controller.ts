@@ -13,9 +13,11 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
+import { memoryStorage } from 'multer';
 import { extname } from 'path';
 import { JwtGuard } from '../auth/jwt/jwt.guard';
 import { createUploadDestination } from '../common/upload-storage';
+import { ChatAttachmentStorageService } from './chat-attachment-storage.service';
 import { ChatGateway } from './chat.gateway';
 import {
   CHAT_UPLOAD_CHUNK_SIZE_BYTES,
@@ -25,18 +27,6 @@ import {
 } from './chat-upload.constants';
 import { ChatUploadService } from './chat-upload.service';
 import { ChatService } from './chat.service';
-
-function attachmentFileName(
-  req: { user?: { userId?: string } },
-  file: { originalname: string },
-  callback: (error: Error | null, filename: string) => void,
-) {
-  const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-  callback(
-    null,
-    `${req['user']?.userId ?? 'chat'}-${uniqueSuffix}${extname(file.originalname)}`,
-  );
-}
 
 function groupAvatarFileName(
   req: { user?: { userId?: string } },
@@ -99,6 +89,7 @@ export class ChatController {
     private chatService: ChatService,
     private chatGateway: ChatGateway,
     private chatUploadService: ChatUploadService,
+    private chatAttachmentStorage: ChatAttachmentStorageService,
   ) {}
 
   @UseGuards(JwtGuard)
@@ -523,6 +514,36 @@ export class ChatController {
     );
   }
 
+  @Post('uploads/sessions/:sessionId/parts')
+  @UseGuards(JwtGuard)
+  prepareAttachmentChunkUpload(
+    @Req() req,
+    @Param('sessionId') sessionId: string,
+    @Body() body: { chunkIndex?: string | number },
+  ) {
+    return this.chatUploadService.prepareChunkUpload(
+      sessionId,
+      req.user.userId,
+      body.chunkIndex,
+    );
+  }
+
+  @Post('uploads/sessions/:sessionId/parts/:chunkIndex/complete')
+  @UseGuards(JwtGuard)
+  completeAttachmentChunkUpload(
+    @Req() req,
+    @Param('sessionId') sessionId: string,
+    @Param('chunkIndex') chunkIndex: string,
+    @Body() body: { etag?: string; size?: number },
+  ) {
+    return this.chatUploadService.completeChunkUpload(
+      sessionId,
+      req.user.userId,
+      chunkIndex,
+      body,
+    );
+  }
+
   @Post('uploads/sessions/:sessionId/finalize')
   @UseGuards(JwtGuard)
   async finalizeUploadSession(
@@ -547,10 +568,10 @@ export class ChatController {
   @UseGuards(JwtGuard)
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: createUploadDestination('uploads', 'chat'),
-        filename: attachmentFileName,
-      }),
+      storage: memoryStorage(),
+      limits: {
+        fileSize: 64 * 1024 * 1024,
+      },
       fileFilter: (req, file, callback) => {
         const normalizedMimeType = normalizeChatAttachmentMimeType(
           file.mimetype,
@@ -558,7 +579,10 @@ export class ChatController {
         );
         if (
           !normalizedMimeType ||
-          !isAllowedChatAttachmentMimeType(normalizedMimeType, file.originalname)
+          !isAllowedChatAttachmentMimeType(
+            normalizedMimeType,
+            file.originalname,
+          )
         ) {
           return callback(
             new BadRequestException('Unsupported file type'),
@@ -583,7 +607,7 @@ export class ChatController {
     },
     @UploadedFile()
     file?: {
-      filename: string;
+      buffer: Buffer;
       originalname: string;
       mimetype: string;
       size: number;
@@ -597,20 +621,36 @@ export class ChatController {
       normalizeChatAttachmentMimeType(file.mimetype, file.originalname) ??
       file.mimetype;
 
-    const message = await this.chatService.createEncryptedMessage({
-      senderId: req.user.userId,
-      receiverId: body.receiverId,
-      groupId: body.groupId,
-      ciphertext: body.ciphertext,
-      encryptedKey: body.encryptedKey,
-      iv: body.iv,
-      algorithm: body.algorithm,
-      fileUrl: `/uploads/chat/${file.filename}`,
-      fileName: file.originalname,
-      fileMimeType: normalizedMimeType,
-      fileSize: file.size,
-      messageType: resolveAttachmentMessageType(normalizedMimeType),
-    });
+    const storedAttachment =
+      await this.chatAttachmentStorage.storeDirectAttachment({
+        buffer: file.buffer,
+        fileName: file.originalname,
+        fileMimeType: normalizedMimeType,
+        userId: req.user.userId,
+      });
+
+    let message;
+    try {
+      message = await this.chatService.createEncryptedMessage({
+        senderId: req.user.userId,
+        receiverId: body.receiverId,
+        groupId: body.groupId,
+        ciphertext: body.ciphertext,
+        encryptedKey: body.encryptedKey,
+        iv: body.iv,
+        algorithm: body.algorithm,
+        fileUrl: storedAttachment.fileUrl,
+        fileName: file.originalname,
+        fileMimeType: normalizedMimeType,
+        fileSize: file.size,
+        messageType: resolveAttachmentMessageType(normalizedMimeType),
+      });
+    } catch (error) {
+      await this.chatAttachmentStorage
+        .deleteAttachment(storedAttachment.fileUrl)
+        .catch(() => undefined);
+      throw error;
+    }
 
     await this.chatGateway.emitMessageToConversation(message);
     return message;

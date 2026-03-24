@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Param,
   Post,
   Query,
   Req,
@@ -13,6 +14,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
+import { AdminGuard } from '../auth/jwt/admin.guard';
 import { JwtGuard } from '../auth/jwt/jwt.guard';
 import { ChatGateway } from '../chat/chat.gateway';
 import { createUploadDestination } from '../common/upload-storage';
@@ -97,6 +99,30 @@ export class UserController {
   @Post('email/verify')
   verifyPendingEmail(@Req() req, @Body() body: VerifyOtpDto) {
     return this.userService.verifyPendingEmail(req.user.userId, body.otp);
+  }
+
+  @UseGuards(JwtGuard, AdminGuard)
+  @Get('admin/users')
+  getAdminUserOverview() {
+    return this.userService.getAdminUserOverview();
+  }
+
+  @UseGuards(JwtGuard, AdminGuard)
+  @Post('admin/users/:userId/approve')
+  approveUserByAdmin(@Param('userId') userId: string) {
+    return this.userService.approveUserByAdmin(userId);
+  }
+
+  @UseGuards(JwtGuard, AdminGuard)
+  @Post('admin/users/:userId/ban')
+  banUserByAdmin(@Req() req, @Param('userId') userId: string) {
+    return this.userService.banUserByAdmin(req.user.userId, userId);
+  }
+
+  @UseGuards(JwtGuard, AdminGuard)
+  @Post('admin/users/:userId/unban')
+  unbanUserByAdmin(@Param('userId') userId: string) {
+    return this.userService.unbanUserByAdmin(userId);
   }
 
   @UseGuards(JwtGuard)

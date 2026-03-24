@@ -1,6 +1,7 @@
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
+import { ChatAttachmentStorageService } from './chat-attachment-storage.service';
 import { ChatController } from './chat.controller';
 import { ChatGateway } from './chat.gateway';
 import { ChatUploadService } from './chat-upload.service';
@@ -35,9 +36,18 @@ describe('ChatController', () => {
           useValue: {
             createSession: jest.fn(),
             getSessionStatus: jest.fn(),
+            prepareChunkUpload: jest.fn(),
+            completeChunkUpload: jest.fn(),
             uploadChunk: jest.fn(),
             finalizeSession: jest.fn(),
             cancelSession: jest.fn(),
+          },
+        },
+        {
+          provide: ChatAttachmentStorageService,
+          useValue: {
+            storeDirectAttachment: jest.fn(),
+            deleteAttachment: jest.fn(),
           },
         },
         {

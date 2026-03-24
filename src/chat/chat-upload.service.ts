@@ -21,6 +21,7 @@ import { randomUUID } from 'crypto';
 import { pipeline } from 'stream/promises';
 import { PrismaService } from '../prisma/prisma.service';
 import { resolveWritableDataPath } from '../common/app-paths';
+import { ChatAttachmentStorageService } from './chat-attachment-storage.service';
 import { ChatService } from './chat.service';
 import {
   CHAT_UPLOAD_CHUNK_SIZE_BYTES,
@@ -30,6 +31,15 @@ import {
 } from './chat-upload.constants';
 
 type UploadSessionStatus = 'pending' | 'completed' | 'cancelled';
+type UploadStorageMode = 'chunked' | 'stream' | 'r2-multipart';
+type UploadTransport = 'server-relay' | 'presigned-put';
+type UploadStorageProvider = 'local' | 'cloudflare-r2';
+
+type UploadedMultipartPart = {
+  partNumber: number;
+  etag: string;
+  size: number;
+};
 
 type UploadSessionRecord = {
   id: string;
@@ -42,10 +52,14 @@ type UploadSessionRecord = {
   chunkSize: number;
   totalChunks: number;
   uploadedChunks: number[];
-  storageMode: 'chunked' | 'stream';
+  uploadedParts: UploadedMultipartPart[];
+  storageMode: UploadStorageMode;
+  storageProvider: UploadStorageProvider;
   status: UploadSessionStatus;
   finalFileName: string | null;
   fileUrl: string | null;
+  remoteObjectKey: string | null;
+  remoteUploadId: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -63,6 +77,7 @@ export class ChatUploadService {
   constructor(
     private prisma: PrismaService,
     private chatService: ChatService,
+    private chatAttachmentStorage: ChatAttachmentStorageService,
   ) {}
 
   private getSessionRootPath() {
@@ -127,6 +142,55 @@ export class ChatUploadService {
     return parsed;
   }
 
+  private normalizeSessionRecord(record: UploadSessionRecord) {
+    const storageMode =
+      record.storageMode === 'r2-multipart'
+        ? 'r2-multipart'
+        : record.storageMode || 'stream';
+    const storageProvider =
+      record.storageProvider ||
+      (storageMode === 'r2-multipart' ? 'cloudflare-r2' : 'local');
+
+    return {
+      ...record,
+      uploadedChunks: Array.isArray(record.uploadedChunks)
+        ? [...new Set(record.uploadedChunks)]
+            .map((value) => Number(value))
+            .filter((value) => Number.isInteger(value) && value >= 0)
+            .sort((left, right) => left - right)
+        : [],
+      uploadedParts: Array.isArray(record.uploadedParts)
+        ? record.uploadedParts
+            .map((part) => ({
+              partNumber: Number(part.partNumber),
+              etag: String(part.etag || '').trim(),
+              size: Number(part.size),
+            }))
+            .filter(
+              (part) =>
+                Number.isInteger(part.partNumber) &&
+                part.partNumber > 0 &&
+                part.etag &&
+                Number.isFinite(part.size) &&
+                part.size > 0,
+            )
+            .sort((left, right) => left.partNumber - right.partNumber)
+        : [],
+      storageMode,
+      storageProvider,
+      remoteObjectKey: record.remoteObjectKey ?? null,
+      remoteUploadId: record.remoteUploadId ?? null,
+      finalFileName: record.finalFileName ?? null,
+      fileUrl: record.fileUrl ?? null,
+    } satisfies UploadSessionRecord;
+  }
+
+  private getUploadTransport(record: UploadSessionRecord): UploadTransport {
+    return record.storageMode === 'r2-multipart'
+      ? 'presigned-put'
+      : 'server-relay';
+  }
+
   private async ensureUploadConversationAccess(
     userId: string,
     input: { receiverId?: string | null; groupId?: string | null },
@@ -166,7 +230,9 @@ export class ChatUploadService {
 
     try {
       const raw = await readFile(metaPath, 'utf8');
-      return JSON.parse(raw) as UploadSessionRecord;
+      return this.normalizeSessionRecord(
+        JSON.parse(raw) as UploadSessionRecord,
+      );
     } catch (error) {
       if (
         error &&
@@ -182,8 +248,10 @@ export class ChatUploadService {
 
   private async writeSessionRecord(record: UploadSessionRecord) {
     await mkdir(this.getSessionMetaDirPath(), { recursive: true });
-    await mkdir(this.getSessionChunksDirPath(record.id), { recursive: true });
-    await mkdir(this.getSessionAssembledDirPath(), { recursive: true });
+    if (record.storageMode !== 'r2-multipart') {
+      await mkdir(this.getSessionChunksDirPath(record.id), { recursive: true });
+      await mkdir(this.getSessionAssembledDirPath(), { recursive: true });
+    }
     await writeFile(
       this.getSessionMetaPath(record.id),
       JSON.stringify(record, null, 2),
@@ -204,7 +272,8 @@ export class ChatUploadService {
   private getChunkByteLength(record: UploadSessionRecord, chunkIndex: number) {
     if (chunkIndex >= record.totalChunks - 1) {
       const remaining =
-        record.fileSize - record.chunkSize * Math.max(record.totalChunks - 1, 0);
+        record.fileSize -
+        record.chunkSize * Math.max(record.totalChunks - 1, 0);
       return Math.max(remaining, 0);
     }
 
@@ -213,7 +282,8 @@ export class ChatUploadService {
 
   private getUploadedBytes(record: UploadSessionRecord) {
     return record.uploadedChunks.reduce(
-      (total, chunkIndex) => total + this.getChunkByteLength(record, chunkIndex),
+      (total, chunkIndex) =>
+        total + this.getChunkByteLength(record, chunkIndex),
       0,
     );
   }
@@ -307,7 +377,10 @@ export class ChatUploadService {
     const shouldTruncate = assembledBytes !== completedBytes;
     const shouldRewriteRecord =
       shouldTruncate ||
-      !this.areUploadedChunkListsEqual(record.uploadedChunks, expectedUploadedChunks) ||
+      !this.areUploadedChunkListsEqual(
+        record.uploadedChunks,
+        expectedUploadedChunks,
+      ) ||
       expectedUploadedBytes !== completedBytes;
 
     if (!shouldRewriteRecord) {
@@ -324,6 +397,14 @@ export class ChatUploadService {
     return record;
   }
 
+  private async syncSessionRecord(record: UploadSessionRecord) {
+    if (record.storageMode === 'stream') {
+      return this.syncStreamSessionRecord(record);
+    }
+
+    return record;
+  }
+
   private getNextChunkIndex(record: UploadSessionRecord) {
     for (let index = 0; index < record.totalChunks; index += 1) {
       if (!record.uploadedChunks.includes(index)) {
@@ -332,6 +413,38 @@ export class ChatUploadService {
     }
 
     return null;
+  }
+
+  private getMultipartPart(record: UploadSessionRecord, chunkIndex: number) {
+    return record.uploadedParts.find(
+      (part) => part.partNumber === chunkIndex + 1,
+    );
+  }
+
+  private assertPendingUploadRecord(record: UploadSessionRecord) {
+    if (record.status !== 'pending') {
+      throw new BadRequestException('Only pending uploads can be modified');
+    }
+  }
+
+  private assertChunkIndexInRange(
+    record: UploadSessionRecord,
+    chunkIndex: number,
+  ) {
+    if (chunkIndex >= record.totalChunks) {
+      throw new BadRequestException('Chunk index is out of range');
+    }
+  }
+
+  private assertNextChunk(record: UploadSessionRecord, chunkIndex: number) {
+    const nextChunkIndex = this.getNextChunkIndex(record);
+    if (nextChunkIndex === null) {
+      return null;
+    }
+    if (chunkIndex !== nextChunkIndex) {
+      throw new BadRequestException('Chunks must be uploaded in order');
+    }
+    return nextChunkIndex;
   }
 
   private serializeSession(record: UploadSessionRecord) {
@@ -349,6 +462,8 @@ export class ChatUploadService {
       receiverId: record.receiverId,
       groupId: record.groupId,
       fileUrl: record.fileUrl,
+      uploadTransport: this.getUploadTransport(record),
+      storageProvider: record.storageProvider,
     };
   }
 
@@ -359,7 +474,9 @@ export class ChatUploadService {
     try {
       const files = await readdir(chunksDir);
       await Promise.all(
-        files.map((file) => unlink(join(chunksDir, file)).catch(() => undefined)),
+        files.map((file) =>
+          unlink(join(chunksDir, file)).catch(() => undefined),
+        ),
       );
       await rm(chunksDir, { recursive: true, force: true });
     } catch (error) {
@@ -390,7 +507,10 @@ export class ChatUploadService {
       throw new BadRequestException('File name is required');
     }
 
-    if (!fileMimeType || !isAllowedChatAttachmentMimeType(fileMimeType, fileName)) {
+    if (
+      !fileMimeType ||
+      !isAllowedChatAttachmentMimeType(fileMimeType, fileName)
+    ) {
       throw new BadRequestException('Unsupported file type');
     }
 
@@ -408,33 +528,194 @@ export class ChatUploadService {
       Math.ceil(fileSize / CHAT_UPLOAD_CHUNK_SIZE_BYTES),
     );
     const now = new Date().toISOString();
-    const record: UploadSessionRecord = {
-      id: randomUUID(),
-      senderId: userId,
-      receiverId: input.receiverId ?? null,
-      groupId: input.groupId ?? null,
-      fileName,
-      fileMimeType,
-      fileSize,
-      chunkSize: CHAT_UPLOAD_CHUNK_SIZE_BYTES,
-      totalChunks,
-      uploadedChunks: [],
-      storageMode: 'stream',
-      status: 'pending',
-      finalFileName: null,
-      fileUrl: null,
-      createdAt: now,
-      updatedAt: now,
-    };
+    let record: UploadSessionRecord;
+
+    if (this.chatAttachmentStorage.isR2Enabled()) {
+      const remoteUpload =
+        await this.chatAttachmentStorage.createMultipartUpload({
+          fileName,
+          fileMimeType,
+          userId,
+        });
+      record = {
+        id: randomUUID(),
+        senderId: userId,
+        receiverId: input.receiverId ?? null,
+        groupId: input.groupId ?? null,
+        fileName,
+        fileMimeType,
+        fileSize,
+        chunkSize: CHAT_UPLOAD_CHUNK_SIZE_BYTES,
+        totalChunks,
+        uploadedChunks: [],
+        uploadedParts: [],
+        storageMode: 'r2-multipart',
+        storageProvider: 'cloudflare-r2',
+        status: 'pending',
+        finalFileName: null,
+        fileUrl: remoteUpload.fileUrl,
+        remoteObjectKey: remoteUpload.key,
+        remoteUploadId: remoteUpload.uploadId,
+        createdAt: now,
+        updatedAt: now,
+      };
+    } else {
+      record = {
+        id: randomUUID(),
+        senderId: userId,
+        receiverId: input.receiverId ?? null,
+        groupId: input.groupId ?? null,
+        fileName,
+        fileMimeType,
+        fileSize,
+        chunkSize: CHAT_UPLOAD_CHUNK_SIZE_BYTES,
+        totalChunks,
+        uploadedChunks: [],
+        uploadedParts: [],
+        storageMode: 'stream',
+        storageProvider: 'local',
+        status: 'pending',
+        finalFileName: null,
+        fileUrl: null,
+        remoteObjectKey: null,
+        remoteUploadId: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+    }
 
     await this.writeSessionRecord(record);
     return this.serializeSession(record);
   }
 
   async getSessionStatus(sessionId: string, userId: string) {
-    const record = await this.syncStreamSessionRecord(
+    const record = await this.syncSessionRecord(
       await this.getOwnedSessionRecord(sessionId, userId),
     );
+    return this.serializeSession(record);
+  }
+
+  async prepareChunkUpload(
+    sessionId: string,
+    userId: string,
+    chunkIndexInput: string | number | undefined,
+  ) {
+    const chunkIndex = this.normalizeChunkIndex(chunkIndexInput);
+    const record = await this.syncSessionRecord(
+      await this.getOwnedSessionRecord(sessionId, userId),
+    );
+
+    this.assertPendingUploadRecord(record);
+    this.assertChunkIndexInRange(record, chunkIndex);
+    await this.ensureUploadConversationAccess(userId, {
+      receiverId: record.receiverId,
+      groupId: record.groupId,
+    });
+
+    if (record.storageMode !== 'r2-multipart') {
+      throw new BadRequestException(
+        'This upload does not support direct multipart part uploads',
+      );
+    }
+
+    if (record.uploadedChunks.includes(chunkIndex)) {
+      return {
+        ...this.serializeSession(record),
+        chunkIndex,
+        partNumber: chunkIndex + 1,
+        uploadUrl: null,
+        alreadyUploaded: true,
+      };
+    }
+
+    this.assertNextChunk(record, chunkIndex);
+
+    if (!record.remoteObjectKey || !record.remoteUploadId) {
+      throw new BadRequestException(
+        'Upload session is missing remote metadata',
+      );
+    }
+
+    const partUpload =
+      await this.chatAttachmentStorage.createMultipartPartUploadUrl({
+        key: record.remoteObjectKey,
+        uploadId: record.remoteUploadId,
+        partNumber: chunkIndex + 1,
+      });
+
+    return {
+      ...this.serializeSession(record),
+      chunkIndex,
+      uploadUrl: partUpload.uploadUrl,
+      uploadHeaders: partUpload.headers,
+      partNumber: partUpload.partNumber,
+      alreadyUploaded: false,
+    };
+  }
+
+  async completeChunkUpload(
+    sessionId: string,
+    userId: string,
+    chunkIndexInput: string | number | undefined,
+    input: { etag?: string; size?: number },
+  ) {
+    const chunkIndex = this.normalizeChunkIndex(chunkIndexInput);
+    const record = await this.syncSessionRecord(
+      await this.getOwnedSessionRecord(sessionId, userId),
+    );
+
+    this.assertPendingUploadRecord(record);
+    this.assertChunkIndexInRange(record, chunkIndex);
+    await this.ensureUploadConversationAccess(userId, {
+      receiverId: record.receiverId,
+      groupId: record.groupId,
+    });
+
+    if (record.storageMode !== 'r2-multipart') {
+      throw new BadRequestException(
+        'This upload does not support direct multipart part uploads',
+      );
+    }
+
+    const expectedSize = this.getChunkByteLength(record, chunkIndex);
+    const uploadedSize = Number(input.size);
+    if (!Number.isFinite(uploadedSize) || uploadedSize !== expectedSize) {
+      throw new BadRequestException(
+        'Chunk size does not match the upload plan',
+      );
+    }
+
+    const etag = String(input.etag || '').trim();
+    if (!etag) {
+      throw new BadRequestException('Chunk ETag is required');
+    }
+
+    if (record.uploadedChunks.includes(chunkIndex)) {
+      const savedPart = this.getMultipartPart(record, chunkIndex);
+      if (savedPart?.etag === etag) {
+        return this.serializeSession(record);
+      }
+      throw new BadRequestException('Chunk upload is out of sync');
+    }
+
+    this.assertNextChunk(record, chunkIndex);
+
+    record.uploadedChunks = [...record.uploadedChunks, chunkIndex].sort(
+      (left, right) => left - right,
+    );
+    record.uploadedParts = [
+      ...record.uploadedParts.filter(
+        (part) => part.partNumber !== chunkIndex + 1,
+      ),
+      {
+        partNumber: chunkIndex + 1,
+        etag,
+        size: uploadedSize,
+      },
+    ].sort((left, right) => left.partNumber - right.partNumber);
+    record.updatedAt = new Date().toISOString();
+
+    await this.writeSessionRecord(record);
     return this.serializeSession(record);
   }
 
@@ -451,21 +732,18 @@ export class ChatUploadService {
     let uploadedChunkMoved = false;
     const chunkIndex = this.normalizeChunkIndex(chunkIndexInput);
     try {
-      const record = await this.syncStreamSessionRecord(
+      const record = await this.syncSessionRecord(
         await this.getOwnedSessionRecord(sessionId, userId),
       );
 
-      if (record.status !== 'pending') {
-        throw new BadRequestException('Only pending uploads can receive chunks');
-      }
-
-      if (chunkIndex >= record.totalChunks) {
-        throw new BadRequestException('Chunk index is out of range');
-      }
+      this.assertPendingUploadRecord(record);
+      this.assertChunkIndexInRange(record, chunkIndex);
 
       const expectedSize = this.getChunkByteLength(record, chunkIndex);
       if (chunk.size > record.chunkSize || chunk.size !== expectedSize) {
-        throw new BadRequestException('Chunk size does not match the upload plan');
+        throw new BadRequestException(
+          'Chunk size does not match the upload plan',
+        );
       }
 
       await this.ensureUploadConversationAccess(userId, {
@@ -473,19 +751,25 @@ export class ChatUploadService {
         groupId: record.groupId,
       });
 
+      if (record.storageMode === 'r2-multipart') {
+        throw new BadRequestException(
+          'This upload session expects direct multipart uploads',
+        );
+      }
+
+      if (record.uploadedChunks.includes(chunkIndex)) {
+        return this.serializeSession(record);
+      }
+
+      const nextChunkIndex = this.getNextChunkIndex(record);
+      if (nextChunkIndex === null) {
+        return this.serializeSession(record);
+      }
+      if (chunkIndex !== nextChunkIndex) {
+        throw new BadRequestException('Chunks must be uploaded in order');
+      }
+
       if (record.storageMode === 'stream') {
-        if (record.uploadedChunks.includes(chunkIndex)) {
-          return this.serializeSession(record);
-        }
-
-        const nextChunkIndex = this.getNextChunkIndex(record);
-        if (nextChunkIndex === null) {
-          return this.serializeSession(record);
-        }
-        if (chunkIndex !== nextChunkIndex) {
-          throw new BadRequestException('Chunks must be uploaded in order');
-        }
-
         const assembledTempPath = this.getSessionAssembledTempPath(record.id);
         const expectedUploadedBytes = this.getUploadedBytes(record);
 
@@ -514,18 +798,18 @@ export class ChatUploadService {
           }
         }
       } else {
-        await mkdir(this.getSessionChunksDirPath(record.id), { recursive: true });
+        await mkdir(this.getSessionChunksDirPath(record.id), {
+          recursive: true,
+        });
         const chunkPath = this.getChunkPath(record.id, chunkIndex);
         await unlink(chunkPath).catch(() => undefined);
         await rename(chunk.path, chunkPath);
         uploadedChunkMoved = true;
       }
 
-      if (!record.uploadedChunks.includes(chunkIndex)) {
-        record.uploadedChunks = [...record.uploadedChunks, chunkIndex].sort(
-          (left, right) => left - right,
-        );
-      }
+      record.uploadedChunks = [...record.uploadedChunks, chunkIndex].sort(
+        (left, right) => left - right,
+      );
       record.updatedAt = new Date().toISOString();
 
       await this.writeSessionRecord(record);
@@ -537,27 +821,39 @@ export class ChatUploadService {
     }
   }
 
-  async finalizeSession(sessionId: string, userId: string) {
-    const record = await this.syncStreamSessionRecord(
-      await this.getOwnedSessionRecord(sessionId, userId),
-    );
-
-    if (record.status !== 'pending') {
-      throw new BadRequestException('Only pending uploads can be finalized');
+  private async finalizeMultipartSession(record: UploadSessionRecord) {
+    if (!record.remoteObjectKey || !record.remoteUploadId) {
+      throw new BadRequestException(
+        'Upload session is missing remote metadata',
+      );
     }
-
-    const nextChunkIndex = this.getNextChunkIndex(record);
-    if (nextChunkIndex !== null) {
+    if (record.uploadedParts.length !== record.totalChunks) {
       throw new BadRequestException('Upload is not complete yet');
     }
 
-    await this.ensureUploadConversationAccess(userId, {
-      receiverId: record.receiverId,
-      groupId: record.groupId,
-    });
+    const completedUpload =
+      await this.chatAttachmentStorage.completeMultipartUpload({
+        key: record.remoteObjectKey,
+        uploadId: record.remoteUploadId,
+        parts: record.uploadedParts,
+      });
 
+    return {
+      fileUrl: completedUpload.fileUrl,
+      finalPath: null,
+      finalFileName: null,
+    };
+  }
+
+  private async finalizeLocalSession(
+    record: UploadSessionRecord,
+    userId: string,
+  ) {
     if (!record.finalFileName) {
-      const { finalFileName } = this.getFinalAttachmentPath(record.fileName, userId);
+      const { finalFileName } = this.getFinalAttachmentPath(
+        record.fileName,
+        userId,
+      );
       record.finalFileName = finalFileName;
       record.updatedAt = new Date().toISOString();
       await this.writeSessionRecord(record);
@@ -568,7 +864,9 @@ export class ChatUploadService {
     const assembledTempPath = this.getSessionAssembledTempPath(record.id);
     const tempPath = `${finalPath}.part`;
 
-    await mkdir(resolveWritableDataPath('uploads', 'chat'), { recursive: true });
+    await mkdir(resolveWritableDataPath('uploads', 'chat'), {
+      recursive: true,
+    });
     let finalFileExists = false;
     try {
       const finalStat = await stat(finalPath);
@@ -672,20 +970,61 @@ export class ChatUploadService {
       }
     }
 
-    const message = await this.chatService.createEncryptedMessage({
-      senderId: userId,
-      receiverId: record.receiverId ?? undefined,
-      groupId: record.groupId ?? undefined,
+    return {
       fileUrl: `/uploads/chat/${finalFileName}`,
-      fileName: record.fileName,
-      fileMimeType: record.fileMimeType,
-      fileSize: record.fileSize,
-      messageType: resolveAttachmentMessageType(record.fileMimeType),
+      finalPath,
+      finalFileName,
+    };
+  }
+
+  async finalizeSession(sessionId: string, userId: string) {
+    const record = await this.syncSessionRecord(
+      await this.getOwnedSessionRecord(sessionId, userId),
+    );
+
+    this.assertPendingUploadRecord(record);
+
+    const nextChunkIndex = this.getNextChunkIndex(record);
+    if (nextChunkIndex !== null) {
+      throw new BadRequestException('Upload is not complete yet');
+    }
+
+    await this.ensureUploadConversationAccess(userId, {
+      receiverId: record.receiverId,
+      groupId: record.groupId,
     });
 
+    const finalizedAttachment =
+      record.storageMode === 'r2-multipart'
+        ? await this.finalizeMultipartSession(record)
+        : await this.finalizeLocalSession(record, userId);
+
+    let message;
+    try {
+      message = await this.chatService.createEncryptedMessage({
+        senderId: userId,
+        receiverId: record.receiverId ?? undefined,
+        groupId: record.groupId ?? undefined,
+        fileUrl: finalizedAttachment.fileUrl,
+        fileName: record.fileName,
+        fileMimeType: record.fileMimeType,
+        fileSize: record.fileSize,
+        messageType: resolveAttachmentMessageType(record.fileMimeType),
+      });
+    } catch (error) {
+      if (record.storageMode === 'r2-multipart') {
+        await this.chatAttachmentStorage
+          .deleteAttachment(finalizedAttachment.fileUrl)
+          .catch(() => undefined);
+      } else if (finalizedAttachment.finalPath) {
+        await unlink(finalizedAttachment.finalPath).catch(() => undefined);
+      }
+      throw error;
+    }
+
     record.status = 'completed';
-    record.finalFileName = finalFileName;
-    record.fileUrl = `/uploads/chat/${finalFileName}`;
+    record.fileUrl = finalizedAttachment.fileUrl;
+    record.finalFileName = finalizedAttachment.finalFileName;
     record.updatedAt = new Date().toISOString();
 
     await this.writeSessionRecord(record);
@@ -695,12 +1034,25 @@ export class ChatUploadService {
   }
 
   async cancelSession(sessionId: string, userId: string) {
-    const record = await this.syncStreamSessionRecord(
+    const record = await this.syncSessionRecord(
       await this.getOwnedSessionRecord(sessionId, userId),
     );
 
     if (record.status === 'completed') {
       throw new BadRequestException('Completed uploads cannot be cancelled');
+    }
+
+    if (
+      record.storageMode === 'r2-multipart' &&
+      record.remoteObjectKey &&
+      record.remoteUploadId
+    ) {
+      await this.chatAttachmentStorage
+        .abortMultipartUpload({
+          key: record.remoteObjectKey,
+          uploadId: record.remoteUploadId,
+        })
+        .catch(() => undefined);
     }
 
     record.status = 'cancelled';

@@ -12,7 +12,7 @@ import {
   loadPublicConfig,
   readKeyBackupUnlockMaterial,
   readJsonResponse,
-} from './runtime.js?v=20260323-smooth2';
+} from './runtime.js?v=20260324-admin1';
 
 const LAST_CHAT_ROUTE_KEY = 'chat_last_route';
 let currentProfileId = '';
@@ -38,6 +38,144 @@ function setBlockedUsersState(message, type = 'empty') {
       ${message}
     </div>
   `;
+}
+
+function setAdminUsersState(message, type = 'empty') {
+  const container = getById('settings-admin-users');
+  if (!container) {
+    return;
+  }
+
+  const toneClass =
+    type === 'error'
+      ? 'border-red-200 bg-red-50 text-red-700'
+      : 'border-dashed border-slate-200 bg-slate-50 text-slate-500';
+
+  container.innerHTML = `
+    <div class="rounded-2xl border px-4 py-6 text-sm ${toneClass}">
+      ${message}
+    </div>
+  `;
+}
+
+function syncAdminPanelVisibility() {
+  const panel = getById('settings-admin-panel');
+  if (!panel) {
+    return;
+  }
+
+  panel.classList.toggle('hidden', currentProfile?.role !== 'ADMIN');
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return 'Not set';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Not set';
+  }
+
+  return parsed.toLocaleString();
+}
+
+function renderAdminUsers(payload) {
+  const summary = getById('settings-admin-summary');
+  const container = getById('settings-admin-users');
+  if (!summary || !container) {
+    return;
+  }
+
+  const stats = payload?.summary || {};
+  const users = Array.isArray(payload?.users) ? payload.users : [];
+
+  summary.innerHTML = `
+    <div class="flex flex-wrap gap-3 text-sm font-medium text-slate-700">
+      <span class="rounded-full bg-white px-3 py-2">Total ${stats.totalUsers || 0}</span>
+      <span class="rounded-full bg-amber-100 px-3 py-2 text-amber-800">Pending ${stats.pendingUsers || 0}</span>
+      <span class="rounded-full bg-emerald-100 px-3 py-2 text-emerald-800">Active ${stats.activeUsers || 0}</span>
+      <span class="rounded-full bg-rose-100 px-3 py-2 text-rose-800">Banned ${stats.bannedUsers || 0}</span>
+      <span class="rounded-full bg-slate-900 px-3 py-2 text-white">Admins ${stats.adminUsers || 0}</span>
+    </div>
+  `;
+
+  if (!users.length) {
+    setAdminUsersState('No users found yet.');
+    return;
+  }
+
+  container.innerHTML = users
+    .map((user) => {
+      const statusTone =
+        user.status === 'banned'
+          ? 'bg-rose-100 text-rose-700'
+          : user.status === 'pending'
+            ? 'bg-amber-100 text-amber-800'
+            : 'bg-emerald-100 text-emerald-700';
+      const isAdmin = user.role === 'ADMIN';
+      const isCurrentAdmin = user.id === currentProfileId;
+      const actionButtons = isAdmin
+        ? ''
+        : `
+            ${!user.isApproved ? `
+              <button
+                type="button"
+                data-admin-action="approve"
+                data-user-id="${user.id}"
+                class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-700"
+              >
+                Approve
+              </button>
+            ` : ''}
+            ${user.isBanned ? `
+              <button
+                type="button"
+                data-admin-action="unban"
+                data-user-id="${user.id}"
+                class="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50"
+              >
+                Unban
+              </button>
+            ` : `
+              <button
+                type="button"
+                data-admin-action="ban"
+                data-user-id="${user.id}"
+                class="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100"
+              >
+                Ban
+              </button>
+            `}
+          `;
+
+      return `
+        <div class="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div class="min-w-0 space-y-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="truncate text-base font-bold text-slate-900">${user.name || user.email || 'User'}</p>
+                <span class="rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone}">${user.status}</span>
+                <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">${user.role}</span>
+                ${isCurrentAdmin ? '<span class="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">You</span>' : ''}
+              </div>
+              <p class="truncate text-sm text-slate-500">${user.email || ''}</p>
+              <div class="grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
+                <p>Created: ${formatDateTime(user.createdAt)}</p>
+                <p>Approved: ${formatDateTime(user.approvedAt)}</p>
+                <p>Banned: ${formatDateTime(user.bannedAt)}</p>
+                <p>Email verified: ${user.emailVerified ? 'Yes' : 'No'}</p>
+              </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              ${actionButtons}
+            </div>
+          </div>
+          ${isAdmin ? '<p class="mt-3 text-xs text-slate-500">Admin accounts stay protected from bans in the panel.</p>' : ''}
+        </div>
+      `;
+    })
+    .join('');
 }
 
 function showFeedback(message, type = 'info') {
@@ -101,7 +239,7 @@ function prefetchChatShell() {
   const hrefs = [
     getLastChatRoute(),
     '/public/app.js?v=20260324-smooth25',
-    '/public/runtime.js?v=20260323-smooth2',
+    '/public/runtime.js?v=20260324-admin1',
     '/public/app.css?v=20260323-smooth11',
   ];
 
@@ -173,6 +311,102 @@ async function unblockUser(userId) {
 
   showFeedback(data.message || 'User unblocked.', 'success');
   await loadBlockedUsers();
+}
+
+async function loadAdminUsers() {
+  if (currentProfile?.role !== 'ADMIN') {
+    return;
+  }
+
+  const refreshButton = getById('settings-admin-refresh-btn');
+  if (refreshButton) {
+    refreshButton.disabled = true;
+    refreshButton.textContent = 'Loading...';
+    refreshButton.classList.add('opacity-70', 'cursor-wait');
+  }
+
+  try {
+    const res = await api('/users/admin/users');
+    const data = await readJsonResponse(
+      res,
+      { summary: {}, users: [] },
+      'Failed to load admin users.',
+    );
+
+    if (!res.ok) {
+      throw new Error(data.message || 'Failed to load admin users');
+    }
+
+    renderAdminUsers(data);
+  } finally {
+    if (refreshButton) {
+      refreshButton.disabled = false;
+      refreshButton.textContent = 'Refresh Users';
+      refreshButton.classList.remove('opacity-70', 'cursor-wait');
+    }
+  }
+}
+
+async function approveAdminUser(userId) {
+  const res = await api(`/users/admin/users/${encodeURIComponent(userId)}/approve`, {
+    method: 'POST',
+  });
+  const data = await readJsonResponse(
+    res,
+    {},
+    'Failed to approve the user.',
+  );
+
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to approve the user');
+  }
+
+  showFeedback(data.message || 'User approved.', 'success');
+  await loadAdminUsers();
+}
+
+async function banAdminUser(userId) {
+  if (!window.confirm('Ban this user from O-chat? They will lose access immediately.')) {
+    return;
+  }
+
+  const res = await api(`/users/admin/users/${encodeURIComponent(userId)}/ban`, {
+    method: 'POST',
+  });
+  const data = await readJsonResponse(
+    res,
+    {},
+    'Failed to ban the user.',
+  );
+
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to ban the user');
+  }
+
+  showFeedback(data.message || 'User banned.', 'success');
+  await loadAdminUsers();
+}
+
+async function unbanAdminUser(userId) {
+  if (!window.confirm('Unban this user and restore website access?')) {
+    return;
+  }
+
+  const res = await api(`/users/admin/users/${encodeURIComponent(userId)}/unban`, {
+    method: 'POST',
+  });
+  const data = await readJsonResponse(
+    res,
+    {},
+    'Failed to unban the user.',
+  );
+
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to unban the user');
+  }
+
+  showFeedback(data.message || 'User unbanned.', 'success');
+  await loadAdminUsers();
 }
 
 async function uploadAvatar() {
@@ -278,6 +512,7 @@ async function loadProfile() {
 
   currentProfile = data;
   currentProfileId = data.id;
+  syncAdminPanelVisibility();
 
   getById('settings-current-name').textContent = data.name || 'Your profile';
   getById('settings-current-email').textContent = data.email || '';
@@ -293,6 +528,10 @@ async function loadProfile() {
   getById('settings-backup-videos-input').checked = Boolean(data.backupVideos);
   getById('settings-backup-files-input').checked = Boolean(data.backupFiles);
   applyDarkMode(Boolean(data.darkMode));
+
+  if (data.role === 'ADMIN') {
+    setAdminUsersState('Loading admin users...');
+  }
 }
 
 async function resolveCurrentProfilePrivateKey() {
@@ -504,6 +743,43 @@ async function boot() {
       showFeedback(error?.message || 'Failed to unblock user.', 'error');
     }
   });
+  getById('settings-admin-refresh-btn')?.addEventListener('click', async () => {
+    try {
+      await loadAdminUsers();
+    } catch (error) {
+      console.error(error);
+      setAdminUsersState(
+        error?.message || 'Failed to load admin users.',
+        'error',
+      );
+      showFeedback(error?.message || 'Failed to load admin users.', 'error');
+    }
+  });
+  getById('settings-admin-users')?.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-admin-action]');
+    if (!button) {
+      return;
+    }
+
+    try {
+      if (button.dataset.adminAction === 'approve') {
+        await approveAdminUser(button.dataset.userId);
+        return;
+      }
+
+      if (button.dataset.adminAction === 'ban') {
+        await banAdminUser(button.dataset.userId);
+        return;
+      }
+
+      if (button.dataset.adminAction === 'unban') {
+        await unbanAdminUser(button.dataset.userId);
+      }
+    } catch (error) {
+      console.error(error);
+      showFeedback(error?.message || 'Failed to update the user.', 'error');
+    }
+  });
   setBlockedUsersState('Loading blocked users...');
   const [profileResult, blockedUsersResult] = await Promise.allSettled([
     loadProfile(),
@@ -520,6 +796,18 @@ async function boot() {
       blockedUsersResult.reason?.message || 'Failed to load blocked users.',
       'error',
     );
+  }
+
+  if (currentProfile?.role === 'ADMIN') {
+    try {
+      await loadAdminUsers();
+    } catch (error) {
+      console.error(error);
+      setAdminUsersState(
+        error?.message || 'Failed to load admin users.',
+        'error',
+      );
+    }
   }
 
 }

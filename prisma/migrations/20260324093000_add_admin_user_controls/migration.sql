@@ -1,0 +1,16 @@
+CREATE TYPE "AppRole" AS ENUM ('USER', 'ADMIN');
+
+ALTER TABLE "User"
+ADD COLUMN "role" "AppRole" NOT NULL DEFAULT 'USER',
+ADD COLUMN "isApproved" BOOLEAN,
+ADD COLUMN "approvedAt" TIMESTAMP(3),
+ADD COLUMN "isBanned" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN "bannedAt" TIMESTAMP(3);
+
+UPDATE "User"
+SET "isApproved" = true
+WHERE "isApproved" IS NULL;
+
+ALTER TABLE "User"
+ALTER COLUMN "isApproved" SET NOT NULL,
+ALTER COLUMN "isApproved" SET DEFAULT false;

@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import { User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
@@ -29,7 +33,12 @@ export class AuthService {
     email: string;
     name: string;
     avatar?: string | null;
+    role?: string;
     emailVerified?: boolean;
+    isApproved?: boolean;
+    approvedAt?: Date | null;
+    isBanned?: boolean;
+    bannedAt?: Date | null;
     pendingEmail?: string | null;
     backupEnabled?: boolean;
     backupImages?: boolean;
@@ -42,7 +51,12 @@ export class AuthService {
       email: user.email,
       name: user.name,
       avatar: user.avatar ?? null,
+      role: user.role ?? 'USER',
       emailVerified: user.emailVerified ?? true,
+      isApproved: user.isApproved ?? true,
+      approvedAt: user.approvedAt ?? null,
+      isBanned: user.isBanned ?? false,
+      bannedAt: user.bannedAt ?? null,
       pendingEmail: user.pendingEmail ?? null,
       backupEnabled: user.backupEnabled ?? true,
       backupImages: user.backupImages ?? true,
@@ -64,12 +78,19 @@ export class AuthService {
       select: {
         id: true,
         email: true,
-        emailVerified: true,
+        isApproved: true,
+        isBanned: true,
       },
     });
 
     if (existingUser) {
-      if (existingUser.email === email && !existingUser.emailVerified) {
+      if (existingUser.isBanned) {
+        throw new ForbiddenException(
+          'This account has been banned from O-chat. Please contact the admin.',
+        );
+      }
+
+      if (existingUser.email === email && !existingUser.isApproved) {
         const user = await this.prisma.user.update({
           where: { id: existingUser.id },
           data: {
@@ -83,7 +104,12 @@ export class AuthService {
             email: true,
             name: true,
             avatar: true,
+            role: true,
             emailVerified: true,
+            isApproved: true,
+            approvedAt: true,
+            isBanned: true,
+            bannedAt: true,
             pendingEmail: true,
             backupEnabled: true,
             backupImages: true,
@@ -95,8 +121,9 @@ export class AuthService {
         });
 
         return {
-          message: 'Registration successful',
-          token: this.signAuthToken(user),
+          message:
+            'Registration received. An admin must approve your account before you can log in.',
+          approvalRequired: true,
           user: this.serializeUser(user),
         };
       }
@@ -110,13 +137,19 @@ export class AuthService {
         name,
         password: hashedPassword,
         emailVerified: true,
+        isApproved: false,
       },
       select: {
         id: true,
         email: true,
         name: true,
         avatar: true,
+        role: true,
         emailVerified: true,
+        isApproved: true,
+        approvedAt: true,
+        isBanned: true,
+        bannedAt: true,
         pendingEmail: true,
         backupEnabled: true,
         backupImages: true,
@@ -128,8 +161,9 @@ export class AuthService {
     });
 
     return {
-      message: 'Registration successful',
-      token: this.signAuthToken(user),
+      message:
+        'Registration submitted. An admin must approve your account before you can log in.',
+      approvalRequired: true,
       user: this.serializeUser(user),
     };
   }
@@ -173,6 +207,18 @@ export class AuthService {
 
     if (!isMatch) {
       throw new BadRequestException('Invalid credentials');
+    }
+
+    if (user.isBanned) {
+      throw new ForbiddenException(
+        'Your account has been banned from O-chat. Please contact the admin.',
+      );
+    }
+
+    if (!user.isApproved) {
+      throw new ForbiddenException(
+        'Your account is waiting for admin approval.',
+      );
     }
 
     const resolvedUser = user.emailVerified

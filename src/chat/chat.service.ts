@@ -12,6 +12,7 @@ import {
 } from '@prisma/client';
 import { PushNotificationService } from '../notifications/push-notification.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ChatAttachmentStorageService } from './chat-attachment-storage.service';
 
 const MESSAGE_PAGE_SIZE = 20;
 const DELETE_FOR_EVERYONE_WINDOW_MS = 5 * 60 * 1000;
@@ -22,6 +23,7 @@ export class ChatService {
   constructor(
     private prisma: PrismaService,
     private pushNotifications: PushNotificationService,
+    private chatAttachmentStorage: ChatAttachmentStorageService,
   ) {}
 
   private normalizeBefore(before?: string) {
@@ -1445,7 +1447,8 @@ export class ChatService {
     return {
       ...createdMessage,
       fileSize:
-        createdMessage.fileSize === null || createdMessage.fileSize === undefined
+        createdMessage.fileSize === null ||
+        createdMessage.fileSize === undefined
           ? null
           : Number(createdMessage.fileSize),
       readByCount: 0,
@@ -1555,6 +1558,12 @@ export class ChatService {
         deletedForEveryoneById: userId,
       },
     });
+
+    if (message.fileUrl) {
+      await this.chatAttachmentStorage
+        .deleteAttachment(message.fileUrl)
+        .catch(() => undefined);
+    }
 
     if (updated.groupId) {
       const membership = await this.ensureGroupMember(updated.groupId, userId);

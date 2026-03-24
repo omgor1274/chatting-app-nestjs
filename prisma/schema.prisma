@@ -15,7 +15,12 @@ model User {
   password           String
   name               String
   avatar             String?
+  role               AppRole     @default(USER)
   emailVerified      Boolean     @default(false)
+  isApproved         Boolean     @default(false)
+  approvedAt         DateTime?
+  isBanned           Boolean     @default(false)
+  bannedAt           DateTime?
   backupEnabled      Boolean     @default(true)
   backupImages       Boolean     @default(true)
   backupVideos       Boolean     @default(true)
@@ -36,6 +41,11 @@ model User {
   hiddenMessages     MessageHidden[]
   blockedUsers       UserBlock[] @relation("UserBlocker")
   blockedByUsers     UserBlock[] @relation("UserBlocked")
+}
+
+enum AppRole {
+  USER
+  ADMIN
 }
 
 enum MessageType {

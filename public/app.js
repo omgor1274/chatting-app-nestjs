@@ -4,7 +4,8 @@ const defaultApiOrigin =
   window.__OCHAT_RUNTIME_CONFIG__?.defaultApiOrigin || 'http://localhost:8080';
 const localBackendOrigin = defaultApiOrigin;
 const isHostedOrigin =
-  !isFileOrigin && !/^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
+  !isFileOrigin &&
+  !/^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
 let appConfig = {
   apiUrl: localBackendOrigin,
   avatarBaseUrl: '/icons/default-avatar.svg',
@@ -168,9 +169,13 @@ function getConfigCandidates() {
   try {
     const parsed = new URL(localBackendOrigin);
     if (parsed.hostname === 'localhost') {
-      candidates.push(`${parsed.protocol}//127.0.0.1${parsed.port ? `:${parsed.port}` : ''}`);
+      candidates.push(
+        `${parsed.protocol}//127.0.0.1${parsed.port ? `:${parsed.port}` : ''}`,
+      );
     } else if (parsed.hostname === '127.0.0.1') {
-      candidates.push(`${parsed.protocol}//localhost${parsed.port ? `:${parsed.port}` : ''}`);
+      candidates.push(
+        `${parsed.protocol}//localhost${parsed.port ? `:${parsed.port}` : ''}`,
+      );
     }
   } catch {
     // Ignore invalid env-driven defaults and keep the explicit candidates above.
@@ -330,9 +335,7 @@ function loadLocalConversationPreferences() {
     Object.entries(readStoredJson(getScopedPreferenceKey('chat_drafts'), {})),
   );
   callHistoryByConversation = new Map(
-    Object.entries(
-      readStoredJson(getScopedPreferenceKey('call_history'), {}),
-    ),
+    Object.entries(readStoredJson(getScopedPreferenceKey('call_history'), {})),
   );
   missedCallCountsByConversation = new Map(
     Object.entries(
@@ -422,7 +425,10 @@ function getFileUrl(path) {
     return '';
   }
 
-  if (String(path).startsWith('http://') || String(path).startsWith('https://')) {
+  if (
+    String(path).startsWith('http://') ||
+    String(path).startsWith('https://')
+  ) {
     return path;
   }
 
@@ -445,7 +451,11 @@ function clearKeyBackupUnlockMaterial(userId) {
   keyBackupRuntime().clearKeyBackupUnlockMaterial?.(userId);
 }
 
-async function encryptPrivateKeyBackupForUser(privateKey, userId, unlockMaterial) {
+async function encryptPrivateKeyBackupForUser(
+  privateKey,
+  userId,
+  unlockMaterial,
+) {
   if (!privateKey || !userId) {
     return null;
   }
@@ -694,13 +704,17 @@ async function ensureEncryptionKeys(forceSync = false) {
   );
   const shouldSyncBackup = Boolean(
     keyBackupPayload &&
-      (!currentUser.privateKeyBackupCiphertext ||
-        !currentUser.privateKeyBackupIv ||
-        generatedNewKeyPair ||
-        currentUser.publicKey !== savedPublicKey),
+    (!currentUser.privateKeyBackupCiphertext ||
+      !currentUser.privateKeyBackupIv ||
+      generatedNewKeyPair ||
+      currentUser.publicKey !== savedPublicKey),
   );
 
-  if (forceSync || currentUser.publicKey !== savedPublicKey || shouldSyncBackup) {
+  if (
+    forceSync ||
+    currentUser.publicKey !== savedPublicKey ||
+    shouldSyncBackup
+  ) {
     const res = await api('/users/keys/public', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -971,9 +985,9 @@ function isSameConversation(left, right) {
 function isConversationStillActive(user, key = getConversationCacheKey(user)) {
   return Boolean(
     user &&
-      key &&
-      activeConversationCacheKey === key &&
-      isSameConversation(user, selectedUser),
+    key &&
+    activeConversationCacheKey === key &&
+    isSameConversation(user, selectedUser),
   );
 }
 
@@ -1273,7 +1287,9 @@ function serializeConversationStateForCache(key, state) {
     return null;
   }
 
-  const messages = sortMessagesChronologically(state.conversationMessages.values())
+  const messages = sortMessagesChronologically(
+    state.conversationMessages.values(),
+  )
     .filter((message) => message?.id && !message?.isPending)
     .slice(-MAX_PERSISTED_MESSAGES_PER_CONVERSATION)
     .map((message) => ({ ...message }));
@@ -1309,7 +1325,11 @@ function getPersistedConversationStateEntries() {
         rank:
           key === activeConversationCacheKey
             ? Number.MAX_SAFE_INTEGER
-            : Number(recentActivity.get(conversationId)?.lastAt || state?.fetchedAt || 0),
+            : Number(
+                recentActivity.get(conversationId)?.lastAt ||
+                  state?.fetchedAt ||
+                  0,
+              ),
       };
     })
     .sort((left, right) => right.rank - left.rank)
@@ -1380,7 +1400,9 @@ function restoreConversationHistoryCacheFromSession() {
       fetchedAt: Number(item.fetchedAt || 0),
       hydratedFromDisk: true,
       pagination: {
-        ...createMessagePaginationState(item.pagination?.loadedForUserId ?? null),
+        ...createMessagePaginationState(
+          item.pagination?.loadedForUserId ?? null,
+        ),
         nextBefore: item.pagination?.nextBefore || null,
         hasMore: Boolean(item.pagination?.hasMore),
         loadedForUserId: item.pagination?.loadedForUserId || null,
@@ -1422,7 +1444,7 @@ function clearScopedRuntimeCaches() {
 }
 
 function prefetchSettingsShell() {
-  const hrefs = ['/settings', '/public/settings.js?v=20260323-smooth3'];
+  const hrefs = ['/settings', '/public/settings.js?v=20260324-admin1'];
 
   hrefs.forEach((href) => {
     if (document.head.querySelector(`link[rel="prefetch"][href="${href}"]`)) {
@@ -1703,7 +1725,9 @@ function startReplyToSelectedMessage() {
 }
 
 function getMessageBubbleElement(messageId) {
-  return getById(`message-${messageId}`)?.querySelector('.message-bubble-shell');
+  return getById(`message-${messageId}`)?.querySelector(
+    '.message-bubble-shell',
+  );
 }
 
 function pulseMessageBubble(messageId, className = 'message-bubble-commit') {
@@ -1807,7 +1831,9 @@ function toggleSelectedMessageReaction(emoji) {
 }
 
 function getSidebarPinnedConversations() {
-  return getSortedUsers().filter((user) => isConversationPinned(user)).slice(0, 6);
+  return getSortedUsers()
+    .filter((user) => isConversationPinned(user))
+    .slice(0, 6);
 }
 
 function renderPinnedConversationsSidebar() {
@@ -1838,7 +1864,7 @@ function renderPinnedConversationsSidebar() {
           <img src="${userAvatar(user)}" alt="" class="h-10 w-10 rounded-2xl object-cover" />
           <div class="min-w-0 flex-1">
             <p class="truncate text-sm font-semibold text-slate-900">${escapeHtml(displayName(user))}</p>
-            <p class="mt-1 truncate text-xs text-slate-500">${escapeHtml((recentActivity.get(user.id)?.preview || 'Pinned chat'))}</p>
+            <p class="mt-1 truncate text-xs text-slate-500">${escapeHtml(recentActivity.get(user.id)?.preview || 'Pinned chat')}</p>
           </div>
         </button>
       `,
@@ -1923,11 +1949,13 @@ function getConversationSearchMatches() {
   }
   const messages = sortMessagesChronologically(conversationMessages.values());
   return messages.filter((message) => {
-    const preview = `${getResolvedMessageText(message)} ${message.fileName || ''}`.toLowerCase();
+    const preview =
+      `${getResolvedMessageText(message)} ${message.fileName || ''}`.toLowerCase();
     const isMedia =
       message.messageType === 'IMAGE' ||
       String(message.fileMimeType || '').startsWith('video/');
-    const isFile = message.messageType === 'DOCUMENT' || message.messageType === 'AUDIO';
+    const isFile =
+      message.messageType === 'DOCUMENT' || message.messageType === 'AUDIO';
 
     if (filter === 'media' && !isMedia) {
       return false;
@@ -1942,7 +1970,9 @@ function getConversationSearchMatches() {
   });
 }
 
-function renderConversationSearchResults(matches = getConversationSearchMatches()) {
+function renderConversationSearchResults(
+  matches = getConversationSearchMatches(),
+) {
   const results = getById('chat-search-results');
   const summary = getById('chat-search-summary');
   const query = getById('chat-search-input')?.value.trim().toLowerCase() || '';
@@ -1958,7 +1988,8 @@ function renderConversationSearchResults(matches = getConversationSearchMatches(
   }
 
   if (!query && filter === 'all') {
-    summary.textContent = 'Search loaded messages, jump by date, or filter media.';
+    summary.textContent =
+      'Search loaded messages, jump by date, or filter media.';
     results.innerHTML = '';
     return;
   }
@@ -2014,13 +2045,15 @@ function jumpToConversationDate() {
     return;
   }
 
-  const targetMessage = sortMessagesChronologically(conversationMessages.values()).find(
-    (message) => {
-      const created = new Date(message.createdAt);
-      return !Number.isNaN(created.getTime()) &&
-        created.toISOString().slice(0, 10) === dateValue;
-    },
-  );
+  const targetMessage = sortMessagesChronologically(
+    conversationMessages.values(),
+  ).find((message) => {
+    const created = new Date(message.createdAt);
+    return (
+      !Number.isNaN(created.getTime()) &&
+      created.toISOString().slice(0, 10) === dateValue
+    );
+  });
 
   if (targetMessage) {
     scrollToMessageInConversation(targetMessage.id);
@@ -2032,7 +2065,11 @@ function jumpToConversationDate() {
 }
 
 async function loadOlderMessagesForSearch() {
-  if (!selectedUser || !messagePagination.hasMore || messagePagination.loadingOlder) {
+  if (
+    !selectedUser ||
+    !messagePagination.hasMore ||
+    messagePagination.loadingOlder
+  ) {
     runConversationSearch();
     return;
   }
@@ -2533,7 +2570,9 @@ async function loadPublicConfig() {
   }
 
   configLoadPromise = (async () => {
-    const candidates = isHostedOrigin ? [window.location.origin] : getConfigCandidates();
+    const candidates = isHostedOrigin
+      ? [window.location.origin]
+      : getConfigCandidates();
 
     for (const candidate of candidates) {
       try {
@@ -2787,10 +2826,17 @@ function normalizeAttachmentUploadNextChunkIndex(value, fallbackValue = 0) {
 }
 
 function resolveAttachmentMimeType(file) {
-  const mimeType = String(file?.type || '').trim().toLowerCase();
-  const fileName = String(file?.name || '').trim().toLowerCase();
+  const mimeType = String(file?.type || '')
+    .trim()
+    .toLowerCase();
+  const fileName = String(file?.name || '')
+    .trim()
+    .toLowerCase();
 
-  if (MATROSKA_ATTACHMENT_MIME_TYPES.has(mimeType) || fileName.endsWith('.mkv')) {
+  if (
+    MATROSKA_ATTACHMENT_MIME_TYPES.has(mimeType) ||
+    fileName.endsWith('.mkv')
+  ) {
     return 'video/x-matroska';
   }
 
@@ -2803,7 +2849,10 @@ function uploadChunkWithProgress(sessionId, chunkIndex, chunkBlob, onProgress) {
     const formData = new FormData();
     formData.append('chunk', chunkBlob, `chunk-${chunkIndex}.part`);
     formData.append('chunkIndex', String(chunkIndex));
-    xhr.open('POST', `${API_URL}/chat/uploads/sessions/${encodeURIComponent(sessionId)}/chunks`);
+    xhr.open(
+      'POST',
+      `${API_URL}/chat/uploads/sessions/${encodeURIComponent(sessionId)}/chunks`,
+    );
     xhr.timeout = 0;
 
     if (token) {
@@ -2847,7 +2896,8 @@ function uploadChunkWithProgress(sessionId, chunkIndex, chunkBlob, onProgress) {
 
     xhr.onabort = () => {
       activeAttachmentUploadRequest = null;
-      const abortReason = xhr.__chatAbortReason === 'paused' ? 'paused' : 'cancelled';
+      const abortReason =
+        xhr.__chatAbortReason === 'paused' ? 'paused' : 'cancelled';
       reject(
         createUploadRequestError(
           abortReason === 'paused' ? 'Upload paused' : 'Upload cancelled',
@@ -2907,7 +2957,7 @@ function createAttachmentUploadTask(file, conversation) {
   const resolvedMimeType = resolveAttachmentMimeType(file);
 
   return {
-    id: `upload-task-${Date.now()}-${nextAttachmentUploadTaskId += 1}`,
+    id: `upload-task-${Date.now()}-${(nextAttachmentUploadTaskId += 1)}`,
     file,
     resolvedMimeType,
     conversation,
@@ -2918,6 +2968,8 @@ function createAttachmentUploadTask(file, conversation) {
     nextChunkIndex: 0,
     totalChunks: 0,
     chunkSize: 0,
+    uploadTransport: 'server-relay',
+    storageProvider: 'local',
     autoRetryCount: 0,
     directUploadFallbackAttempted: false,
     errorMessage: '',
@@ -2984,11 +3036,10 @@ async function compressImageFileIfNeeded(file) {
       return file;
     }
 
-    return new File(
-      [blob],
-      file.name.replace(/\.[^.]+$/, '.jpg'),
-      { type: 'image/jpeg', lastModified: file.lastModified || Date.now() },
-    );
+    return new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), {
+      type: 'image/jpeg',
+      lastModified: file.lastModified || Date.now(),
+    });
   } catch (error) {
     console.warn('Image compression skipped', error);
     return file;
@@ -3018,7 +3069,9 @@ function cleanupAttachmentUploadTask(task) {
 function getAttachmentQueueCounts() {
   return attachmentUploadTasks.reduce(
     (summary, task) => {
-      if (['queued', 'uploading', 'retrying', 'finalizing'].includes(task.status)) {
+      if (
+        ['queued', 'uploading', 'retrying', 'finalizing'].includes(task.status)
+      ) {
         summary.active += 1;
       }
       if (task.status === 'pending-send') {
@@ -3063,7 +3116,11 @@ function renderAttachmentQueueActionButtons(task) {
     `;
   }
 
-  if (task.status === 'queued' || task.status === 'uploading' || task.status === 'retrying') {
+  if (
+    task.status === 'queued' ||
+    task.status === 'uploading' ||
+    task.status === 'retrying'
+  ) {
     return `<button type="button" onclick="cancelAttachmentUpload('${taskId}')" class="${buttonClass}">Stop</button>`;
   }
 
@@ -3154,18 +3211,18 @@ function renderAttachmentUploadQueue() {
     pending > 0
       ? `${pending} ${pending === 1 ? 'file is' : 'files are'} ready to send`
       : active > 0
-      ? `Uploading ${active} ${active === 1 ? 'file' : 'files'}`
-      : failed > 0
-        ? `${failed} ${failed === 1 ? 'upload needs' : 'uploads need'} attention`
-        : `${completed} ${completed === 1 ? 'file is' : 'files are'} ready`;
+        ? `Uploading ${active} ${active === 1 ? 'file' : 'files'}`
+        : failed > 0
+          ? `${failed} ${failed === 1 ? 'upload needs' : 'uploads need'} attention`
+          : `${completed} ${completed === 1 ? 'file is' : 'files are'} ready`;
   queueNote.textContent =
     pending > 0
       ? 'Selected files stay here until you press Send. After that, they upload in the background.'
       : active > 0
-      ? 'Uploads keep running in the background, so you can still send normal messages.'
-      : failed > 0
-        ? 'Retry any failed upload without losing the rest of the queue.'
-        : 'Completed uploads can be cleared from this list anytime.';
+        ? 'Uploads keep running in the background, so you can still send normal messages.'
+        : failed > 0
+          ? 'Retry any failed upload without losing the rest of the queue.'
+          : 'Completed uploads can be cleared from this list anytime.';
 
   clearButton.classList.toggle('hidden', completed === 0);
   queueList.innerHTML = attachmentUploadTasks
@@ -3175,26 +3232,32 @@ function renderAttachmentUploadQueue() {
       const percentage = task.file?.size
         ? Math.max(
             0,
-            Math.min(100, Math.round((task.progressBytes / task.file.size) * 100)),
+            Math.min(
+              100,
+              Math.round((task.progressBytes / task.file.size) * 100),
+            ),
           )
         : 0;
       const progressText = isDone
         ? 'Ready in chat'
         : isFailed
           ? task.errorMessage || 'Upload paused'
-        : task.status === 'cancelled'
-          ? 'Upload stopped'
-        : task.status === 'paused'
-          ? 'Paused'
-        : task.status === 'pending-send'
-            ? 'Ready to send'
-          : task.status === 'queued'
-            ? 'Waiting in queue'
-            : task.status === 'retrying'
-              ? task.errorMessage || 'Retrying upload...'
-            : task.status === 'finalizing'
-              ? 'Finalizing file...'
-              : formatUploadProgress(task.progressBytes, task.file.size);
+          : task.status === 'cancelled'
+            ? 'Upload stopped'
+            : task.status === 'paused'
+              ? 'Paused'
+              : task.status === 'pending-send'
+                ? 'Ready to send'
+                : task.status === 'queued'
+                  ? 'Waiting in queue'
+                  : task.status === 'retrying'
+                    ? task.errorMessage || 'Retrying upload...'
+                    : task.status === 'finalizing'
+                      ? 'Finalizing file...'
+                      : formatUploadProgress(
+                          task.progressBytes,
+                          task.file.size,
+                        );
       const actionButton = renderAttachmentQueueActionButtons(task);
 
       return `
@@ -3262,6 +3325,8 @@ async function createAttachmentUploadSession(task) {
   task.totalChunks = data.totalChunks ?? 0;
   task.uploadedBytes = data.uploadedBytes ?? 0;
   task.progressBytes = task.uploadedBytes;
+  task.uploadTransport = data.uploadTransport || 'server-relay';
+  task.storageProvider = data.storageProvider || 'local';
   task.nextChunkIndex = normalizeAttachmentUploadNextChunkIndex(
     data.nextChunkIndex,
     0,
@@ -3294,6 +3359,10 @@ async function syncAttachmentUploadSession(task) {
   task.totalChunks = data.totalChunks ?? task.totalChunks ?? 0;
   task.uploadedBytes = data.uploadedBytes ?? 0;
   task.progressBytes = task.uploadedBytes;
+  task.uploadTransport =
+    data.uploadTransport || task.uploadTransport || 'server-relay';
+  task.storageProvider =
+    data.storageProvider || task.storageProvider || 'local';
   task.nextChunkIndex = normalizeAttachmentUploadNextChunkIndex(
     data.nextChunkIndex,
     0,
@@ -3336,6 +3405,141 @@ async function cancelAttachmentUploadSession(task) {
     },
   );
   await readJsonResponse(res, {}, 'Failed to cancel the upload session.');
+}
+
+async function prepareAttachmentUploadPart(task, chunkIndex) {
+  const res = await api(
+    `/chat/uploads/sessions/${encodeURIComponent(task.sessionId)}/parts`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chunkIndex }),
+    },
+  );
+  const data = await readJsonResponse(
+    res,
+    {},
+    'Failed to prepare the file upload part.',
+  );
+
+  if (!res.ok) {
+    throw createUploadRequestError(
+      data.message || 'Failed to prepare the file upload part',
+      res.status,
+    );
+  }
+
+  return data;
+}
+
+async function completeAttachmentUploadPart(task, chunkIndex, etag, size) {
+  const res = await api(
+    `/chat/uploads/sessions/${encodeURIComponent(task.sessionId)}/parts/${encodeURIComponent(String(chunkIndex))}/complete`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ etag, size }),
+    },
+  );
+  const data = await readJsonResponse(
+    res,
+    {},
+    'Failed to confirm the uploaded file part.',
+  );
+
+  if (!res.ok) {
+    throw createUploadRequestError(
+      data.message || 'Failed to confirm the uploaded file part',
+      res.status,
+    );
+  }
+
+  return data;
+}
+
+function uploadChunkToSignedUrlWithProgress(uploadUrl, chunkBlob, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', uploadUrl);
+    xhr.timeout = 0;
+
+    activeAttachmentUploadRequest = {
+      taskId: activeAttachmentUploadTaskId,
+      xhr,
+    };
+
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) {
+        return;
+      }
+
+      onProgress?.(event.loaded, event.total);
+    };
+
+    xhr.onerror = () => {
+      activeAttachmentUploadRequest = null;
+      reject(
+        createUploadRequestError(
+          'Network error while uploading file chunk',
+          xhr.status,
+          'Network error while uploading file chunk',
+          'NETWORK_ERROR',
+        ),
+      );
+    };
+
+    xhr.ontimeout = () => {
+      activeAttachmentUploadRequest = null;
+      reject(
+        createUploadRequestError(
+          'Upload timed out while sending the file chunk',
+          0,
+          'Upload timed out while sending the file chunk',
+          'UPLOAD_TIMEOUT',
+        ),
+      );
+    };
+
+    xhr.onabort = () => {
+      activeAttachmentUploadRequest = null;
+      const abortReason =
+        xhr.__chatAbortReason === 'paused' ? 'paused' : 'cancelled';
+      reject(
+        createUploadRequestError(
+          abortReason === 'paused' ? 'Upload paused' : 'Upload cancelled',
+          0,
+          abortReason === 'paused' ? 'Upload paused' : 'Upload cancelled',
+          abortReason === 'paused' ? 'UPLOAD_PAUSED' : 'UPLOAD_CANCELLED',
+        ),
+      );
+    };
+
+    xhr.onload = () => {
+      activeAttachmentUploadRequest = null;
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(
+          createUploadRequestError('Failed to upload file chunk', xhr.status),
+        );
+        return;
+      }
+
+      const etag =
+        xhr.getResponseHeader('etag') || xhr.getResponseHeader('ETag') || '';
+      if (!etag) {
+        reject(
+          createUploadRequestError(
+            'Upload succeeded but the storage service did not return an ETag. Check your R2 CORS settings.',
+            xhr.status,
+          ),
+        );
+        return;
+      }
+
+      resolve({ etag });
+    };
+
+    xhr.send(chunkBlob);
+  });
 }
 
 function shouldAttemptDirectAttachmentUploadFallback(task, error) {
@@ -3473,15 +3677,43 @@ async function uploadAttachmentTask(task) {
     task.status = 'uploading';
     renderAttachmentUploadQueue();
 
-    const data = await uploadChunkWithProgress(
-      task.sessionId,
-      nextChunkIndex,
-      chunkBlob,
-      (loaded) => {
-        task.progressBytes = Math.min(task.file.size, confirmedBytes + loaded);
-        renderAttachmentUploadQueue();
-      },
-    );
+    let data;
+    if (task.uploadTransport === 'presigned-put') {
+      const uploadPart = await prepareAttachmentUploadPart(
+        task,
+        nextChunkIndex,
+      );
+      const uploadedPart = await uploadChunkToSignedUrlWithProgress(
+        uploadPart.uploadUrl,
+        chunkBlob,
+        (loaded) => {
+          task.progressBytes = Math.min(
+            task.file.size,
+            confirmedBytes + loaded,
+          );
+          renderAttachmentUploadQueue();
+        },
+      );
+      data = await completeAttachmentUploadPart(
+        task,
+        nextChunkIndex,
+        uploadedPart.etag,
+        chunkBlob.size,
+      );
+    } else {
+      data = await uploadChunkWithProgress(
+        task.sessionId,
+        nextChunkIndex,
+        chunkBlob,
+        (loaded) => {
+          task.progressBytes = Math.min(
+            task.file.size,
+            confirmedBytes + loaded,
+          );
+          renderAttachmentUploadQueue();
+        },
+      );
+    }
 
     task.uploadedBytes = data.uploadedBytes ?? end;
     task.progressBytes = task.uploadedBytes;
@@ -3546,14 +3778,18 @@ async function processAttachmentUploadQueue() {
     if (
       nextTask.pauseRequested ||
       error?.code === 'UPLOAD_PAUSED' ||
-      String(error?.message || '').toLowerCase().includes('paused')
+      String(error?.message || '')
+        .toLowerCase()
+        .includes('paused')
     ) {
       nextTask.status = 'paused';
       nextTask.errorMessage = 'Upload paused';
       nextTask.pauseRequested = false;
     } else if (
       error?.code === 'UPLOAD_CANCELLED' ||
-      String(error?.message || '').toLowerCase().includes('cancel')
+      String(error?.message || '')
+        .toLowerCase()
+        .includes('cancel')
     ) {
       nextTask.status = 'cancelled';
       nextTask.errorMessage = 'Upload stopped';
@@ -3578,7 +3814,10 @@ async function processAttachmentUploadQueue() {
         try {
           await syncAttachmentUploadSession(nextTask);
         } catch (syncError) {
-          console.error('Failed to sync upload after recoverable error', syncError);
+          console.error(
+            'Failed to sync upload after recoverable error',
+            syncError,
+          );
         }
         scheduleAttachmentUploadRetry(nextTask);
       } else {
@@ -3597,7 +3836,9 @@ async function processAttachmentUploadQueue() {
   }
 }
 
-function queuePendingAttachmentUploads(conversationKey = getSelectedConversationTaskKey()) {
+function queuePendingAttachmentUploads(
+  conversationKey = getSelectedConversationTaskKey(),
+) {
   let queuedCount = 0;
 
   attachmentUploadTasks.forEach((task) => {
@@ -3619,7 +3860,9 @@ function queuePendingAttachmentUploads(conversationKey = getSelectedConversation
 }
 
 async function startAttachmentUploads(files, conversation) {
-  const acceptedFiles = Array.from(files || []).filter((file) => file && file.size);
+  const acceptedFiles = Array.from(files || []).filter(
+    (file) => file && file.size,
+  );
   if (!acceptedFiles.length) {
     return;
   }
@@ -3895,10 +4138,10 @@ function restoreChatShellCache() {
     return false;
   }
 
-  users = payload.users
-    .map((user) => normalizeUser(user))
-    .filter(Boolean);
-  groupInvites = Array.isArray(payload.groupInvites) ? payload.groupInvites : [];
+  users = payload.users.map((user) => normalizeUser(user)).filter(Boolean);
+  groupInvites = Array.isArray(payload.groupInvites)
+    ? payload.groupInvites
+    : [];
   recentActivity = hydrateRecentActivityEntries(payload.recentActivity);
   syncSelectedUser();
   updateChatCount();
@@ -3971,7 +4214,10 @@ function scheduleUsersRefreshInBackground(options = {}) {
 }
 
 function handleUserSearchInput() {
-  const query = document.getElementById('user-search')?.value.trim().toLowerCase();
+  const query = document
+    .getElementById('user-search')
+    ?.value.trim()
+    .toLowerCase();
   if (userSearchDebounceTimer) {
     window.clearTimeout(userSearchDebounceTimer);
     userSearchDebounceTimer = 0;
@@ -4427,7 +4673,10 @@ function isBlockedDirectUser(user, blockedIds = getBlockedUserIdSet()) {
   return Boolean(user && !isGroupConversation(user) && blockedIds.has(user.id));
 }
 
-function filterBlockedDirectUsers(collection, blockedIds = getBlockedUserIdSet()) {
+function filterBlockedDirectUsers(
+  collection,
+  blockedIds = getBlockedUserIdSet(),
+) {
   if (!Array.isArray(collection) || !collection.length || !blockedIds.size) {
     return Array.isArray(collection) ? collection : [];
   }
@@ -4444,7 +4693,10 @@ function applyBlockedUserFilters(options = {}) {
 
   const nextUsers = filterBlockedDirectUsers(users, blockedIds);
   const nextDirectory = filterBlockedDirectUsers(peopleDirectory, blockedIds);
-  const nextSearchResults = filterBlockedDirectUsers(userSearchResults, blockedIds);
+  const nextSearchResults = filterBlockedDirectUsers(
+    userSearchResults,
+    blockedIds,
+  );
   const usersChanged = nextUsers.length !== users.length;
   const directoryChanged = nextDirectory.length !== peopleDirectory.length;
   const searchChanged = nextSearchResults.length !== userSearchResults.length;
@@ -5014,7 +5266,9 @@ function renderSharedMediaBrowser() {
         item.fileName || `Shared ${getSharedMediaKindLabel(item.kind)}`,
       );
       const dateLabel = escapeHtml(
-        formatShortDate(item.createdAt) || formatRelativeTime(item.createdAt) || '',
+        formatShortDate(item.createdAt) ||
+          formatRelativeTime(item.createdAt) ||
+          '',
       );
 
       if (item.kind === 'video') {
@@ -5216,7 +5470,9 @@ async function loadSharedMediaForSelectedConversation() {
   }
 
   const requestedConversation = selectedUser;
-  const requestedConversationKey = getConversationCacheKey(requestedConversation);
+  const requestedConversationKey = getConversationCacheKey(
+    requestedConversation,
+  );
   sharedMediaItems = [];
   sharedMediaLoading = true;
   sharedMediaErrorMessage = '';
@@ -5227,7 +5483,11 @@ async function loadSharedMediaForSelectedConversation() {
       ? `groupId=${encodeURIComponent(requestedConversation.id)}`
       : `userId=${encodeURIComponent(requestedConversation.id)}`;
     const res = await api(`/chat/media?${query}`);
-    const data = await readJsonResponse(res, [], 'Failed to load shared media.');
+    const data = await readJsonResponse(
+      res,
+      [],
+      'Failed to load shared media.',
+    );
 
     if (!res.ok) {
       throw new Error(data.message || 'Failed to load shared media');
@@ -5996,10 +6256,7 @@ async function startApp() {
     : true;
 
   if (!users.length || !hasRequestedConversation) {
-    await Promise.all([
-      ensureEncryptionKeys(true),
-      loadUsers(),
-    ]);
+    await Promise.all([ensureEncryptionKeys(true), loadUsers()]);
   } else {
     await ensureEncryptionKeys(true);
     scheduleUsersRefreshInBackground({
@@ -6386,25 +6643,25 @@ async function loadUsers() {
     const groupUsers = recentUsers
       .filter((user) => (user.chatType || 'direct') === 'group')
       .map((group) => {
-      const key = `group:${group.id}`;
-      const recent = recentByKey.get(key);
-      return normalizeUser(
-        {
-          ...group,
-          chatType: 'group',
-          displayName: group.name,
-          nickname: null,
-          email: '',
-          chatTheme: null,
-          lastMessagePreview:
-            recent?.lastMessagePreview ?? group.lastMessagePreview ?? null,
-          lastMessageAt: recent?.lastMessageAt ?? group.lastMessageAt ?? null,
-          lastMessageType:
-            recent?.lastMessageType ?? group.lastMessageType ?? null,
-        },
-        existingByKey.get(key),
-      );
-    });
+        const key = `group:${group.id}`;
+        const recent = recentByKey.get(key);
+        return normalizeUser(
+          {
+            ...group,
+            chatType: 'group',
+            displayName: group.name,
+            nickname: null,
+            email: '',
+            chatTheme: null,
+            lastMessagePreview:
+              recent?.lastMessagePreview ?? group.lastMessagePreview ?? null,
+            lastMessageAt: recent?.lastMessageAt ?? group.lastMessageAt ?? null,
+            lastMessageType:
+              recent?.lastMessageType ?? group.lastMessageType ?? null,
+          },
+          existingByKey.get(key),
+        );
+      });
 
     users = filterBlockedDirectUsers([...directUsers, ...groupUsers]);
 
@@ -6527,7 +6784,10 @@ function findKnownDirectUserById(userId) {
 }
 
 function getSearchUserPool() {
-  const query = document.getElementById('user-search')?.value.trim().toLowerCase();
+  const query = document
+    .getElementById('user-search')
+    ?.value.trim()
+    .toLowerCase();
   const matchingSearchResults =
     query && userSearchResultsQuery === query ? userSearchResults : [];
   const directUsers = matchingSearchResults.length
@@ -6677,7 +6937,9 @@ function getUserRenderSignature(user) {
     unread: 0,
   };
   const draft = getConversationDraft(user);
-  const missedCalls = Number(missedCallCountsByConversation.get(getConversationCacheKey(user)) || 0);
+  const missedCalls = Number(
+    missedCallCountsByConversation.get(getConversationCacheKey(user)) || 0,
+  );
   return [
     selectedUser?.id === user.id ? 1 : 0,
     !isGroupConversation(user) && onlineUserIds.has(user.id) ? 1 : 0,
@@ -6701,7 +6963,9 @@ function getUserListPreviewMeta(user) {
   const draft = getConversationDraft(user);
   return {
     state,
-    previewText: draft ? `Draft: ${draft}` : state.preview || 'No recent messages yet',
+    previewText: draft
+      ? `Draft: ${draft}`
+      : state.preview || 'No recent messages yet',
     previewToneClass: draft
       ? 'font-semibold text-amber-600'
       : state.unread
@@ -6710,10 +6974,7 @@ function getUserListPreviewMeta(user) {
   };
 }
 
-function scheduleUserListDraftPreviewSync(
-  user = selectedUser,
-  options = {},
-) {
+function scheduleUserListDraftPreviewSync(user = selectedUser, options = {}) {
   if (pendingUserListPreviewSyncTimer) {
     window.clearTimeout(pendingUserListPreviewSyncTimer);
     pendingUserListPreviewSyncTimer = 0;
@@ -6809,7 +7070,9 @@ function syncUserListDraftPreview(user = selectedUser) {
   }
 
   const key = userListKey(user);
-  const item = Array.from(list.children).find((child) => child.dataset.userKey === key);
+  const item = Array.from(list.children).find(
+    (child) => child.dataset.userKey === key,
+  );
   if (!item) {
     return;
   }
@@ -6824,8 +7087,7 @@ function syncUserListDraftPreview(user = selectedUser) {
     preview.textContent = previewText;
   }
 
-  const nextPreviewClassName =
-    `user-list-preview mt-0.5 truncate text-[11px] leading-4 ${previewToneClass}`;
+  const nextPreviewClassName = `user-list-preview mt-0.5 truncate text-[11px] leading-4 ${previewToneClass}`;
   if (preview.className !== nextPreviewClassName) {
     preview.className = nextPreviewClassName;
   }
@@ -6875,7 +7137,9 @@ function updateArchivedChatsToggle() {
     return;
   }
 
-  const archivedCount = users.filter((user) => isConversationArchived(user)).length;
+  const archivedCount = users.filter((user) =>
+    isConversationArchived(user),
+  ).length;
   button.classList.toggle('hidden', archivedCount === 0 && !showArchivedChats);
   button.textContent = showArchivedChats
     ? 'Back to Active Chats'
@@ -6890,7 +7154,9 @@ function toggleArchivedChatsView() {
 function scrollToMessageInConversation(messageId) {
   const element = document.getElementById(`message-${messageId}`);
   if (!element) {
-    alert('That starred message is not loaded yet. Scroll up to load older messages.');
+    alert(
+      'That starred message is not loaded yet. Scroll up to load older messages.',
+    );
     return;
   }
 
@@ -7047,11 +7313,15 @@ function connectSocket() {
     const isIncomingPending =
       payload.status === 'PENDING' && payload.receiverId === currentUser.id;
     const otherUserId =
-      payload.senderId === currentUser.id ? payload.receiverId : payload.senderId;
+      payload.senderId === currentUser.id
+        ? payload.receiverId
+        : payload.senderId;
 
     if (isIncomingPending && otherUserId) {
       let otherUser =
-        users.find((user) => !isGroupConversation(user) && user.id === otherUserId) ||
+        users.find(
+          (user) => !isGroupConversation(user) && user.id === otherUserId,
+        ) ||
         peopleDirectory.find((user) => user.id === otherUserId) ||
         null;
 
@@ -7080,7 +7350,8 @@ function connectSocket() {
     if (
       selectedUser &&
       !isGroupConversation(selectedUser) &&
-      (payload.senderId === selectedUser.id || payload.receiverId === selectedUser.id)
+      (payload.senderId === selectedUser.id ||
+        payload.receiverId === selectedUser.id)
     ) {
       await loadChatPermission();
     }
@@ -7282,11 +7553,16 @@ async function selectUser(userId) {
   if (!selectedUser) return;
 
   const requestedConversation = selectedUser;
-  const requestedConversationKey = getConversationCacheKey(requestedConversation);
+  const requestedConversationKey = getConversationCacheKey(
+    requestedConversation,
+  );
 
   const conversationState = activateConversationHistory(selectedUser);
 
-  if (!detachedSelectedUser && !users.some((user) => user.id === selectedUser.id)) {
+  if (
+    !detachedSelectedUser &&
+    !users.some((user) => user.id === selectedUser.id)
+  ) {
     users = [selectedUser, ...users];
   }
 
@@ -7317,9 +7593,18 @@ async function selectUser(userId) {
   closeChatContactPanel();
   closeChatActionsMenu();
   closeComposerActionsMenu();
-  triggerMotionClass(document.getElementById('chat-header'), 'chat-chrome-enter');
-  triggerMotionClass(document.getElementById('input-area'), 'chat-chrome-enter');
-  triggerMotionClass(document.getElementById('messages-list'), 'chat-chrome-enter');
+  triggerMotionClass(
+    document.getElementById('chat-header'),
+    'chat-chrome-enter',
+  );
+  triggerMotionClass(
+    document.getElementById('input-area'),
+    'chat-chrome-enter',
+  );
+  triggerMotionClass(
+    document.getElementById('messages-list'),
+    'chat-chrome-enter',
+  );
 
   updateSelectedUserHeader();
   applyChatTheme();
@@ -7357,14 +7642,18 @@ async function selectUser(userId) {
       retryConversationDecryption();
     }
   } catch (error) {
-    if (isConversationStillActive(requestedConversation, requestedConversationKey)) {
+    if (
+      isConversationStillActive(requestedConversation, requestedConversationKey)
+    ) {
       setMessageLoadingState(false);
       alert(error.message || 'Failed to load this chat');
     }
     return;
   }
 
-  if (!isConversationStillActive(requestedConversation, requestedConversationKey)) {
+  if (
+    !isConversationStillActive(requestedConversation, requestedConversationKey)
+  ) {
     return;
   }
 
@@ -7373,11 +7662,7 @@ async function selectUser(userId) {
       ? `/chat?group=${selectedUser.id}`
       : `/chat?chat=${selectedUser.id}`;
     sessionStorage.setItem(LAST_CHAT_ROUTE_KEY, nextRoute);
-    history.replaceState(
-      null,
-      '',
-      nextRoute,
-    );
+    history.replaceState(null, '', nextRoute);
   }
 }
 
@@ -7387,8 +7672,13 @@ async function loadMessageChunk(before = null, prepend = false, options = {}) {
   }
 
   const requestedConversation = selectedUser;
-  const requestedConversationKey = getConversationCacheKey(requestedConversation);
-  if (options.background && requestedConversationKey === activeConversationCacheKey) {
+  const requestedConversationKey = getConversationCacheKey(
+    requestedConversation,
+  );
+  if (
+    options.background &&
+    requestedConversationKey === activeConversationCacheKey
+  ) {
     rememberActiveConversationScroll();
   }
 
@@ -7421,7 +7711,12 @@ async function loadMessageChunk(before = null, prepend = false, options = {}) {
     const messages = (data.messages || []).map((message) =>
       createRenderableMessage(message),
     );
-    if (!isConversationStillActive(requestedConversation, requestedConversationKey)) {
+    if (
+      !isConversationStillActive(
+        requestedConversation,
+        requestedConversationKey,
+      )
+    ) {
       return;
     }
 
@@ -7478,7 +7773,9 @@ async function loadMessageChunk(before = null, prepend = false, options = {}) {
 
       state.conversationMessages.clear();
       state.renderedMessageIds.clear();
-      for (const message of sortMessagesChronologically(mergedMessages.values())) {
+      for (const message of sortMessagesChronologically(
+        mergedMessages.values(),
+      )) {
         state.conversationMessages.set(message.id, message);
       }
       state.initialized = true;
@@ -7486,7 +7783,8 @@ async function loadMessageChunk(before = null, prepend = false, options = {}) {
         state.scrollTop = null;
       }
       renderActiveConversationFromCache({
-        restoreScroll: options.restoreScroll !== false && Boolean(options.background),
+        restoreScroll:
+          options.restoreScroll !== false && Boolean(options.background),
       });
     } else {
       appendMessages(messages, { stickToBottom: true });
@@ -7504,7 +7802,9 @@ async function loadMessageChunk(before = null, prepend = false, options = {}) {
       await markSelectedConversationRead();
     }
   } finally {
-    if (isConversationStillActive(requestedConversation, requestedConversationKey)) {
+    if (
+      isConversationStillActive(requestedConversation, requestedConversationKey)
+    ) {
       setMessageLoadingState(false);
     }
   }
@@ -7597,7 +7897,9 @@ async function loadChatPermission(user = selectedUser) {
     return nextPermission;
   }
 
-  const res = await api(`/chat/permission?userId=${encodeURIComponent(user.id)}`);
+  const res = await api(
+    `/chat/permission?userId=${encodeURIComponent(user.id)}`,
+  );
   const data = await readJsonResponse(
     res,
     {},
@@ -7678,8 +7980,16 @@ function applyRequestActionProgressState(actionBtn, rejectBtn) {
 }
 
 function pulseRequestActionSurface() {
-  triggerMotionClass(getById('request-action-btn'), 'request-action-success', 460);
-  triggerMotionClass(getById('request-reject-btn'), 'request-action-success', 460);
+  triggerMotionClass(
+    getById('request-action-btn'),
+    'request-action-success',
+    460,
+  );
+  triggerMotionClass(
+    getById('request-reject-btn'),
+    'request-action-success',
+    460,
+  );
   triggerMotionClass(getById('chat-header'), 'chat-chrome-enter', 320);
 }
 
@@ -7779,7 +8089,10 @@ function updateChatAccessUI() {
   panelManageGroupBtn?.classList.toggle('hidden', !isGroup);
   renameBtn?.classList.toggle('hidden', isGroup);
   themeBtn?.classList.toggle('hidden', isGroup);
-  clearThemeBtn?.classList.toggle('hidden', isGroup || !selectedUser?.chatTheme);
+  clearThemeBtn?.classList.toggle(
+    'hidden',
+    isGroup || !selectedUser?.chatTheme,
+  );
   voiceCallBtn?.classList.toggle('hidden', !selectedUser || isGroup);
   videoCallBtn?.classList.toggle('hidden', !selectedUser || isGroup);
   headerShortcuts?.classList.toggle('hidden', !selectedUser || isGroup);
@@ -8224,7 +8537,10 @@ async function sendMessage() {
     return;
   }
 
-  if (shouldTrackDraftSubmission && shouldSkipDuplicateDraft(draftFingerprint)) {
+  if (
+    shouldTrackDraftSubmission &&
+    shouldSkipDuplicateDraft(draftFingerprint)
+  ) {
     return;
   }
 
@@ -8295,7 +8611,9 @@ async function sendMessage() {
       isTyping: false,
     });
 
-    const queuedAttachments = queuePendingAttachmentUploads(selectedConversationKey);
+    const queuedAttachments = queuePendingAttachmentUploads(
+      selectedConversationKey,
+    );
     if (queuedAttachments > 0) {
       void processAttachmentUploadQueue();
     }
@@ -8460,7 +8778,9 @@ async function rejectIncomingRequest() {
     if (!res.ok) {
       alert(
         data.message ||
-          (isOutgoing ? 'Failed to withdraw request' : 'Failed to reject request'),
+          (isOutgoing
+            ? 'Failed to withdraw request'
+            : 'Failed to reject request'),
       );
       return;
     }
@@ -9005,7 +9325,10 @@ async function handleAttachmentSelected() {
 
   closeComposerActionsMenu();
   markComposerDraftDirty();
-  await startAttachmentUploads(files, buildUploadConversationTarget(selectedUser));
+  await startAttachmentUploads(
+    files,
+    buildUploadConversationTarget(selectedUser),
+  );
 }
 
 function updateChatDropzoneState(active) {
@@ -9024,7 +9347,10 @@ async function handleAttachmentDrop(files) {
   }
 
   markComposerDraftDirty();
-  await startAttachmentUploads(files, buildUploadConversationTarget(selectedUser));
+  await startAttachmentUploads(
+    files,
+    buildUploadConversationTarget(selectedUser),
+  );
 }
 
 async function uploadMyAvatar(inputId = 'desktop-avatar-input') {
@@ -9437,7 +9763,9 @@ function updateActiveCallFlipButton() {
     activeCall.callType === 'video' && activeCall.videoDeviceIds.length > 1;
   button.classList.toggle('hidden', !shouldShow);
   button.disabled = !shouldShow || activeCall.switchingCamera;
-  button.innerText = activeCall.switchingCamera ? 'Switching...' : 'Flip Camera';
+  button.innerText = activeCall.switchingCamera
+    ? 'Switching...'
+    : 'Flip Camera';
 }
 
 async function refreshActiveCallVideoDevices() {
@@ -9670,9 +9998,7 @@ async function flipActiveCamera() {
       ? availableDeviceIds.indexOf(currentDeviceId)
       : -1;
     const nextIndex =
-      currentIndex >= 0
-        ? (currentIndex + 1) % availableDeviceIds.length
-        : 0;
+      currentIndex >= 0 ? (currentIndex + 1) % availableDeviceIds.length : 0;
     targetDeviceId = availableDeviceIds[nextIndex] || null;
   }
 
@@ -10031,6 +10357,9 @@ function createMessageElement(message, options = {}) {
         `;
   const replySnippet = renderMessageReplySnippetHtml(message, metaTone);
   const reactionChip = renderMessageReactionHtml(message);
+  const messageFileUrl = message.fileUrl
+    ? escapeHtml(getFileUrl(message.fileUrl))
+    : '';
 
   if (message.deletedForEveryoneAt) {
     div.innerHTML = `
@@ -10044,12 +10373,12 @@ function createMessageElement(message, options = {}) {
     div.innerHTML = `
             <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,40rem)] overflow-hidden p-2">
               ${replySnippet}
-              <a href="${API_URL}${message.fileUrl}" target="_blank" rel="noopener noreferrer">
-                <img src="${API_URL}${message.fileUrl}" loading="lazy" decoding="async" class="mb-2 max-h-80 w-auto rounded-2xl border border-black/5">
+              <a href="${messageFileUrl}" target="_blank" rel="noopener noreferrer">
+                <img src="${messageFileUrl}" loading="lazy" decoding="async" class="mb-2 max-h-80 w-auto rounded-2xl border border-black/5">
               </a>
               <div class="flex flex-wrap items-center gap-3 text-xs ${metaTone}">
-                <a href="${API_URL}${message.fileUrl}" target="_blank" rel="noopener noreferrer" class="font-semibold underline">Open image</a>
-                <button class="font-semibold underline" onclick="downloadFile('${API_URL}${message.fileUrl}', '${escapeHtml(message.fileName || 'image')}')">Download</button>
+                <a href="${messageFileUrl}" target="_blank" rel="noopener noreferrer" class="font-semibold underline">Open image</a>
+                <button class="font-semibold underline" onclick="downloadFile('${messageFileUrl}', '${escapeHtml(message.fileName || 'image')}')">Download</button>
               </div>
               ${footer}
               ${reactionChip}
@@ -10061,7 +10390,7 @@ function createMessageElement(message, options = {}) {
               <div class="space-y-3">
                 ${replySnippet}
                 <p class="text-sm font-semibold">${escapeHtml(message.fileName || 'Voice message')}</p>
-                <audio controls src="${API_URL}${message.fileUrl}" class="w-full max-w-md"></audio>
+                <audio controls src="${messageFileUrl}" class="w-full max-w-md"></audio>
               </div>
               ${footer}
               ${reactionChip}
@@ -10076,12 +10405,12 @@ function createMessageElement(message, options = {}) {
               <div class="space-y-3">
                 ${replySnippet}
                 <video controls playsinline preload="metadata" class="max-h-80 w-full rounded-2xl border border-black/5 bg-black">
-                  <source src="${API_URL}${message.fileUrl}" type="${escapeHtml(message.fileMimeType || 'video/mp4')}">
+                  <source src="${messageFileUrl}" type="${escapeHtml(message.fileMimeType || 'video/mp4')}">
                   Your browser does not support the video tag.
                 </video>
                 <div class="flex flex-wrap items-center gap-3 text-xs ${metaTone}">
-                  <a href="${API_URL}${message.fileUrl}" target="_blank" rel="noopener noreferrer" class="font-semibold underline">Open video</a>
-                  <button class="font-semibold underline" onclick="downloadFile('${API_URL}${message.fileUrl}', '${escapeHtml(message.fileName || 'video')}')">Download</button>
+                  <a href="${messageFileUrl}" target="_blank" rel="noopener noreferrer" class="font-semibold underline">Open video</a>
+                  <button class="font-semibold underline" onclick="downloadFile('${messageFileUrl}', '${escapeHtml(message.fileName || 'video')}')">Download</button>
                 </div>
               </div>
               ${footer}
@@ -10096,8 +10425,8 @@ function createMessageElement(message, options = {}) {
                 <p class="text-sm font-semibold">${escapeHtml(message.fileName || 'Document')}</p>
                 <p class="text-xs ${metaTone}">${formatBytes(message.fileSize)}</p>
                 <div class="flex flex-wrap items-center gap-3 text-xs ${metaTone}">
-                  <a href="${API_URL}${message.fileUrl}" target="_blank" rel="noopener noreferrer" class="font-semibold underline">Open file</a>
-                  <button class="font-semibold underline" onclick="downloadFile('${API_URL}${message.fileUrl}', '${escapeHtml(message.fileName || 'file')}')">Download</button>
+                  <a href="${messageFileUrl}" target="_blank" rel="noopener noreferrer" class="font-semibold underline">Open file</a>
+                  <button class="font-semibold underline" onclick="downloadFile('${messageFileUrl}', '${escapeHtml(message.fileName || 'file')}')">Download</button>
                 </div>
               </div>
               ${footer}
@@ -10253,9 +10582,11 @@ function appendMessages(messages, options = {}) {
 
     renderedMessageIds.add(message.id);
     conversationMessages.set(message.id, message);
-    fragment.appendChild(createMessageElement(message, {
-      animate: options.animate !== false,
-    }));
+    fragment.appendChild(
+      createMessageElement(message, {
+        animate: options.animate !== false,
+      }),
+    );
     appendedCount += 1;
   }
 
@@ -10835,8 +11166,14 @@ window.addEventListener('drop', (event) => {
 
 if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', scheduleViewportHeight);
-  window.visualViewport.addEventListener('resize', stabilizeMobileKeyboardViewport);
-  window.visualViewport.addEventListener('scroll', stabilizeMobileKeyboardViewport);
+  window.visualViewport.addEventListener(
+    'resize',
+    stabilizeMobileKeyboardViewport,
+  );
+  window.visualViewport.addEventListener(
+    'scroll',
+    stabilizeMobileKeyboardViewport,
+  );
 }
 
 getById('message-container')?.addEventListener(

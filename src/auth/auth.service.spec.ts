@@ -1,5 +1,6 @@
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
+import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -69,14 +70,19 @@ describe('AuthService', () => {
     expect(service).toBeDefined();
   });
 
-  it('registers and immediately returns an auth token', async () => {
+  it('registers new users in a pending approval state', async () => {
     prismaService.user.findFirst.mockResolvedValue(null);
     prismaService.user.create.mockResolvedValue({
       id: 'user-1',
       email: 'user@example.com',
       name: 'User',
       avatar: null,
+      role: 'USER',
       emailVerified: true,
+      isApproved: false,
+      approvedAt: null,
+      isBanned: false,
+      bannedAt: null,
       pendingEmail: null,
       backupEnabled: true,
       backupImages: true,
@@ -92,9 +98,66 @@ describe('AuthService', () => {
       password: 'secret123',
     });
 
+    expect(result.token).toBeUndefined();
+    expect(result.approvalRequired).toBe(true);
+    expect(result.user.isApproved).toBe(false);
+    expect(jwtService.sign).not.toHaveBeenCalled();
+  });
+
+  it('logs in approved users and returns an auth token', async () => {
+    prismaService.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      email: 'user@example.com',
+      password: await bcrypt.hash('secret123', 10),
+      name: 'User',
+      avatar: null,
+      role: 'USER',
+      emailVerified: true,
+      isApproved: true,
+      approvedAt: new Date('2026-03-24T00:00:00.000Z'),
+      isBanned: false,
+      bannedAt: null,
+      pendingEmail: null,
+      backupEnabled: true,
+      backupImages: true,
+      backupVideos: true,
+      backupFiles: true,
+      darkMode: false,
+      tokenVersion: 0,
+    });
+
+    const result = await service.login('user@example.com', 'secret123');
+
     expect(result.token).toBe('signed-token');
-    expect(result.user.emailVerified).toBe(true);
+    expect(result.user.role).toBe('USER');
     expect(jwtService.sign).toHaveBeenCalled();
+  });
+
+  it('blocks login while a user is waiting for admin approval', async () => {
+    prismaService.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      email: 'user@example.com',
+      password: await bcrypt.hash('secret123', 10),
+      name: 'User',
+      avatar: null,
+      role: 'USER',
+      emailVerified: true,
+      isApproved: false,
+      approvedAt: null,
+      isBanned: false,
+      bannedAt: null,
+      pendingEmail: null,
+      backupEnabled: true,
+      backupImages: true,
+      backupVideos: true,
+      backupFiles: true,
+      darkMode: false,
+      tokenVersion: 0,
+    });
+
+    await expect(
+      service.login('user@example.com', 'secret123'),
+    ).rejects.toThrow('waiting for admin approval');
   });
 
   it('rejects password reset when email recovery is disabled', async () => {

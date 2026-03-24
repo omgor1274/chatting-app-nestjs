@@ -237,4 +237,108 @@ describe('UserService', () => {
       }),
     );
   });
+
+  it('builds an admin overview with user status counts', async () => {
+    prisma.user.findMany.mockResolvedValue([
+      {
+        id: 'admin-1',
+        email: 'admin@example.com',
+        name: 'Admin',
+        avatar: null,
+        role: 'ADMIN',
+        emailVerified: true,
+        isApproved: true,
+        approvedAt: new Date('2026-03-20T00:00:00.000Z'),
+        isBanned: false,
+        bannedAt: null,
+        createdAt: new Date('2026-03-20T00:00:00.000Z'),
+        updatedAt: new Date('2026-03-20T00:00:00.000Z'),
+      },
+      {
+        id: 'user-2',
+        email: 'pending@example.com',
+        name: 'Pending User',
+        avatar: null,
+        role: 'USER',
+        emailVerified: true,
+        isApproved: false,
+        approvedAt: null,
+        isBanned: false,
+        bannedAt: null,
+        createdAt: new Date('2026-03-24T00:00:00.000Z'),
+        updatedAt: new Date('2026-03-24T00:00:00.000Z'),
+      },
+      {
+        id: 'user-3',
+        email: 'banned@example.com',
+        name: 'Banned User',
+        avatar: null,
+        role: 'USER',
+        emailVerified: true,
+        isApproved: true,
+        approvedAt: new Date('2026-03-22T00:00:00.000Z'),
+        isBanned: true,
+        bannedAt: new Date('2026-03-23T00:00:00.000Z'),
+        createdAt: new Date('2026-03-22T00:00:00.000Z'),
+        updatedAt: new Date('2026-03-23T00:00:00.000Z'),
+      },
+    ]);
+
+    const result = await service.getAdminUserOverview();
+
+    expect(result.summary).toEqual({
+      totalUsers: 3,
+      adminUsers: 1,
+      pendingUsers: 1,
+      activeUsers: 1,
+      bannedUsers: 1,
+    });
+    expect(result.users[0].role).toBe('ADMIN');
+    expect(result.users[1].status).toBe('pending');
+    expect(result.users[2].status).toBe('banned');
+  });
+
+  it('bans a non-admin user and invalidates existing sessions', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-2',
+      email: 'user2@example.com',
+      name: 'User Two',
+      avatar: null,
+      role: 'USER',
+      emailVerified: true,
+      isApproved: true,
+      approvedAt: new Date('2026-03-20T00:00:00.000Z'),
+      isBanned: false,
+      bannedAt: null,
+      createdAt: new Date('2026-03-20T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-20T00:00:00.000Z'),
+    });
+    prisma.user.update.mockResolvedValue({
+      id: 'user-2',
+      email: 'user2@example.com',
+      name: 'User Two',
+      avatar: null,
+      role: 'USER',
+      emailVerified: true,
+      isApproved: true,
+      approvedAt: new Date('2026-03-20T00:00:00.000Z'),
+      isBanned: true,
+      bannedAt: new Date('2026-03-24T00:00:00.000Z'),
+      createdAt: new Date('2026-03-20T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-24T00:00:00.000Z'),
+    });
+
+    const result = await service.banUserByAdmin('admin-1', 'user-2');
+
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'user-2' },
+        data: expect.objectContaining({
+          isBanned: true,
+          tokenVersion: { increment: 1 },
+        }),
+      }),
+    );
+    expect(result.user.isBanned).toBe(true);
+  });
 });

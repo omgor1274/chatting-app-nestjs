@@ -267,12 +267,47 @@
           </button>
         </div>
       </section>
+
+      <section
+        id="settings-admin-panel"
+        class="glass hidden space-y-5 rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_30px_120px_rgba(15,23,42,0.12)]"
+      >
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p
+              class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400"
+            >
+              Admin
+            </p>
+            <h2 class="mt-2 text-xl font-bold text-slate-900">
+              User approvals and bans
+            </h2>
+            <p class="mt-2 text-sm leading-6 text-slate-500">
+              Review all accounts, approve new registrations, and ban users when needed.
+            </p>
+          </div>
+          <button
+            id="settings-admin-refresh-btn"
+            type="button"
+            class="mobile-full-btn rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            Refresh Users
+          </button>
+        </div>
+        <div
+          id="settings-admin-summary"
+          class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600"
+        >
+          Loading admin data...
+        </div>
+        <div id="settings-admin-users" class="space-y-3"></div>
+      </section>
     </main>
 
     <script src="/runtime-config.js?v=20260323-smooth1"></script>
     <script
       type="module"
-      src="/public/settings.js?v=20260323-smooth3"
+      src="/public/settings.js?v=20260324-admin1"
     ></script>
   </body>
 </html>

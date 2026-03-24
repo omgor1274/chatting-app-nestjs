@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AuthTokenType } from '@prisma/client';
+import { AppRole, AuthTokenType } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomInt } from 'crypto';
 import { MailService } from '../mail/mail.service';
@@ -75,7 +75,12 @@ export class UserService {
     pendingEmail?: string | null;
     name: string;
     avatar?: string | null;
+    role?: AppRole;
     emailVerified?: boolean;
+    isApproved?: boolean;
+    approvedAt?: Date | null;
+    isBanned?: boolean;
+    bannedAt?: Date | null;
     backupEnabled?: boolean;
     backupImages?: boolean;
     backupVideos?: boolean;
@@ -92,7 +97,12 @@ export class UserService {
       ...user,
       avatar: user.avatar ?? null,
       pendingEmail: user.pendingEmail ?? null,
+      role: user.role ?? AppRole.USER,
       emailVerified: user.emailVerified ?? false,
+      isApproved: user.isApproved ?? true,
+      approvedAt: user.approvedAt ?? null,
+      isBanned: user.isBanned ?? false,
+      bannedAt: user.bannedAt ?? null,
       backupEnabled: user.backupEnabled ?? true,
       backupImages: user.backupImages ?? true,
       backupVideos: user.backupVideos ?? true,
@@ -102,6 +112,41 @@ export class UserService {
       privateKeyBackupCiphertext: user.privateKeyBackupCiphertext ?? null,
       privateKeyBackupIv: user.privateKeyBackupIv ?? null,
       publicKeyUpdatedAt: user.publicKeyUpdatedAt ?? null,
+    };
+  }
+
+  private serializeAdminUser(user: {
+    id: string;
+    email: string;
+    name: string;
+    avatar?: string | null;
+    role: AppRole;
+    emailVerified: boolean;
+    isApproved: boolean;
+    approvedAt?: Date | null;
+    isBanned: boolean;
+    bannedAt?: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }) {
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      avatar: user.avatar ?? null,
+      role: user.role,
+      emailVerified: user.emailVerified,
+      isApproved: user.isApproved,
+      approvedAt: user.approvedAt ?? null,
+      isBanned: user.isBanned,
+      bannedAt: user.bannedAt ?? null,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      status: user.isBanned
+        ? 'banned'
+        : user.isApproved
+          ? 'active'
+          : 'pending',
     };
   }
 
@@ -348,7 +393,12 @@ export class UserService {
         pendingEmail: true,
         name: true,
         avatar: true,
+        role: true,
         emailVerified: true,
+        isApproved: true,
+        approvedAt: true,
+        isBanned: true,
+        bannedAt: true,
         backupEnabled: true,
         backupImages: true,
         backupVideos: true,
@@ -370,6 +420,223 @@ export class UserService {
     return this.serializeProfile(user);
   }
 
+  async getAdminUserOverview() {
+    const users = await this.prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatar: true,
+        role: true,
+        emailVerified: true,
+        isApproved: true,
+        approvedAt: true,
+        isBanned: true,
+        bannedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const serializedUsers = users
+      .map((user) => this.serializeAdminUser(user))
+      .sort((left, right) => {
+        if (left.role === AppRole.ADMIN && right.role !== AppRole.ADMIN) {
+          return -1;
+        }
+
+        if (left.role !== AppRole.ADMIN && right.role === AppRole.ADMIN) {
+          return 1;
+        }
+
+        return right.createdAt.getTime() - left.createdAt.getTime();
+      });
+
+    return {
+      summary: {
+        totalUsers: serializedUsers.length,
+        adminUsers: serializedUsers.filter((user) => user.role === AppRole.ADMIN)
+          .length,
+        pendingUsers: serializedUsers.filter((user) => user.status === 'pending')
+          .length,
+        activeUsers: serializedUsers.filter((user) => user.status === 'active')
+          .length,
+        bannedUsers: serializedUsers.filter((user) => user.status === 'banned')
+          .length,
+      },
+      users: serializedUsers,
+    };
+  }
+
+  async approveUserByAdmin(targetUserId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatar: true,
+        role: true,
+        emailVerified: true,
+        isApproved: true,
+        approvedAt: true,
+        isBanned: true,
+        bannedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: targetUserId },
+      data: {
+        isApproved: true,
+        approvedAt: user.approvedAt ?? new Date(),
+        ...(user.isApproved ? {} : { tokenVersion: { increment: 1 } }),
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatar: true,
+        role: true,
+        emailVerified: true,
+        isApproved: true,
+        approvedAt: true,
+        isBanned: true,
+        bannedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return {
+      message: user.isBanned
+        ? 'User approved, but the account is still banned until you unban it.'
+        : user.isApproved
+          ? 'User is already approved.'
+          : 'User approved successfully.',
+      user: this.serializeAdminUser(updatedUser),
+    };
+  }
+
+  async banUserByAdmin(adminUserId: string, targetUserId: string) {
+    if (adminUserId === targetUserId) {
+      throw new BadRequestException('You cannot ban your own admin account');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatar: true,
+        role: true,
+        emailVerified: true,
+        isApproved: true,
+        approvedAt: true,
+        isBanned: true,
+        bannedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.role === AppRole.ADMIN) {
+      throw new BadRequestException('Admin accounts cannot be banned');
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: targetUserId },
+      data: {
+        isBanned: true,
+        bannedAt: user.bannedAt ?? new Date(),
+        ...(user.isBanned ? {} : { tokenVersion: { increment: 1 } }),
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatar: true,
+        role: true,
+        emailVerified: true,
+        isApproved: true,
+        approvedAt: true,
+        isBanned: true,
+        bannedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return {
+      message: user.isBanned ? 'User is already banned.' : 'User banned successfully.',
+      user: this.serializeAdminUser(updatedUser),
+    };
+  }
+
+  async unbanUserByAdmin(targetUserId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatar: true,
+        role: true,
+        emailVerified: true,
+        isApproved: true,
+        approvedAt: true,
+        isBanned: true,
+        bannedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: targetUserId },
+      data: {
+        isBanned: false,
+        bannedAt: null,
+        ...(user.isBanned ? { tokenVersion: { increment: 1 } } : {}),
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatar: true,
+        role: true,
+        emailVerified: true,
+        isApproved: true,
+        approvedAt: true,
+        isBanned: true,
+        bannedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return {
+      message: user.isBanned ? 'User unbanned successfully.' : 'User is not banned.',
+      user: this.serializeAdminUser(updatedUser),
+    };
+  }
+
   async searchUsers(userId: string, query?: string) {
     const normalizedQuery = query?.trim();
     const blockedUserIds = await this.getBlockedUserIds(userId, {
@@ -384,6 +651,8 @@ export class UserService {
             not: userId,
             notIn: Array.from(blockedUserIds),
           },
+          isApproved: true,
+          isBanned: false,
           emailVerified: true,
           OR: normalizedQuery
             ? [
@@ -498,7 +767,12 @@ export class UserService {
         pendingEmail: true,
         name: true,
         avatar: true,
+        role: true,
         emailVerified: true,
+        isApproved: true,
+        approvedAt: true,
+        isBanned: true,
+        bannedAt: true,
         backupEnabled: true,
         backupImages: true,
         backupVideos: true,
@@ -577,7 +851,12 @@ export class UserService {
         pendingEmail: true,
         name: true,
         avatar: true,
+        role: true,
         emailVerified: true,
+        isApproved: true,
+        approvedAt: true,
+        isBanned: true,
+        bannedAt: true,
         backupEnabled: true,
         backupImages: true,
         backupVideos: true,
@@ -603,7 +882,12 @@ export class UserService {
         pendingEmail: true,
         name: true,
         avatar: true,
+        role: true,
         emailVerified: true,
+        isApproved: true,
+        approvedAt: true,
+        isBanned: true,
+        bannedAt: true,
         backupEnabled: true,
         backupImages: true,
         backupVideos: true,
@@ -660,7 +944,12 @@ export class UserService {
         pendingEmail: true,
         name: true,
         avatar: true,
+        role: true,
         emailVerified: true,
+        isApproved: true,
+        approvedAt: true,
+        isBanned: true,
+        bannedAt: true,
         backupEnabled: true,
         backupImages: true,
         backupVideos: true,
@@ -743,7 +1032,12 @@ export class UserService {
         pendingEmail: true,
         name: true,
         avatar: true,
+        role: true,
         emailVerified: true,
+        isApproved: true,
+        approvedAt: true,
+        isBanned: true,
+        bannedAt: true,
         backupEnabled: true,
         backupImages: true,
         backupVideos: true,

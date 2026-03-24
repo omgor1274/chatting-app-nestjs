@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { GroupMemberRole, MessageType } from '@prisma/client';
 import { ChatService } from './chat.service';
+import { ChatAttachmentStorageService } from './chat-attachment-storage.service';
 import { PushNotificationService } from '../notifications/push-notification.service';
 import { RedisService } from '../redis/redis.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -9,6 +10,9 @@ describe('ChatService', () => {
   let service: ChatService;
   let pushNotifications: {
     notifyUser: jest.Mock;
+  };
+  let attachmentStorage: {
+    deleteAttachment: jest.Mock;
   };
   let prisma: {
     user: {
@@ -47,6 +51,9 @@ describe('ChatService', () => {
   beforeEach(async () => {
     pushNotifications = {
       notifyUser: jest.fn(),
+    };
+    attachmentStorage = {
+      deleteAttachment: jest.fn(),
     };
     prisma = {
       user: {
@@ -99,6 +106,10 @@ describe('ChatService', () => {
           useValue: pushNotifications,
         },
         {
+          provide: ChatAttachmentStorageService,
+          useValue: attachmentStorage,
+        },
+        {
           provide: RedisService,
           useValue: {
             getClient: jest.fn(),
@@ -129,7 +140,9 @@ describe('ChatService', () => {
 
     prisma.message.create
       .mockRejectedValueOnce(
-        new Error('Unable to fit integer value into an INT4 column for fileSize'),
+        new Error(
+          'Unable to fit integer value into an INT4 column for fileSize',
+        ),
       )
       .mockResolvedValueOnce({
         id: 'message-1',

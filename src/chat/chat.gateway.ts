@@ -397,16 +397,29 @@ export class ChatGateway
       const payload = this.jwt.verify(token);
       const user = await this.prisma.user.findUnique({
         where: { id: payload.userId },
-        select: { id: true, email: true, tokenVersion: true },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          isApproved: true,
+          isBanned: true,
+          tokenVersion: true,
+        },
       });
 
-      if (!user || user.tokenVersion !== payload.tokenVersion) {
+      if (
+        !user ||
+        user.tokenVersion !== payload.tokenVersion ||
+        user.isBanned ||
+        !user.isApproved
+      ) {
         throw new Error('Session expired');
       }
 
       client.data.user = {
         userId: user.id,
         email: user.email,
+        role: user.role,
         tokenVersion: user.tokenVersion,
       };
 
@@ -428,10 +441,22 @@ export class ChatGateway
 
     const user = await this.prisma.user.findUnique({
       where: { id: currentUser.userId },
-      select: { id: true, email: true, tokenVersion: true },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        isApproved: true,
+        isBanned: true,
+        tokenVersion: true,
+      },
     });
 
-    if (!user || user.tokenVersion !== currentUser.tokenVersion) {
+    if (
+      !user ||
+      user.tokenVersion !== currentUser.tokenVersion ||
+      user.isBanned ||
+      !user.isApproved
+    ) {
       client.emit('auth:logout');
       client.disconnect();
       return null;
@@ -440,6 +465,7 @@ export class ChatGateway
     client.data.user = {
       userId: user.id,
       email: user.email,
+      role: user.role,
       tokenVersion: user.tokenVersion,
     };
     return client.data.user;
