@@ -93,6 +93,10 @@ let pendingIncomingCall = null;
 let pendingVerificationEmail = '';
 let pendingResetEmail = '';
 let blockedUsers = [];
+let adminUsersPayload = {
+  summary: {},
+  users: [],
+};
 let ignoredPresenceUserIds = new Set();
 let sessionExpiryHandled = false;
 let messageActionTarget = null;
@@ -143,7 +147,7 @@ let sharedMediaErrorMessage = '';
 let sharedMediaBrowserKind = 'image';
 const OFFLINE_QUEUE_KEY = 'ochat_offline_message_queue';
 const RINGTONE_PREFERENCE_KEY = 'ochat_ringtone_preference';
-const CLIENT_CACHE_VERSION = '20260324-smooth25';
+const CLIENT_CACHE_VERSION = '20260324-smooth26';
 const CHAT_SHELL_CACHE_TTL_MS = 2 * 60 * 1000;
 const CHAT_SHELL_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const CONVERSATION_CACHE_TTL_MS = 90 * 1000;
@@ -1441,21 +1445,6 @@ function shouldRefreshConversationHistoryState(state) {
 function clearScopedRuntimeCaches() {
   removeStoredValue(window.localStorage, getShellCacheKey());
   removeSessionValue(getConversationCacheKeyForStorage());
-}
-
-function prefetchSettingsShell() {
-  const hrefs = ['/settings', '/public/settings.js?v=20260324-admin3'];
-
-  hrefs.forEach((href) => {
-    if (document.head.querySelector(`link[rel="prefetch"][href="${href}"]`)) {
-      return;
-    }
-
-    const link = document.createElement('link');
-    link.rel = 'prefetch';
-    link.href = href;
-    document.head.appendChild(link);
-  });
 }
 
 function currentTypingUsers() {
@@ -4599,6 +4588,10 @@ function updateSettingsUI() {
   verificationStatus.innerText = `Email: ${currentUser.email}`;
 
   renderBlockedUsers();
+  syncAdminPanelVisibility();
+  if (currentUser.role === 'ADMIN' && adminUsersPayload.users.length) {
+    renderAdminUsers();
+  }
 }
 
 function updateBackupSettingsAvailability() {
@@ -4658,6 +4651,220 @@ function renderBlockedUsers() {
             </div>
           `,
     )
+    .join('');
+}
+
+function setAdminUsersState(message, type = 'empty') {
+  const container = getById('settings-admin-users');
+  if (!container) {
+    return;
+  }
+
+  const toneClass =
+    type === 'error'
+      ? 'border-red-200 bg-red-50 text-red-700'
+      : 'border-dashed border-slate-200 bg-slate-50 text-slate-500';
+
+  container.innerHTML = `
+    <div class="rounded-2xl border px-4 py-6 text-sm ${toneClass}">
+      ${escapeHtml(message || '')}
+    </div>
+  `;
+}
+
+function syncAdminPanelVisibility() {
+  const panel = getById('settings-admin-panel');
+  if (!panel) {
+    return;
+  }
+
+  panel.classList.toggle('hidden', currentUser?.role !== 'ADMIN');
+}
+
+function formatAdminUserDateTime(value) {
+  if (!value) {
+    return 'Not set';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Not set';
+  }
+
+  return parsed.toLocaleString();
+}
+
+function filterAdminUsers(usersList, query) {
+  const normalizedQuery = String(query || '').trim().toLowerCase();
+  if (!normalizedQuery) {
+    return usersList;
+  }
+
+  const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
+  return usersList.filter((user) => {
+    const searchText = [
+      user.id,
+      user.name,
+      user.email,
+      user.role,
+      user.status,
+      user.isApproved ? 'approved' : 'pending',
+      user.isBanned ? 'banned' : 'not-banned',
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    return tokens.every((token) => searchText.includes(token));
+  });
+}
+
+function renderAdminUsers(payload = adminUsersPayload) {
+  const summary = getById('settings-admin-summary');
+  const container = getById('settings-admin-users');
+  if (!summary || !container) {
+    return;
+  }
+
+  adminUsersPayload = payload || adminUsersPayload;
+
+  const stats = payload?.summary || {};
+  const usersList = Array.isArray(payload?.users) ? payload.users : [];
+  const searchQuery = getById('settings-admin-search-input')?.value?.trim() || '';
+  const filteredUsers = filterAdminUsers(usersList, searchQuery);
+
+  summary.innerHTML = `
+    <div class="flex flex-wrap gap-3 text-sm font-medium text-slate-700">
+      <span class="rounded-full bg-white px-3 py-2">Total ${stats.totalUsers || 0}</span>
+      <span class="rounded-full bg-amber-100 px-3 py-2 text-amber-800">Pending ${stats.pendingUsers || 0}</span>
+      <span class="rounded-full bg-emerald-100 px-3 py-2 text-emerald-800">Active ${stats.activeUsers || 0}</span>
+      <span class="rounded-full bg-rose-100 px-3 py-2 text-rose-800">Banned ${stats.bannedUsers || 0}</span>
+      <span class="rounded-full bg-slate-900 px-3 py-2 text-white">Admins ${stats.adminUsers || 0}</span>
+      <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-slate-600">Showing ${filteredUsers.length} of ${usersList.length}</span>
+    </div>
+  `;
+
+  if (!usersList.length) {
+    setAdminUsersState('No users found yet.');
+    return;
+  }
+
+  if (!filteredUsers.length) {
+    setAdminUsersState(`No users match "${searchQuery}".`);
+    return;
+  }
+
+  container.innerHTML = filteredUsers
+    .map((user) => {
+      const statusTone =
+        user.status === 'banned'
+          ? 'bg-rose-100 text-rose-700'
+          : user.status === 'pending'
+            ? 'bg-amber-100 text-amber-800'
+            : 'bg-emerald-100 text-emerald-700';
+      const isAdmin = user.role === 'ADMIN';
+      const isCurrentAdmin = user.id === currentUser?.id;
+      const isProtectedBootstrapAdmin = Boolean(user.isProtectedBootstrapAdmin);
+      const actionButtons = [
+        !isAdmin && !user.isApproved
+          ? `
+              <button
+                type="button"
+                data-admin-action="approve"
+                data-user-id="${user.id}"
+                class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-700"
+              >
+                Approve
+              </button>
+            `
+          : '',
+        !isAdmin
+          ? user.isBanned
+            ? `
+                <button
+                  type="button"
+                  data-admin-action="unban"
+                  data-user-id="${user.id}"
+                  class="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50"
+                >
+                  Unban
+                </button>
+              `
+            : `
+                <button
+                  type="button"
+                  data-admin-action="ban"
+                  data-user-id="${user.id}"
+                  class="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100"
+                >
+                  Ban
+                </button>
+              `
+          : '',
+        isAdmin && !isCurrentAdmin && !isProtectedBootstrapAdmin
+          ? `
+              <button
+                type="button"
+                data-admin-action="remove-admin"
+                data-user-id="${user.id}"
+                class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 transition hover:bg-amber-100"
+              >
+                Remove Admin
+              </button>
+            `
+          : '',
+        !isCurrentAdmin && !isProtectedBootstrapAdmin
+          ? `
+              <button
+                type="button"
+                data-admin-action="delete-user"
+                data-user-id="${user.id}"
+                class="rounded-xl border border-slate-300 bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
+              >
+                Delete Account
+              </button>
+            `
+          : '',
+      ]
+        .filter(Boolean)
+        .join('');
+
+      const adminNote = isProtectedBootstrapAdmin
+        ? 'This is the configured bootstrap admin. Update the bootstrap admin env vars before removing or deleting this account.'
+        : isCurrentAdmin
+          ? 'Use another admin account to change this admin role or permanently delete this account.'
+          : isAdmin
+            ? 'Admins cannot be banned. You can remove admin access or permanently delete this account.'
+            : '';
+
+      return `
+        <div class="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div class="min-w-0 space-y-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="truncate text-base font-bold text-slate-900">${escapeHtml(user.name || user.email || 'User')}</p>
+                <span class="rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone}">${escapeHtml(user.status)}</span>
+                <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">${escapeHtml(user.role)}</span>
+                ${isCurrentAdmin ? '<span class="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">You</span>' : ''}
+                ${isProtectedBootstrapAdmin ? '<span class="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-700">Bootstrap Admin</span>' : ''}
+              </div>
+              <p class="truncate text-sm text-slate-500">${escapeHtml(user.email || '')}</p>
+              <p class="truncate text-xs text-slate-400">User ID: ${escapeHtml(user.id || '')}</p>
+              <div class="grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
+                <p>Created: ${formatAdminUserDateTime(user.createdAt)}</p>
+                <p>Approved: ${formatAdminUserDateTime(user.approvedAt)}</p>
+                <p>Banned: ${formatAdminUserDateTime(user.bannedAt)}</p>
+                <p>Email verified: ${user.emailVerified ? 'Yes' : 'No'}</p>
+              </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              ${actionButtons}
+            </div>
+          </div>
+          ${adminNote ? `<p class="mt-3 text-xs text-slate-500">${escapeHtml(adminNote)}</p>` : ''}
+        </div>
+      `;
+    })
     .join('');
 }
 
@@ -4760,6 +4967,142 @@ async function unblockUserFromSettings(userId) {
     updateSelectedUserHeader();
   }
   alert(data.message || 'User unblocked.');
+}
+
+async function loadAdminUsers() {
+  if (currentUser?.role !== 'ADMIN') {
+    return;
+  }
+
+  const refreshButton = getById('settings-admin-refresh-btn');
+  if (refreshButton) {
+    refreshButton.disabled = true;
+    refreshButton.textContent = 'Loading...';
+    refreshButton.classList.add('opacity-70', 'cursor-wait');
+  }
+
+  try {
+    const res = await api('/users/admin/users');
+    const data = await readJsonResponse(
+      res,
+      { summary: {}, users: [] },
+      'Failed to load admin users.',
+    );
+
+    if (!res.ok) {
+      throw new Error(data.message || 'Failed to load admin users');
+    }
+
+    adminUsersPayload = data;
+    renderAdminUsers();
+  } finally {
+    if (refreshButton) {
+      refreshButton.disabled = false;
+      refreshButton.textContent = 'Refresh Users';
+      refreshButton.classList.remove('opacity-70', 'cursor-wait');
+    }
+  }
+}
+
+async function approveAdminUser(userId) {
+  const res = await api(`/users/admin/users/${encodeURIComponent(userId)}/approve`, {
+    method: 'POST',
+  });
+  const data = await readJsonResponse(res, {}, 'Failed to approve the user.');
+
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to approve the user');
+  }
+
+  await loadAdminUsers();
+  alert(data.message || 'User approved.');
+}
+
+async function banAdminUser(userId) {
+  const confirmed = window.confirm(
+    'Ban this user from O-chat? They will lose access immediately.',
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  const res = await api(`/users/admin/users/${encodeURIComponent(userId)}/ban`, {
+    method: 'POST',
+  });
+  const data = await readJsonResponse(res, {}, 'Failed to ban the user.');
+
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to ban the user');
+  }
+
+  await loadAdminUsers();
+  alert(data.message || 'User banned.');
+}
+
+async function unbanAdminUser(userId) {
+  const confirmed = window.confirm('Unban this user and restore website access?');
+  if (!confirmed) {
+    return;
+  }
+
+  const res = await api(`/users/admin/users/${encodeURIComponent(userId)}/unban`, {
+    method: 'POST',
+  });
+  const data = await readJsonResponse(res, {}, 'Failed to unban the user.');
+
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to unban the user');
+  }
+
+  await loadAdminUsers();
+  alert(data.message || 'User unbanned.');
+}
+
+async function removeAdminRoleFromUser(userId) {
+  const confirmed = window.confirm('Remove admin access from this account?');
+  if (!confirmed) {
+    return;
+  }
+
+  const res = await api(
+    `/users/admin/users/${encodeURIComponent(userId)}/remove-admin`,
+    {
+      method: 'POST',
+    },
+  );
+  const data = await readJsonResponse(res, {}, 'Failed to remove the admin role.');
+
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to remove the admin role');
+  }
+
+  await loadAdminUsers();
+  alert(data.message || 'Admin role removed.');
+}
+
+async function deleteAdminUserPermanently(userId) {
+  const confirmed = window.confirm(
+    'Delete this account permanently? This removes the user and related stored data and cannot be undone.',
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  const res = await api(`/users/admin/users/${encodeURIComponent(userId)}/delete`, {
+    method: 'POST',
+  });
+  const data = await readJsonResponse(
+    res,
+    {},
+    'Failed to permanently delete the account.',
+  );
+
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to permanently delete the account');
+  }
+
+  await loadAdminUsers();
+  alert(data.message || 'Account deleted permanently.');
 }
 
 function assetUrl(path) {
@@ -5813,11 +6156,27 @@ async function openProfileModal() {
   if (!currentUser) return;
   updateSettingsUI();
   updateInstallAppUI();
-  try {
-    await loadBlockedUsers();
-  } catch (error) {
-    console.error(error);
+  const loadTasks = [loadBlockedUsers()];
+  if (currentUser.role === 'ADMIN') {
+    if (!adminUsersPayload.users.length) {
+      setAdminUsersState('Loading admin data...');
+    }
+    loadTasks.push(loadAdminUsers());
   }
+  const results = await Promise.allSettled(loadTasks);
+  results.forEach((result, index) => {
+    if (result.status !== 'rejected') {
+      return;
+    }
+
+    console.error(result.reason);
+    if (index > 0) {
+      setAdminUsersState(
+        result.reason?.message || 'Failed to load admin users.',
+        'error',
+      );
+    }
+  });
   document.getElementById('profile-modal').classList.remove('hidden');
   document.getElementById('profile-modal').classList.add('flex');
 }
@@ -6264,7 +6623,6 @@ async function startApp() {
     });
   }
 
-  prefetchSettingsShell();
   connectSocket();
   void setupNotifications().catch((error) => {
     console.warn('Push notification setup skipped', error);
@@ -11191,6 +11549,53 @@ getById('message-container')?.addEventListener(
   },
   { passive: true },
 );
+getById('settings-admin-refresh-btn')?.addEventListener('click', async () => {
+  try {
+    await loadAdminUsers();
+  } catch (error) {
+    console.error(error);
+    setAdminUsersState(error?.message || 'Failed to load admin users.', 'error');
+    alert(error?.message || 'Failed to load admin users.');
+  }
+});
+getById('settings-admin-search-input')?.addEventListener('input', () => {
+  renderAdminUsers();
+});
+getById('settings-admin-users')?.addEventListener('click', async (event) => {
+  const button = event.target.closest('[data-admin-action]');
+  if (!button) {
+    return;
+  }
+
+  try {
+    if (button.dataset.adminAction === 'approve') {
+      await approveAdminUser(button.dataset.userId);
+      return;
+    }
+
+    if (button.dataset.adminAction === 'ban') {
+      await banAdminUser(button.dataset.userId);
+      return;
+    }
+
+    if (button.dataset.adminAction === 'unban') {
+      await unbanAdminUser(button.dataset.userId);
+      return;
+    }
+
+    if (button.dataset.adminAction === 'remove-admin') {
+      await removeAdminRoleFromUser(button.dataset.userId);
+      return;
+    }
+
+    if (button.dataset.adminAction === 'delete-user') {
+      await deleteAdminUserPermanently(button.dataset.userId);
+    }
+  } catch (error) {
+    console.error(error);
+    alert(error?.message || 'Failed to update the user.');
+  }
+});
 
 applyViewportHeight();
 updateInstallAppUI();
