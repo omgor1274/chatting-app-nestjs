@@ -10,10 +10,18 @@
     <title>O-chat</title>
     <script>
       document.documentElement.classList.add('chat-page-root');
-      if (localStorage.getItem('chat_token')) {
+      const readBootStorage = (key) => {
+        try {
+          return window.localStorage.getItem(key) || '';
+        } catch (error) {
+          console.warn(`Failed to read ${key} during chat boot`, error);
+          return '';
+        }
+      };
+      if (readBootStorage('chat_token')) {
         document.documentElement.classList.add('has-session-token');
       }
-      if (localStorage.getItem('chat_dark_mode') === '1') {
+      if (readBootStorage('chat_dark_mode') === '1') {
         document.documentElement.classList.add('prefers-dark-mode');
       }
     </script>
@@ -2268,7 +2276,7 @@
       import {
         hasValidSession,
         loadPublicConfig,
-      } from '/public/runtime.js?v=20260324-admin1';
+      } from '/public/runtime.js?v=20260324-admin2';
 
       const loadScript = (src) =>
         new Promise((resolve, reject) => {
@@ -2286,7 +2294,7 @@
         window.location.replace('/auth');
       } else {
         loadScript('https://cdn.socket.io/4.7.2/socket.io.min.js')
-          .then(() => loadScript('/public/app.js?v=20260324-smooth26'))
+          .then(() => loadScript('/public/app.js?v=20260324-smooth28'))
           .catch((error) =>
             console.error('Failed to load chat runtime', error),
           );

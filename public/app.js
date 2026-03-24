@@ -110,8 +110,8 @@ let userSearchResultsQuery = '';
 let userSearchDebounceTimer = 0;
 let userSearchRequestToken = 0;
 const NOTIFICATION_PERMISSION_KEY = 'ochat_notification_permission_requested';
-const MESSAGE_ACTION_TOUCH_HOLD_MS = 750;
-const MESSAGE_ACTION_MOVE_TOLERANCE_PX = 6;
+const MESSAGE_ACTION_TOUCH_HOLD_MS = 420;
+const MESSAGE_ACTION_MOVE_TOLERANCE_PX = 10;
 const MESSAGE_ACTION_SCROLL_BLOCK_MS = 700;
 const MAX_ATTACHMENT_UPLOAD_AUTO_RETRIES = 4;
 let messageActionScrollBlockedUntil = 0;
@@ -147,7 +147,7 @@ let sharedMediaErrorMessage = '';
 let sharedMediaBrowserKind = 'image';
 const OFFLINE_QUEUE_KEY = 'ochat_offline_message_queue';
 const RINGTONE_PREFERENCE_KEY = 'ochat_ringtone_preference';
-const CLIENT_CACHE_VERSION = '20260324-smooth26';
+const CLIENT_CACHE_VERSION = '20260324-smooth28';
 const CHAT_SHELL_CACHE_TTL_MS = 2 * 60 * 1000;
 const CHAT_SHELL_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const CONVERSATION_CACHE_TTL_MS = 90 * 1000;
@@ -232,7 +232,7 @@ function setSurfaceRefreshState(id, isRefreshing, delayMs = 120) {
 }
 
 function readStorageJson(storage, key, fallbackValue) {
-  if (!key) {
+  if (!storage || !key) {
     return fallbackValue;
   }
 
@@ -251,7 +251,7 @@ function readStorageJson(storage, key, fallbackValue) {
 }
 
 function writeStorageJson(storage, key, value) {
-  if (!key) {
+  if (!storage || !key) {
     return;
   }
 
@@ -263,7 +263,7 @@ function writeStorageJson(storage, key, value) {
 }
 
 function removeStoredValue(storage, key) {
-  if (!key) {
+  if (!storage || !key) {
     return;
   }
 
@@ -274,24 +274,103 @@ function removeStoredValue(storage, key) {
   }
 }
 
+function getBrowserStorage(kind = 'local') {
+  try {
+    return kind === 'session' ? window.sessionStorage : window.localStorage;
+  } catch (error) {
+    console.warn(`Failed to access ${kind}Storage`, error);
+    return null;
+  }
+}
+
 function readStoredJson(key, fallbackValue) {
-  return readStorageJson(window.localStorage, key, fallbackValue);
+  return readStorageJson(getBrowserStorage('local'), key, fallbackValue);
 }
 
 function writeStoredJson(key, value) {
-  writeStorageJson(window.localStorage, key, value);
+  writeStorageJson(getBrowserStorage('local'), key, value);
 }
 
 function readSessionJson(key, fallbackValue) {
-  return readStorageJson(window.sessionStorage, key, fallbackValue);
+  return readStorageJson(getBrowserStorage('session'), key, fallbackValue);
 }
 
 function writeSessionJson(key, value) {
-  writeStorageJson(window.sessionStorage, key, value);
+  writeStorageJson(getBrowserStorage('session'), key, value);
 }
 
 function removeSessionValue(key) {
-  removeStoredValue(window.sessionStorage, key);
+  removeStoredValue(getBrowserStorage('session'), key);
+}
+
+function readStoredValue(key, fallbackValue = '') {
+  const storage = getBrowserStorage('local');
+  if (!storage || !key) {
+    return fallbackValue;
+  }
+
+  try {
+    const value = storage.getItem(key);
+    return value ?? fallbackValue;
+  } catch (error) {
+    console.warn('Failed to read stored value', error);
+    return fallbackValue;
+  }
+}
+
+function writeStoredValue(key, value) {
+  const storage = getBrowserStorage('local');
+  if (!storage || !key) {
+    return;
+  }
+
+  try {
+    if (value === undefined || value === null || value === '') {
+      storage.removeItem(key);
+      return;
+    }
+
+    storage.setItem(key, String(value));
+  } catch (error) {
+    console.warn('Failed to write stored value', error);
+  }
+}
+
+function removeStoredKey(key) {
+  removeStoredValue(getBrowserStorage('local'), key);
+}
+
+function readSessionValue(key, fallbackValue = '') {
+  const storage = getBrowserStorage('session');
+  if (!storage || !key) {
+    return fallbackValue;
+  }
+
+  try {
+    const value = storage.getItem(key);
+    return value ?? fallbackValue;
+  } catch (error) {
+    console.warn('Failed to read stored value', error);
+    return fallbackValue;
+  }
+}
+
+function writeSessionValue(key, value) {
+  const storage = getBrowserStorage('session');
+  if (!storage || !key) {
+    return;
+  }
+
+  try {
+    if (value === undefined || value === null || value === '') {
+      storage.removeItem(key);
+      return;
+    }
+
+    storage.setItem(key, String(value));
+  } catch (error) {
+    console.warn('Failed to write stored value', error);
+  }
 }
 
 function scheduleIdleWork(callback, timeout = 500) {
@@ -347,8 +426,7 @@ function loadLocalConversationPreferences() {
     ).map(([key, value]) => [key, Number(value) || 0]),
   );
   offlineQueuedMessages = readStoredJson(OFFLINE_QUEUE_KEY, []);
-  ringtonePreference =
-    localStorage.getItem(RINGTONE_PREFERENCE_KEY) || 'classic';
+  ringtonePreference = readStoredValue(RINGTONE_PREFERENCE_KEY, 'classic');
 }
 
 function persistPinnedConversations() {
@@ -502,8 +580,9 @@ async function resolveCurrentUserPrivateKeyForBackup() {
     return '';
   }
 
-  const storedPrivateKey = localStorage.getItem(
+  const storedPrivateKey = readStoredValue(
     privateKeyStorageKey(currentUser.id),
+    '',
   );
   if (storedPrivateKey) {
     return storedPrivateKey;
@@ -526,15 +605,9 @@ async function resolveCurrentUserPrivateKeyForBackup() {
       return '';
     }
 
-    localStorage.setItem(
-      privateKeyStorageKey(currentUser.id),
-      restoredPrivateKey,
-    );
+    writeStoredValue(privateKeyStorageKey(currentUser.id), restoredPrivateKey);
     if (currentUser.publicKey) {
-      localStorage.setItem(
-        publicKeyStorageKey(currentUser.id),
-        currentUser.publicKey,
-      );
+      writeStoredValue(publicKeyStorageKey(currentUser.id), currentUser.publicKey);
     }
     return restoredPrivateKey;
   } catch (error) {
@@ -630,8 +703,8 @@ async function generateAndPersistEncryptionKeyPair(userId) {
     await window.crypto.subtle.exportKey('spki', keyPair.publicKey),
   );
 
-  localStorage.setItem(privateKeyStorageKey(userId), privateKey);
-  localStorage.setItem(publicKeyStorageKey(userId), publicKey);
+  writeStoredValue(privateKeyStorageKey(userId), privateKey);
+  writeStoredValue(publicKeyStorageKey(userId), publicKey);
 
   return {
     privateKey,
@@ -644,12 +717,8 @@ async function ensureEncryptionKeys(forceSync = false) {
     return;
   }
 
-  let savedPrivateKey = localStorage.getItem(
-    privateKeyStorageKey(currentUser.id),
-  );
-  let savedPublicKey = localStorage.getItem(
-    publicKeyStorageKey(currentUser.id),
-  );
+  let savedPrivateKey = readStoredValue(privateKeyStorageKey(currentUser.id), '');
+  let savedPublicKey = readStoredValue(publicKeyStorageKey(currentUser.id), '');
   let generatedNewKeyPair = false;
   const hasServerKeyBackup = Boolean(
     currentUser.privateKeyBackupCiphertext && currentUser.privateKeyBackupIv,
@@ -671,11 +740,11 @@ async function ensureEncryptionKeys(forceSync = false) {
         savedPrivateKey = restoredPrivateKey;
         savedPublicKey = currentUser.publicKey;
         restoredFromServerKeyBackup = true;
-        localStorage.setItem(
+        writeStoredValue(
           privateKeyStorageKey(currentUser.id),
           restoredPrivateKey,
         );
-        localStorage.setItem(
+        writeStoredValue(
           publicKeyStorageKey(currentUser.id),
           currentUser.publicKey,
         );
@@ -1443,7 +1512,7 @@ function shouldRefreshConversationHistoryState(state) {
 }
 
 function clearScopedRuntimeCaches() {
-  removeStoredValue(window.localStorage, getShellCacheKey());
+  removeStoredKey(getShellCacheKey());
   removeSessionValue(getConversationCacheKeyForStorage());
 }
 
@@ -2169,7 +2238,7 @@ function renderConversationCallHistory() {
 function updateRingtonePreference() {
   const nextValue = getById('settings-ringtone-select')?.value || 'classic';
   ringtonePreference = nextValue;
-  localStorage.setItem(RINGTONE_PREFERENCE_KEY, nextValue);
+  writeStoredValue(RINGTONE_PREFERENCE_KEY, nextValue);
 }
 
 function syncRingtonePreferenceUI() {
@@ -4016,7 +4085,7 @@ function resetSelectedConversation() {
   closeChatActionsMenu();
   closeComposerActionsMenu();
   if (!isFileOrigin) {
-    sessionStorage.setItem(LAST_CHAT_ROUTE_KEY, '/chat');
+    writeSessionValue(LAST_CHAT_ROUTE_KEY, '/chat');
     history.replaceState(null, '', '/chat');
   }
 }
@@ -4471,13 +4540,18 @@ function setAuthMode(nextIsLogin) {
 }
 
 function applyDarkMode(enabled) {
-  document.documentElement.classList.add('theme-switching');
-  document.body.classList.toggle('dark-mode', Boolean(enabled));
-  localStorage.setItem('chat_dark_mode', enabled ? '1' : '0');
+  const nextEnabled = Boolean(enabled);
+  const bodyAlreadyMatches = document.body.classList.contains('dark-mode') === nextEnabled;
+  writeStoredValue('chat_dark_mode', nextEnabled ? '1' : '0');
   const darkModeInput = document.getElementById('settings-darkmode-input');
   if (darkModeInput) {
-    darkModeInput.checked = Boolean(enabled);
+    darkModeInput.checked = nextEnabled;
   }
+  if (bodyAlreadyMatches) {
+    return;
+  }
+  document.documentElement.classList.add('theme-switching');
+  document.body.classList.toggle('dark-mode', nextEnabled);
   applyChatTheme();
   window.requestAnimationFrame(() => {
     window.requestAnimationFrame(() => {
@@ -6565,7 +6639,7 @@ async function handleAuth() {
         }
       }
       token = authToken;
-      localStorage.setItem('chat_token', token);
+      writeStoredValue('chat_token', token);
       showAuthFeedback('', 'info');
       await startApp();
       return;
@@ -8019,7 +8093,7 @@ async function selectUser(userId) {
     const nextRoute = isGroupConversation(selectedUser)
       ? `/chat?group=${selectedUser.id}`
       : `/chat?chat=${selectedUser.id}`;
-    sessionStorage.setItem(LAST_CHAT_ROUTE_KEY, nextRoute);
+    writeSessionValue(LAST_CHAT_ROUTE_KEY, nextRoute);
     history.replaceState(null, '', nextRoute);
   }
 }
@@ -9524,6 +9598,11 @@ function openMessageActions(x, y, message) {
   const padding = 12;
   const starButton = document.getElementById('message-action-star');
   const reactionOptions = menu?.querySelectorAll('.message-reaction-option');
+  try {
+    window.getSelection?.()?.removeAllRanges?.();
+  } catch (error) {
+    console.warn('Failed to clear text selection before opening actions', error);
+  }
   messageActionTarget = message;
   if (starButton) {
     starButton.querySelector('span').textContent = isMessageStarred(message.id)
@@ -10839,6 +10918,7 @@ function createMessageElement(message, options = {}) {
       clearTimeout(div._holdTimer);
       div._holdTimer = null;
     }
+    div.classList.remove('message-hold-armed');
   };
 
   div.onpointerdown = (event) => {
@@ -10846,8 +10926,11 @@ function createMessageElement(message, options = {}) {
       event.pointerType === 'touch' ||
       event.pointerType === 'pen' ||
       !event.pointerType;
+    const isInteractiveTarget = event.target?.closest(
+      'a, button, input, textarea, select, option, label, audio, video, [contenteditable="true"]',
+    );
 
-    if (!isTouchLikePointer) {
+    if (!isTouchLikePointer || isInteractiveTarget) {
       return;
     }
 
@@ -10856,12 +10939,14 @@ function createMessageElement(message, options = {}) {
     }
 
     clearHoldTimer();
+    div.classList.add('message-hold-armed');
     const holdX = event.clientX;
     const holdY = event.clientY;
     div._holdStartX = holdX;
     div._holdStartY = holdY;
     div._holdTimer = window.setTimeout(() => {
       div._holdTimer = null;
+      div.classList.remove('message-hold-armed');
       if (areMessageActionsBlockedByScroll()) {
         return;
       }
@@ -11032,10 +11117,10 @@ async function setupNotifications() {
 
   if (Notification.permission === 'default') {
     const alreadyRequested =
-      localStorage.getItem(NOTIFICATION_PERMISSION_KEY) === '1';
+      readStoredValue(NOTIFICATION_PERMISSION_KEY, '') === '1';
 
     if (!alreadyRequested) {
-      localStorage.setItem(NOTIFICATION_PERMISSION_KEY, '1');
+      writeStoredValue(NOTIFICATION_PERMISSION_KEY, '1');
       try {
         const permission = await Notification.requestPermission();
         if (permission === 'granted') {
@@ -11235,7 +11320,7 @@ function forceSessionLogout(message = '') {
     backgroundUsersRefreshTimer = 0;
   }
 
-  localStorage.removeItem('chat_token');
+  removeStoredKey('chat_token');
   document.documentElement.classList.remove('has-session-token');
 
   if (message) {
@@ -11276,10 +11361,10 @@ async function logout() {
 }
 
 async function restoreSession() {
-  const savedToken = localStorage.getItem('chat_token');
+  const savedToken = readStoredValue('chat_token', '');
   if (!savedToken) {
     document.documentElement.classList.remove('has-session-token');
-    applyDarkMode(localStorage.getItem('chat_dark_mode') === '1');
+    applyDarkMode(readStoredValue('chat_dark_mode', '') === '1');
     syncLayout();
     if (!isFileOrigin && window.location.pathname.startsWith('/chat')) {
       window.location.replace('/auth');
@@ -11304,7 +11389,7 @@ async function restoreSession() {
 
     if (isAuthFailure || requiresFreshLogin) {
       token = null;
-      localStorage.removeItem('chat_token');
+      removeStoredKey('chat_token');
       if (requiresFreshLogin && error?.message) {
         alert(error.message);
       }

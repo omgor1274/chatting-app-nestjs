@@ -806,6 +806,19 @@ body.chat-page #message-container {
   box-shadow: 0 16px 30px rgba(15, 23, 42, 0.08);
 }
 
+.message-hold-armed,
+.message-hold-armed * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+@media (pointer: coarse) {
+  .message-bubble-shell,
+  .message-bubble-shell * {
+    -webkit-touch-callout: none;
+  }
+}
+
 .message-bubble-processing {
   animation: message-bubble-processing 420ms var(--motion-silk);
 }

@@ -15,6 +15,58 @@ let API_URL = appConfig.apiUrl;
 let configLoadPromise = null;
 const DEFAULT_AVATAR_URL = '/icons/default-avatar.svg';
 
+function getBrowserStorage(kind = 'local') {
+  try {
+    return kind === 'session' ? window.sessionStorage : window.localStorage;
+  } catch (error) {
+    console.warn(`Failed to access ${kind}Storage`, error);
+    return null;
+  }
+}
+
+function readStorageValue(storage, key, fallbackValue = '') {
+  if (!storage || !key) {
+    return fallbackValue;
+  }
+
+  try {
+    const value = storage.getItem(key);
+    return value ?? fallbackValue;
+  } catch (error) {
+    console.warn('Failed to read stored value', error);
+    return fallbackValue;
+  }
+}
+
+function writeStorageValue(storage, key, value) {
+  if (!storage || !key) {
+    return;
+  }
+
+  try {
+    if (value === undefined || value === null || value === '') {
+      storage.removeItem(key);
+      return;
+    }
+
+    storage.setItem(key, String(value));
+  } catch (error) {
+    console.warn('Failed to write stored value', error);
+  }
+}
+
+function removeStorageValue(storage, key) {
+  if (!storage || !key) {
+    return;
+  }
+
+  try {
+    storage.removeItem(key);
+  } catch (error) {
+    console.warn('Failed to remove stored value', error);
+  }
+}
+
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
   let binary = '';
@@ -71,19 +123,15 @@ export function getApiUrl() {
 }
 
 export function getToken() {
-  return localStorage.getItem('chat_token') || '';
+  return readStorageValue(getBrowserStorage('local'), 'chat_token', '');
 }
 
 export function setToken(token) {
-  if (token) {
-    localStorage.setItem('chat_token', token);
-  } else {
-    localStorage.removeItem('chat_token');
-  }
+  writeStorageValue(getBrowserStorage('local'), 'chat_token', token);
 }
 
 export function clearToken() {
-  localStorage.removeItem('chat_token');
+  removeStorageValue(getBrowserStorage('local'), 'chat_token');
 }
 
 export async function deriveKeyBackupUnlockMaterial(password, userId) {
@@ -119,7 +167,8 @@ export function storeKeyBackupUnlockMaterial(userId, unlockMaterial) {
     return;
   }
 
-  sessionStorage.setItem(
+  writeStorageValue(
+    getBrowserStorage('session'),
     keyBackupUnlockStorageKey(userId),
     String(unlockMaterial),
   );
@@ -130,7 +179,11 @@ export function readKeyBackupUnlockMaterial(userId) {
     return '';
   }
 
-  return sessionStorage.getItem(keyBackupUnlockStorageKey(userId)) || '';
+  return readStorageValue(
+    getBrowserStorage('session'),
+    keyBackupUnlockStorageKey(userId),
+    '',
+  );
 }
 
 export function clearKeyBackupUnlockMaterial(userId) {
@@ -138,7 +191,10 @@ export function clearKeyBackupUnlockMaterial(userId) {
     return;
   }
 
-  sessionStorage.removeItem(keyBackupUnlockStorageKey(userId));
+  removeStorageValue(
+    getBrowserStorage('session'),
+    keyBackupUnlockStorageKey(userId),
+  );
 }
 
 async function importKeyBackupKey(unlockMaterial) {

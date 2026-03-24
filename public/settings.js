@@ -12,7 +12,7 @@ import {
   loadPublicConfig,
   readKeyBackupUnlockMaterial,
   readJsonResponse,
-} from './runtime.js?v=20260324-admin1';
+} from './runtime.js?v=20260324-admin2';
 
 const LAST_CHAT_ROUTE_KEY = 'chat_last_route';
 let currentProfileId = '';
@@ -330,8 +330,8 @@ function updateCloseLink() {
 function prefetchChatShell() {
   const hrefs = [
     getLastChatRoute(),
-    '/public/app.js?v=20260324-smooth26',
-    '/public/runtime.js?v=20260324-admin1',
+    '/public/app.js?v=20260324-smooth28',
+    '/public/runtime.js?v=20260324-admin2',
     '/public/app.css?v=20260323-smooth11',
   ];
 
