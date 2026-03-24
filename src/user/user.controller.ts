@@ -125,6 +125,18 @@ export class UserController {
     return this.userService.unbanUserByAdmin(userId);
   }
 
+  @UseGuards(JwtGuard, AdminGuard)
+  @Post('admin/users/:userId/remove-admin')
+  removeAdminRoleByAdmin(@Req() req, @Param('userId') userId: string) {
+    return this.userService.removeAdminRoleByAdmin(req.user.userId, userId);
+  }
+
+  @UseGuards(JwtGuard, AdminGuard)
+  @Post('admin/users/:userId/delete')
+  deleteUserPermanentlyByAdmin(@Req() req, @Param('userId') userId: string) {
+    return this.userService.deleteUserPermanentlyByAdmin(req.user.userId, userId);
+  }
+
   @UseGuards(JwtGuard)
   @Get()
   searchUsers(@Req() req, @Query('q') query?: string) {

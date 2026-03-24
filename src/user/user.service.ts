@@ -2,11 +2,17 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { AppRole, AuthTokenType } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomInt } from 'crypto';
+import { unlink } from 'fs/promises';
+import { basename } from 'path';
+import { getBootstrapAdminCredentials } from '../auth/admin.constants';
+import { ChatAttachmentStorageService } from '../chat/chat-attachment-storage.service';
+import { resolveWritableDataPath } from '../common/app-paths';
 import { MailService } from '../mail/mail.service';
 import { PushNotificationService } from '../notifications/push-notification.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -24,10 +30,13 @@ const CHAT_THEME_PRESET_KEYS = new Set([
 
 @Injectable()
 export class UserService {
+  private readonly logger = new Logger(UserService.name);
+
   constructor(
     private prisma: PrismaService,
     private pushNotifications: PushNotificationService,
     private mailService: MailService,
+    private chatAttachmentStorage: ChatAttachmentStorageService,
   ) {}
 
   private normalizeEmail(email: string) {
@@ -142,12 +151,55 @@ export class UserService {
       bannedAt: user.bannedAt ?? null,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
+      isProtectedBootstrapAdmin: this.isProtectedBootstrapAdmin(user.email),
       status: user.isBanned
         ? 'banned'
         : user.isApproved
           ? 'active'
           : 'pending',
     };
+  }
+
+  private isProtectedBootstrapAdmin(email?: string | null) {
+    const bootstrapAdmin = getBootstrapAdminCredentials();
+    if (!bootstrapAdmin || !email) {
+      return false;
+    }
+
+    return this.normalizeEmail(email) === bootstrapAdmin.email;
+  }
+
+  private async deleteManagedUpload(
+    filePath: string | null | undefined,
+    relativePrefix: string,
+    storageSegments: string[],
+  ) {
+    if (!filePath || !String(filePath).startsWith(relativePrefix)) {
+      return false;
+    }
+
+    const fileName = basename(
+      decodeURIComponent(String(filePath).slice(relativePrefix.length)),
+    );
+
+    try {
+      await unlink(resolveWritableDataPath(...storageSegments, fileName));
+      return true;
+    } catch (error) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        error.code === 'ENOENT'
+      ) {
+        return false;
+      }
+
+      this.logger.warn(
+        `Failed to delete managed upload "${filePath}". ${error instanceof Error ? error.message : 'Unknown filesystem error'}`,
+      );
+      return false;
+    }
   }
 
   private async ensureContactUser(contactUserId: string, userId: string) {
@@ -634,6 +686,261 @@ export class UserService {
     return {
       message: user.isBanned ? 'User unbanned successfully.' : 'User is not banned.',
       user: this.serializeAdminUser(updatedUser),
+    };
+  }
+
+  async removeAdminRoleByAdmin(adminUserId: string, targetUserId: string) {
+    if (adminUserId === targetUserId) {
+      throw new BadRequestException(
+        'Use another admin account to remove this admin role.',
+      );
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatar: true,
+        role: true,
+        emailVerified: true,
+        isApproved: true,
+        approvedAt: true,
+        isBanned: true,
+        bannedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.role !== AppRole.ADMIN) {
+      return {
+        message: 'User is not an admin.',
+        user: this.serializeAdminUser(user),
+      };
+    }
+
+    if (this.isProtectedBootstrapAdmin(user.email)) {
+      throw new BadRequestException(
+        'The configured bootstrap admin cannot be removed while BOOTSTRAP_ADMIN_EMAIL is set.',
+      );
+    }
+
+    const adminCount = await this.prisma.user.count({
+      where: { role: AppRole.ADMIN },
+    });
+
+    if (adminCount <= 1) {
+      throw new BadRequestException('At least one admin account must remain.');
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: targetUserId },
+      data: {
+        role: AppRole.USER,
+        tokenVersion: { increment: 1 },
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatar: true,
+        role: true,
+        emailVerified: true,
+        isApproved: true,
+        approvedAt: true,
+        isBanned: true,
+        bannedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return {
+      message: 'Admin role removed successfully.',
+      user: this.serializeAdminUser(updatedUser),
+    };
+  }
+
+  async deleteUserPermanentlyByAdmin(adminUserId: string, targetUserId: string) {
+    if (adminUserId === targetUserId) {
+      throw new BadRequestException(
+        'You cannot permanently delete your own admin account from this panel.',
+      );
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatar: true,
+        role: true,
+        emailVerified: true,
+        isApproved: true,
+        approvedAt: true,
+        isBanned: true,
+        bannedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (this.isProtectedBootstrapAdmin(user.email)) {
+      throw new BadRequestException(
+        'The configured bootstrap admin cannot be permanently deleted while BOOTSTRAP_ADMIN_EMAIL is set.',
+      );
+    }
+
+    if (user.role === AppRole.ADMIN) {
+      const adminCount = await this.prisma.user.count({
+        where: { role: AppRole.ADMIN },
+      });
+
+      if (adminCount <= 1) {
+        throw new BadRequestException('At least one admin account must remain.');
+      }
+    }
+
+    const groups = await this.prisma.group.findMany({
+      where: { createdById: targetUserId },
+      select: {
+        id: true,
+        avatar: true,
+      },
+    });
+    const createdGroupIds = groups.map((group) => group.id);
+    const messageDeleteFilters: Array<Record<string, unknown>> = [
+      { senderId: targetUserId },
+      { receiverId: targetUserId },
+    ];
+
+    if (createdGroupIds.length) {
+      messageDeleteFilters.push({
+        groupId: { in: createdGroupIds },
+      });
+    }
+
+    const [messages, themePreferences] = await Promise.all([
+      this.prisma.message.findMany({
+        where: {
+          OR: messageDeleteFilters,
+        },
+        select: {
+          fileUrl: true,
+        },
+      }),
+      this.prisma.contactPreference.findMany({
+        where: {
+          OR: [
+            { ownerId: targetUserId },
+            { contactUserId: targetUserId },
+          ],
+        },
+        select: {
+          chatTheme: true,
+        },
+      }),
+    ]);
+
+    const attachmentUrls = Array.from(
+      new Set(
+        messages
+          .map((message) => message.fileUrl)
+          .filter((fileUrl): fileUrl is string => Boolean(fileUrl)),
+      ),
+    );
+    const themePaths = Array.from(
+      new Set(
+        themePreferences
+          .map((preference) => preference.chatTheme)
+          .filter((themePath): themePath is string => Boolean(themePath)),
+      ),
+    );
+    const groupAvatarPaths = Array.from(
+      new Set(groups.map((group) => group.avatar).filter(Boolean)),
+    );
+
+    await this.prisma.$transaction([
+      this.prisma.contactPreference.deleteMany({
+        where: {
+          OR: [
+            { ownerId: targetUserId },
+            { contactUserId: targetUserId },
+          ],
+        },
+      }),
+      this.prisma.chatRequest.deleteMany({
+        where: {
+          OR: [
+            { senderId: targetUserId },
+            { receiverId: targetUserId },
+          ],
+        },
+      }),
+      this.prisma.pushSubscription.deleteMany({
+        where: {
+          userId: targetUserId,
+        },
+      }),
+      this.prisma.message.deleteMany({
+        where: {
+          OR: messageDeleteFilters,
+        },
+      }),
+      this.prisma.user.delete({
+        where: {
+          id: targetUserId,
+        },
+      }),
+    ]);
+
+    for (const attachmentUrl of attachmentUrls) {
+      await this.chatAttachmentStorage
+        .deleteAttachment(attachmentUrl)
+        .catch((error) => {
+          this.logger.warn(
+            `Failed to delete a chat attachment for removed user ${targetUserId}. ${error instanceof Error ? error.message : 'Unknown storage error'}`,
+          );
+        });
+    }
+
+    await this.deleteManagedUpload(
+      user.avatar,
+      '/uploads/avatars/',
+      ['uploads', 'avatars'],
+    );
+
+    for (const groupAvatarPath of groupAvatarPaths) {
+      await this.deleteManagedUpload(
+        groupAvatarPath,
+        '/uploads/groups/',
+        ['uploads', 'groups'],
+      );
+    }
+
+    for (const themePath of themePaths) {
+      await this.deleteManagedUpload(
+        themePath,
+        '/uploads/chat-themes/',
+        ['uploads', 'chat-themes'],
+      );
+    }
+
+    return {
+      success: true,
+      deletedUserId: targetUserId,
+      message: `Account for ${user.email} was permanently deleted.`,
     };
   }
 

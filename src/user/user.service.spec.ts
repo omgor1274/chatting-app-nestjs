@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import * as bcrypt from 'bcrypt';
+import { ChatAttachmentStorageService } from '../chat/chat-attachment-storage.service';
 import { MailService } from '../mail/mail.service';
 import { PushNotificationService } from '../notifications/push-notification.service';
 import { UserService } from './user.service';
@@ -13,6 +14,8 @@ describe('UserService', () => {
       findMany: jest.Mock;
       update: jest.Mock;
       findFirst: jest.Mock;
+      count: jest.Mock;
+      delete: jest.Mock;
     };
     userBlock: {
       findMany: jest.Mock;
@@ -21,10 +24,22 @@ describe('UserService', () => {
       findMany: jest.Mock;
       findUnique: jest.Mock;
       delete: jest.Mock;
+      deleteMany: jest.Mock;
       upsert: jest.Mock;
     };
     chatRequest: {
       findFirst: jest.Mock;
+      deleteMany: jest.Mock;
+    };
+    pushSubscription: {
+      deleteMany: jest.Mock;
+    };
+    message: {
+      findMany: jest.Mock;
+      deleteMany: jest.Mock;
+    };
+    group: {
+      findMany: jest.Mock;
     };
     authToken: {
       deleteMany: jest.Mock;
@@ -32,15 +47,28 @@ describe('UserService', () => {
       findFirst: jest.Mock;
       update: jest.Mock;
     };
+    $transaction: jest.Mock;
   };
+  let attachmentStorage: {
+    deleteAttachment: jest.Mock;
+  };
+  const originalBootstrapAdminName = process.env.BOOTSTRAP_ADMIN_NAME;
+  const originalBootstrapAdminEmail = process.env.BOOTSTRAP_ADMIN_EMAIL;
+  const originalBootstrapAdminPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD;
 
   beforeEach(async () => {
+    delete process.env.BOOTSTRAP_ADMIN_NAME;
+    delete process.env.BOOTSTRAP_ADMIN_EMAIL;
+    delete process.env.BOOTSTRAP_ADMIN_PASSWORD;
+
     prisma = {
       user: {
         findUnique: jest.fn(),
         findMany: jest.fn(),
         update: jest.fn(),
         findFirst: jest.fn(),
+        count: jest.fn(),
+        delete: jest.fn(),
       },
       userBlock: {
         findMany: jest.fn(),
@@ -49,10 +77,22 @@ describe('UserService', () => {
         findMany: jest.fn(),
         findUnique: jest.fn(),
         delete: jest.fn(),
+        deleteMany: jest.fn(),
         upsert: jest.fn(),
       },
       chatRequest: {
         findFirst: jest.fn(),
+        deleteMany: jest.fn(),
+      },
+      pushSubscription: {
+        deleteMany: jest.fn(),
+      },
+      message: {
+        findMany: jest.fn(),
+        deleteMany: jest.fn(),
+      },
+      group: {
+        findMany: jest.fn(),
       },
       authToken: {
         deleteMany: jest.fn(),
@@ -60,6 +100,10 @@ describe('UserService', () => {
         findFirst: jest.fn(),
         update: jest.fn(),
       },
+      $transaction: jest.fn(async (operations) => Promise.all(operations)),
+    };
+    attachmentStorage = {
+      deleteAttachment: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -83,10 +127,34 @@ describe('UserService', () => {
             sendVerificationEmail: jest.fn(),
           },
         },
+        {
+          provide: ChatAttachmentStorageService,
+          useValue: attachmentStorage,
+        },
       ],
     }).compile();
 
     service = module.get<UserService>(UserService);
+  });
+
+  afterAll(() => {
+    if (originalBootstrapAdminName === undefined) {
+      delete process.env.BOOTSTRAP_ADMIN_NAME;
+    } else {
+      process.env.BOOTSTRAP_ADMIN_NAME = originalBootstrapAdminName;
+    }
+
+    if (originalBootstrapAdminEmail === undefined) {
+      delete process.env.BOOTSTRAP_ADMIN_EMAIL;
+    } else {
+      process.env.BOOTSTRAP_ADMIN_EMAIL = originalBootstrapAdminEmail;
+    }
+
+    if (originalBootstrapAdminPassword === undefined) {
+      delete process.env.BOOTSTRAP_ADMIN_PASSWORD;
+    } else {
+      process.env.BOOTSTRAP_ADMIN_PASSWORD = originalBootstrapAdminPassword;
+    }
   });
 
   it('should be defined', () => {
@@ -340,5 +408,102 @@ describe('UserService', () => {
       }),
     );
     expect(result.user.isBanned).toBe(true);
+  });
+
+  it('allows one admin to remove admin access from another admin', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'admin-2',
+      email: 'other-admin@example.com',
+      name: 'Other Admin',
+      avatar: null,
+      role: 'ADMIN',
+      emailVerified: true,
+      isApproved: true,
+      approvedAt: new Date('2026-03-20T00:00:00.000Z'),
+      isBanned: false,
+      bannedAt: null,
+      createdAt: new Date('2026-03-20T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-20T00:00:00.000Z'),
+    });
+    prisma.user.count.mockResolvedValue(2);
+    prisma.user.update.mockResolvedValue({
+      id: 'admin-2',
+      email: 'other-admin@example.com',
+      name: 'Other Admin',
+      avatar: null,
+      role: 'USER',
+      emailVerified: true,
+      isApproved: true,
+      approvedAt: new Date('2026-03-20T00:00:00.000Z'),
+      isBanned: false,
+      bannedAt: null,
+      createdAt: new Date('2026-03-20T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-24T00:00:00.000Z'),
+    });
+
+    const result = await service.removeAdminRoleByAdmin('admin-1', 'admin-2');
+
+    expect(prisma.user.count).toHaveBeenCalledWith({
+      where: { role: 'ADMIN' },
+    });
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'admin-2' },
+        data: expect.objectContaining({
+          role: 'USER',
+          tokenVersion: { increment: 1 },
+        }),
+      }),
+    );
+    expect(result.user.role).toBe('USER');
+  });
+
+  it('permanently deletes a user account and cleans stored chat attachments', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-2',
+      email: 'user2@example.com',
+      name: 'User Two',
+      avatar: null,
+      role: 'USER',
+      emailVerified: true,
+      isApproved: true,
+      approvedAt: new Date('2026-03-20T00:00:00.000Z'),
+      isBanned: false,
+      bannedAt: null,
+      createdAt: new Date('2026-03-20T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-20T00:00:00.000Z'),
+    });
+    prisma.group.findMany.mockResolvedValue([]);
+    prisma.message.findMany.mockResolvedValue([
+      { fileUrl: '/uploads/chat/file-1.png' },
+      { fileUrl: '/uploads/chat/file-2.pdf' },
+    ]);
+    prisma.contactPreference.findMany.mockResolvedValue([
+      { chatTheme: null },
+    ]);
+    prisma.contactPreference.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.chatRequest.deleteMany.mockResolvedValue({ count: 0 });
+    prisma.pushSubscription.deleteMany.mockResolvedValue({ count: 0 });
+    prisma.message.deleteMany.mockResolvedValue({ count: 2 });
+    prisma.user.delete.mockResolvedValue({ id: 'user-2' });
+
+    const result = await service.deleteUserPermanentlyByAdmin('admin-1', 'user-2');
+
+    expect(prisma.$transaction).toHaveBeenCalled();
+    expect(prisma.user.delete).toHaveBeenCalledWith({
+      where: { id: 'user-2' },
+    });
+    expect(attachmentStorage.deleteAttachment).toHaveBeenCalledWith(
+      '/uploads/chat/file-1.png',
+    );
+    expect(attachmentStorage.deleteAttachment).toHaveBeenCalledWith(
+      '/uploads/chat/file-2.pdf',
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        success: true,
+        deletedUserId: 'user-2',
+      }),
+    );
   });
 });

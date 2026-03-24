@@ -28,6 +28,6 @@ import { ChatService } from './chat.service';
     ChatAttachmentStorageService,
   ],
   controllers: [ChatController],
-  exports: [ChatGateway],
+  exports: [ChatGateway, ChatAttachmentStorageService],
 })
 export class ChatModule {}

@@ -1444,7 +1444,7 @@ function clearScopedRuntimeCaches() {
 }
 
 function prefetchSettingsShell() {
-  const hrefs = ['/settings', '/public/settings.js?v=20260324-admin2'];
+  const hrefs = ['/settings', '/public/settings.js?v=20260324-admin3'];
 
   hrefs.forEach((href) => {
     if (document.head.querySelector(`link[rel="prefetch"][href="${href}"]`)) {

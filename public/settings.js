@@ -166,10 +166,10 @@ function renderAdminUsers(payload = adminUsersPayload) {
             : 'bg-emerald-100 text-emerald-700';
       const isAdmin = user.role === 'ADMIN';
       const isCurrentAdmin = user.id === currentProfileId;
-      const actionButtons = isAdmin
-        ? ''
-        : `
-            ${!user.isApproved ? `
+      const isProtectedBootstrapAdmin = Boolean(user.isProtectedBootstrapAdmin);
+      const actionButtons = [
+        !isAdmin && !user.isApproved
+          ? `
               <button
                 type="button"
                 data-admin-action="approve"
@@ -178,27 +178,66 @@ function renderAdminUsers(payload = adminUsersPayload) {
               >
                 Approve
               </button>
-            ` : ''}
-            ${user.isBanned ? `
+            `
+          : '',
+        !isAdmin
+          ? user.isBanned
+            ? `
+                <button
+                  type="button"
+                  data-admin-action="unban"
+                  data-user-id="${user.id}"
+                  class="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50"
+                >
+                  Unban
+                </button>
+              `
+            : `
+                <button
+                  type="button"
+                  data-admin-action="ban"
+                  data-user-id="${user.id}"
+                  class="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100"
+                >
+                  Ban
+                </button>
+              `
+          : '',
+        isAdmin && !isCurrentAdmin && !isProtectedBootstrapAdmin
+          ? `
               <button
                 type="button"
-                data-admin-action="unban"
+                data-admin-action="remove-admin"
                 data-user-id="${user.id}"
-                class="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50"
+                class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 transition hover:bg-amber-100"
               >
-                Unban
+                Remove Admin
               </button>
-            ` : `
+            `
+          : '',
+        !isCurrentAdmin && !isProtectedBootstrapAdmin
+          ? `
               <button
                 type="button"
-                data-admin-action="ban"
+                data-admin-action="delete-user"
                 data-user-id="${user.id}"
-                class="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100"
+                class="rounded-xl border border-slate-300 bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
               >
-                Ban
+                Delete Account
               </button>
-            `}
-          `;
+            `
+          : '',
+      ]
+        .filter(Boolean)
+        .join('');
+
+      const adminNote = isProtectedBootstrapAdmin
+        ? 'This is the configured bootstrap admin. Update the bootstrap admin env vars before removing or deleting this account.'
+        : isCurrentAdmin
+          ? 'Use another admin account to change this admin role or permanently delete this account.'
+          : isAdmin
+            ? 'Admins cannot be banned. You can remove admin access or permanently delete this account.'
+            : '';
 
       return `
         <div class="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
@@ -209,6 +248,7 @@ function renderAdminUsers(payload = adminUsersPayload) {
                 <span class="rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone}">${escapeHtml(user.status)}</span>
                 <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">${escapeHtml(user.role)}</span>
                 ${isCurrentAdmin ? '<span class="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">You</span>' : ''}
+                ${isProtectedBootstrapAdmin ? '<span class="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-700">Bootstrap Admin</span>' : ''}
               </div>
               <p class="truncate text-sm text-slate-500">${escapeHtml(user.email || '')}</p>
               <p class="truncate text-xs text-slate-400">User ID: ${escapeHtml(user.id || '')}</p>
@@ -223,7 +263,7 @@ function renderAdminUsers(payload = adminUsersPayload) {
               ${actionButtons}
             </div>
           </div>
-          ${isAdmin ? '<p class="mt-3 text-xs text-slate-500">Admin accounts stay protected from bans in the panel.</p>' : ''}
+          ${adminNote ? `<p class="mt-3 text-xs text-slate-500">${escapeHtml(adminNote)}</p>` : ''}
         </div>
       `;
     })
@@ -459,6 +499,54 @@ async function unbanAdminUser(userId) {
   }
 
   showFeedback(data.message || 'User unbanned.', 'success');
+  await loadAdminUsers();
+}
+
+async function removeAdminRoleFromUser(userId) {
+  if (!window.confirm('Remove admin access from this account?')) {
+    return;
+  }
+
+  const res = await api(`/users/admin/users/${encodeURIComponent(userId)}/remove-admin`, {
+    method: 'POST',
+  });
+  const data = await readJsonResponse(
+    res,
+    {},
+    'Failed to remove the admin role.',
+  );
+
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to remove the admin role');
+  }
+
+  showFeedback(data.message || 'Admin role removed.', 'success');
+  await loadAdminUsers();
+}
+
+async function deleteAdminUserPermanently(userId) {
+  if (
+    !window.confirm(
+      'Delete this account permanently? This removes the user and related stored data and cannot be undone.',
+    )
+  ) {
+    return;
+  }
+
+  const res = await api(`/users/admin/users/${encodeURIComponent(userId)}/delete`, {
+    method: 'POST',
+  });
+  const data = await readJsonResponse(
+    res,
+    {},
+    'Failed to permanently delete the account.',
+  );
+
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to permanently delete the account');
+  }
+
+  showFeedback(data.message || 'Account deleted permanently.', 'success');
   await loadAdminUsers();
 }
 
@@ -830,6 +918,16 @@ async function boot() {
 
       if (button.dataset.adminAction === 'unban') {
         await unbanAdminUser(button.dataset.userId);
+        return;
+      }
+
+      if (button.dataset.adminAction === 'remove-admin') {
+        await removeAdminRoleFromUser(button.dataset.userId);
+        return;
+      }
+
+      if (button.dataset.adminAction === 'delete-user') {
+        await deleteAdminUserPermanently(button.dataset.userId);
       }
     } catch (error) {
       console.error(error);
