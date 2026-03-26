@@ -564,7 +564,7 @@ export class ChatService {
       },
     });
     const groupIds = groupMemberships.map((item) => item.groupId);
-    const [directMessages, acceptedRequests, preferences, groupMessages] =
+    const [directMessages, directRequests, preferences, groupMessages] =
       await Promise.all([
         this.prisma.message.findMany({
           where: {
@@ -577,13 +577,16 @@ export class ChatService {
         }),
         this.prisma.chatRequest.findMany({
           where: {
-            status: 'ACCEPTED',
+            status: {
+              in: ['ACCEPTED', 'PENDING'],
+            },
             OR: [{ senderId: userId }, { receiverId: userId }],
           },
           orderBy: { createdAt: 'desc' },
           select: {
             senderId: true,
             receiverId: true,
+            status: true,
             createdAt: true,
           },
         }),
@@ -617,21 +620,34 @@ export class ChatService {
         latestDirectByPeer.set(peerId, message);
     }
     const latestAcceptedRequestByPeer = new Map();
-    for (const request of acceptedRequests) {
+    const latestPendingRequestByPeer = new Map();
+    for (const request of directRequests) {
       const peerId =
         request.senderId === userId ? request.receiverId : request.senderId;
+      if (!peerId || hiddenDirectUserIds.has(peerId)) {
+        continue;
+      }
+
       if (
-        peerId &&
-        !hiddenDirectUserIds.has(peerId) &&
+        request.status === 'ACCEPTED' &&
         !latestAcceptedRequestByPeer.has(peerId)
       ) {
         latestAcceptedRequestByPeer.set(peerId, request);
+      }
+
+      if (
+        request.status === 'PENDING' &&
+        !latestAcceptedRequestByPeer.has(peerId) &&
+        !latestPendingRequestByPeer.has(peerId)
+      ) {
+        latestPendingRequestByPeer.set(peerId, request);
       }
     }
     const visibleDirectPeerIds = Array.from(
       new Set([
         ...Array.from(latestDirectByPeer.keys()),
         ...Array.from(latestAcceptedRequestByPeer.keys()),
+        ...Array.from(latestPendingRequestByPeer.keys()),
       ]),
     ).filter((peerId) => Boolean(peerId) && !hiddenDirectUserIds.has(peerId));
     const directUsers = visibleDirectPeerIds.length
@@ -649,7 +665,13 @@ export class ChatService {
     const directEntries = directUsers.map((user) => {
       const latest = latestDirectByPeer.get(user.id);
       const acceptedRequest = latestAcceptedRequestByPeer.get(user.id);
+      const pendingRequest = latestPendingRequestByPeer.get(user.id);
       const preference = preferenceByUserId.get(user.id);
+      const pendingPreview = pendingRequest
+        ? pendingRequest.senderId === userId
+          ? 'Chat request sent'
+          : 'Sent you a chat request'
+        : null;
       return {
         id: user.id,
         chatType: 'direct',
@@ -661,9 +683,10 @@ export class ChatService {
         chatTheme: preference?.chatTheme ?? null,
         lastMessagePreview: latest
           ? this.previewForMessage(latest)
-          : 'Chat request accepted',
+          : pendingPreview ?? 'Chat request accepted',
         lastMessageAt:
           latest?.createdAt?.toISOString() ??
+          pendingRequest?.createdAt?.toISOString() ??
           acceptedRequest?.createdAt?.toISOString() ??
           null,
         lastMessageType: latest?.messageType ?? null,

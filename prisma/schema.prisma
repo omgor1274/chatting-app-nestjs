@@ -31,6 +31,8 @@ model User {
   privateKeyBackupCiphertext String?
   privateKeyBackupIv String?
   publicKeyUpdatedAt DateTime?
+  deletionRequestedAt DateTime?
+  deletionScheduledFor DateTime?
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @default(now()) @updatedAt
   authTokens         AuthToken[]
@@ -41,6 +43,11 @@ model User {
   hiddenMessages     MessageHidden[]
   blockedUsers       UserBlock[] @relation("UserBlocker")
   blockedByUsers     UserBlock[] @relation("UserBlocked")
+  filedReports       UserReport[] @relation("UserReportReporter")
+  reportsAgainst     UserReport[] @relation("UserReportTargetUser")
+  handledReports     UserReport[] @relation("UserReportHandler")
+
+  @@index([deletionScheduledFor])
 }
 
 enum AppRole {
@@ -77,6 +84,7 @@ model Message {
   createdAt    DateTime    @default(now())
   group        Group?      @relation(fields: [groupId], references: [id], onDelete: Cascade)
   hiddenForUsers MessageHidden[]
+  reports      UserReport[]
 
   @@index([senderId, receiverId, createdAt])
   @@index([groupId, createdAt])
@@ -141,6 +149,7 @@ model Group {
   members     GroupMember[]
   joinRequests GroupJoinRequest[]
   messages    Message[]
+  reports     UserReport[]
 }
 
 model GroupMember {
@@ -201,6 +210,48 @@ enum AuthTokenType {
   VERIFY_EMAIL
   VERIFY_PENDING_EMAIL
   RESET_PASSWORD
+}
+
+enum UserReportReason {
+  SPAM
+  ABUSE
+  HARASSMENT
+  SCAM
+  IMPERSONATION
+  OTHER
+}
+
+enum UserReportStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+model UserReport {
+  id            String           @id @default(uuid())
+  reporterId    String
+  targetUserId  String?
+  groupId       String?
+  messageId     String?
+  reason        UserReportReason
+  details       String?
+  status        UserReportStatus @default(OPEN)
+  adminNote     String?
+  handledById   String?
+  handledAt     DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @default(now()) @updatedAt
+  reporter      User             @relation("UserReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  targetUser    User?            @relation("UserReportTargetUser", fields: [targetUserId], references: [id], onDelete: SetNull)
+  group         Group?           @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  message       Message?         @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  handledBy     User?            @relation("UserReportHandler", fields: [handledById], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([reporterId, createdAt])
+  @@index([targetUserId, status])
+  @@index([groupId, status])
 }
 
 model AuthToken {

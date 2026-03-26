@@ -5,6 +5,7 @@ import { ChatModule } from '../chat/chat.module';
 import { MailModule } from '../mail/mail.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { AccountDeletionService } from './account-deletion.service';
 import { UserController } from './user.controller';
 import { UserService } from './user.service';
 
@@ -20,6 +21,6 @@ import { UserService } from './user.service';
     }),
   ],
   controllers: [UserController],
-  providers: [UserService, AdminGuard],
+  providers: [UserService, AccountDeletionService, AdminGuard],
 })
 export class UserModule {}

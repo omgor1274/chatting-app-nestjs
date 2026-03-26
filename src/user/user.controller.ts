@@ -20,11 +20,13 @@ import { ChatGateway } from '../chat/chat.gateway';
 import { createUploadDestination } from '../common/upload-storage';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ContactNicknameDto } from './dto/contact-nickname.dto';
+import { CreateReportDto } from './dto/create-report.dto';
 import {
   NotificationSubscriptionDto,
   NotificationUnsubscribeDto,
 } from './dto/notification-subscription.dto';
 import { PublicKeyDto } from './dto/public-key.dto';
+import { ReviewReportDto } from './dto/review-report.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
 import { UserIdDto } from './dto/user-id.dto';
@@ -72,6 +74,18 @@ export class UserController {
   @Post('me')
   updateProfile(@Req() req, @Body() body: UpdateProfileDto) {
     return this.userService.updateProfile(req.user.userId, body);
+  }
+
+  @UseGuards(JwtGuard)
+  @Post('account/delete/request')
+  requestAccountDeletion(@Req() req) {
+    return this.userService.requestAccountDeletion(req.user.userId);
+  }
+
+  @UseGuards(JwtGuard)
+  @Post('account/delete/cancel')
+  cancelAccountDeletion(@Req() req) {
+    return this.userService.cancelAccountDeletion(req.user.userId);
   }
 
   @UseGuards(JwtGuard)
@@ -137,10 +151,45 @@ export class UserController {
     return this.userService.deleteUserPermanentlyByAdmin(req.user.userId, userId);
   }
 
+  @UseGuards(JwtGuard, AdminGuard)
+  @Post('admin/users/bulk')
+  bulkUpdateUsersByAdmin(
+    @Req() req,
+    @Body() body: { action: string; userIds: string[] },
+  ) {
+    return this.userService.bulkUpdateUsersByAdmin(req.user.userId, body);
+  }
+
+  @UseGuards(JwtGuard, AdminGuard)
+  @Get('admin/reports')
+  getAdminReportOverview() {
+    return this.userService.getAdminReportOverview();
+  }
+
+  @UseGuards(JwtGuard, AdminGuard)
+  @Post('admin/reports/:reportId/review')
+  reviewReportByAdmin(
+    @Req() req,
+    @Param('reportId') reportId: string,
+    @Body() body: ReviewReportDto,
+  ) {
+    return this.userService.reviewReportByAdmin(
+      req.user.userId,
+      reportId,
+      body,
+    );
+  }
+
   @UseGuards(JwtGuard)
   @Get()
   searchUsers(@Req() req, @Query('q') query?: string) {
     return this.userService.searchUsers(req.user.userId, query);
+  }
+
+  @UseGuards(JwtGuard)
+  @Post('reports')
+  createReport(@Req() req, @Body() body: CreateReportDto) {
+    return this.userService.createReport(req.user.userId, body);
   }
 
   @UseGuards(JwtGuard)

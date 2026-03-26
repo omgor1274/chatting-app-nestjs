@@ -5,7 +5,13 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { AppRole, AuthTokenType } from '@prisma/client';
+import {
+  AppRole,
+  AuthTokenType,
+  MessageType,
+  UserReportReason,
+  UserReportStatus,
+} from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomInt } from 'crypto';
 import { unlink } from 'fs/promises';
@@ -18,6 +24,8 @@ import { PushNotificationService } from '../notifications/push-notification.serv
 import { PrismaService } from '../prisma/prisma.service';
 
 const EMAIL_OTP_TTL_MS = 10 * 60 * 1000;
+const ACCOUNT_DELETION_GRACE_DAYS = 7;
+const RETENTION_DEFAULT_DAYS = 7;
 type VerificationTokenType = 'VERIFY_EMAIL' | 'VERIFY_PENDING_EMAIL';
 const CHAT_THEME_PRESET_KEYS = new Set([
   'aurora-grid',
@@ -99,6 +107,8 @@ export class UserService {
     privateKeyBackupCiphertext?: string | null;
     privateKeyBackupIv?: string | null;
     publicKeyUpdatedAt?: Date | null;
+    deletionRequestedAt?: Date | null;
+    deletionScheduledFor?: Date | null;
     createdAt?: Date;
     updatedAt?: Date;
   }) {
@@ -121,6 +131,9 @@ export class UserService {
       privateKeyBackupCiphertext: user.privateKeyBackupCiphertext ?? null,
       privateKeyBackupIv: user.privateKeyBackupIv ?? null,
       publicKeyUpdatedAt: user.publicKeyUpdatedAt ?? null,
+      deletionRequestedAt: user.deletionRequestedAt ?? null,
+      deletionScheduledFor: user.deletionScheduledFor ?? null,
+      isScheduledForDeletion: Boolean(user.deletionScheduledFor),
     };
   }
 
@@ -135,9 +148,12 @@ export class UserService {
     approvedAt?: Date | null;
     isBanned: boolean;
     bannedAt?: Date | null;
+    deletionRequestedAt?: Date | null;
+    deletionScheduledFor?: Date | null;
     createdAt: Date;
     updatedAt: Date;
   }) {
+    const isScheduledForDeletion = Boolean(user.deletionScheduledFor);
     return {
       id: user.id,
       email: user.email,
@@ -149,15 +165,177 @@ export class UserService {
       approvedAt: user.approvedAt ?? null,
       isBanned: user.isBanned,
       bannedAt: user.bannedAt ?? null,
+      deletionRequestedAt: user.deletionRequestedAt ?? null,
+      deletionScheduledFor: user.deletionScheduledFor ?? null,
+      isScheduledForDeletion,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
       isProtectedBootstrapAdmin: this.isProtectedBootstrapAdmin(user.email),
-      status: user.isBanned
+      status: isScheduledForDeletion
+        ? 'scheduled-deletion'
+        : user.isBanned
         ? 'banned'
         : user.isApproved
           ? 'active'
           : 'pending',
     };
+  }
+
+  private previewReportMessage(message?: {
+    deletedForEveryoneAt?: Date | null;
+    messageType?: MessageType | null;
+    fileName?: string | null;
+    fileMimeType?: string | null;
+    content?: string | null;
+    ciphertext?: string | null;
+  } | null) {
+    if (!message) {
+      return null;
+    }
+
+    if (message.deletedForEveryoneAt) {
+      return 'Message deleted';
+    }
+
+    if (message.messageType === MessageType.IMAGE) {
+      return 'Image message';
+    }
+
+    if (message.messageType === MessageType.AUDIO) {
+      return 'Voice message';
+    }
+
+    if (
+      message.messageType === MessageType.DOCUMENT ||
+      message.fileMimeType?.startsWith('video/')
+    ) {
+      return message.fileMimeType?.startsWith('video/')
+        ? 'Video message'
+        : message.fileName
+          ? `File: ${message.fileName}`
+          : 'Document message';
+    }
+
+    const rawText = message.content?.trim() || message.ciphertext?.trim() || '';
+    if (!rawText) {
+      return 'Message';
+    }
+
+    return rawText.length > 120 ? `${rawText.slice(0, 117)}...` : rawText;
+  }
+
+  private serializeAdminReport(report: {
+    id: string;
+    reason: UserReportReason;
+    details?: string | null;
+    status: UserReportStatus;
+    adminNote?: string | null;
+    handledAt?: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+    reporter: {
+      id: string;
+      name: string;
+      email: string;
+      avatar?: string | null;
+    };
+    targetUser?: {
+      id: string;
+      name: string;
+      email: string;
+      avatar?: string | null;
+      role: AppRole;
+      isBanned: boolean;
+    } | null;
+    group?: {
+      id: string;
+      name: string;
+      avatar?: string | null;
+    } | null;
+    message?: {
+      id: string;
+      content?: string | null;
+      ciphertext?: string | null;
+      messageType?: MessageType | null;
+      fileName?: string | null;
+      fileMimeType?: string | null;
+      deletedForEveryoneAt?: Date | null;
+      createdAt: Date;
+    } | null;
+    handledBy?: {
+      id: string;
+      name: string;
+      email: string;
+    } | null;
+  }) {
+    return {
+      id: report.id,
+      reason: report.reason,
+      details: report.details ?? null,
+      status: report.status,
+      adminNote: report.adminNote ?? null,
+      handledAt: report.handledAt ?? null,
+      createdAt: report.createdAt,
+      updatedAt: report.updatedAt,
+      reporter: {
+        id: report.reporter.id,
+        name: report.reporter.name,
+        email: report.reporter.email,
+        avatar: report.reporter.avatar ?? null,
+      },
+      targetUser: report.targetUser
+        ? {
+            id: report.targetUser.id,
+            name: report.targetUser.name,
+            email: report.targetUser.email,
+            avatar: report.targetUser.avatar ?? null,
+            role: report.targetUser.role,
+            isBanned: report.targetUser.isBanned,
+          }
+        : null,
+      group: report.group
+        ? {
+            id: report.group.id,
+            name: report.group.name,
+            avatar: report.group.avatar ?? null,
+          }
+        : null,
+      message: report.message
+        ? {
+            id: report.message.id,
+            preview: this.previewReportMessage(report.message),
+            createdAt: report.message.createdAt,
+          }
+        : null,
+      handledBy: report.handledBy
+        ? {
+            id: report.handledBy.id,
+            name: report.handledBy.name,
+            email: report.handledBy.email,
+          }
+        : null,
+    };
+  }
+
+  private getAccountDeletionDeadline(from = new Date()) {
+    return new Date(
+      from.getTime() + ACCOUNT_DELETION_GRACE_DAYS * 24 * 60 * 60 * 1000,
+    );
+  }
+
+  private getRetentionDays() {
+    const value = Number(process.env.CHAT_RETENTION_DAYS);
+    if (Number.isFinite(value) && value > 0) {
+      return Math.max(1, Math.trunc(value));
+    }
+
+    return RETENTION_DEFAULT_DAYS;
+  }
+
+  private getRetentionCutoff() {
+    return new Date(
+      Date.now() - this.getRetentionDays() * 24 * 60 * 60 * 1000,
+    );
   }
 
   private isProtectedBootstrapAdmin(email?: string | null) {
@@ -167,6 +345,176 @@ export class UserService {
     }
 
     return this.normalizeEmail(email) === bootstrapAdmin.email;
+  }
+
+  private async ensureSelfDeleteAllowed(user: {
+    id: string;
+    email: string;
+    role: AppRole;
+  }) {
+    if (this.isProtectedBootstrapAdmin(user.email)) {
+      throw new BadRequestException(
+        'The configured bootstrap admin cannot be scheduled for deletion while BOOTSTRAP_ADMIN_EMAIL is set.',
+      );
+    }
+
+    if (user.role !== AppRole.ADMIN) {
+      return;
+    }
+
+    const otherActiveAdminCount = await this.prisma.user.count({
+      where: {
+        role: AppRole.ADMIN,
+        id: { not: user.id },
+        deletionScheduledFor: null,
+      },
+    });
+
+    if (otherActiveAdminCount <= 0) {
+      throw new BadRequestException(
+        'At least one other active admin account must remain before deleting this account.',
+      );
+    }
+  }
+
+  private async deleteUserPermanentlyInternal(user: {
+    id: string;
+    email: string;
+    name: string;
+    avatar?: string | null;
+    role: AppRole;
+  }) {
+    const targetUserId = user.id;
+    const groups = await this.prisma.group.findMany({
+      where: { createdById: targetUserId },
+      select: {
+        id: true,
+        avatar: true,
+      },
+    });
+    const createdGroupIds = groups.map((group) => group.id);
+    const messageDeleteFilters: Array<Record<string, unknown>> = [
+      { senderId: targetUserId },
+      { receiverId: targetUserId },
+    ];
+
+    if (createdGroupIds.length) {
+      messageDeleteFilters.push({
+        groupId: { in: createdGroupIds },
+      });
+    }
+
+    const [messages, themePreferences] = await Promise.all([
+      this.prisma.message.findMany({
+        where: {
+          OR: messageDeleteFilters,
+        },
+        select: {
+          fileUrl: true,
+        },
+      }),
+      this.prisma.contactPreference.findMany({
+        where: {
+          OR: [
+            { ownerId: targetUserId },
+            { contactUserId: targetUserId },
+          ],
+        },
+        select: {
+          chatTheme: true,
+        },
+      }),
+    ]);
+
+    const attachmentUrls = Array.from(
+      new Set(
+        messages
+          .map((message) => message.fileUrl)
+          .filter((fileUrl): fileUrl is string => Boolean(fileUrl)),
+      ),
+    );
+    const themePaths = Array.from(
+      new Set(
+        themePreferences
+          .map((preference) => preference.chatTheme)
+          .filter((themePath): themePath is string => Boolean(themePath)),
+      ),
+    );
+    const groupAvatarPaths = Array.from(
+      new Set(groups.map((group) => group.avatar).filter(Boolean)),
+    );
+
+    await this.prisma.$transaction([
+      this.prisma.contactPreference.deleteMany({
+        where: {
+          OR: [
+            { ownerId: targetUserId },
+            { contactUserId: targetUserId },
+          ],
+        },
+      }),
+      this.prisma.chatRequest.deleteMany({
+        where: {
+          OR: [
+            { senderId: targetUserId },
+            { receiverId: targetUserId },
+          ],
+        },
+      }),
+      this.prisma.pushSubscription.deleteMany({
+        where: {
+          userId: targetUserId,
+        },
+      }),
+      this.prisma.message.deleteMany({
+        where: {
+          OR: messageDeleteFilters,
+        },
+      }),
+      this.prisma.user.delete({
+        where: {
+          id: targetUserId,
+        },
+      }),
+    ]);
+
+    for (const attachmentUrl of attachmentUrls) {
+      await this.chatAttachmentStorage
+        .deleteAttachment(attachmentUrl)
+        .catch((error) => {
+          this.logger.warn(
+            `Failed to delete a chat attachment for removed user ${targetUserId}. ${error instanceof Error ? error.message : 'Unknown storage error'}`,
+          );
+        });
+    }
+
+    await this.deleteManagedUpload(
+      user.avatar,
+      '/uploads/avatars/',
+      ['uploads', 'avatars'],
+    );
+
+    for (const groupAvatarPath of groupAvatarPaths) {
+      await this.deleteManagedUpload(
+        groupAvatarPath,
+        '/uploads/groups/',
+        ['uploads', 'groups'],
+      );
+    }
+
+    for (const themePath of themePaths) {
+      await this.deleteManagedUpload(
+        themePath,
+        '/uploads/chat-themes/',
+        ['uploads', 'chat-themes'],
+      );
+    }
+
+    return {
+      success: true,
+      deletedUserId: targetUserId,
+      message: `Account for ${user.email} was permanently deleted.`,
+    };
   }
 
   private async deleteManagedUpload(
@@ -460,6 +808,8 @@ export class UserService {
         privateKeyBackupCiphertext: true,
         privateKeyBackupIv: true,
         publicKeyUpdatedAt: true,
+        deletionRequestedAt: true,
+        deletionScheduledFor: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -473,23 +823,63 @@ export class UserService {
   }
 
   async getAdminUserOverview() {
-    const users = await this.prisma.user.findMany({
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        avatar: true,
-        role: true,
-        emailVerified: true,
-        isApproved: true,
-        approvedAt: true,
-        isBanned: true,
-        bannedAt: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const retentionCutoff = this.getRetentionCutoff();
+    const [
+      users,
+      acceptedDirectChats,
+      groupCount,
+      uploadsCount,
+      storageUsage,
+      expiredMessagesPendingCleanup,
+      expiredThemesPendingCleanup,
+    ] = await Promise.all([
+      this.prisma.user.findMany({
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          avatar: true,
+          role: true,
+          emailVerified: true,
+          isApproved: true,
+          approvedAt: true,
+          isBanned: true,
+          bannedAt: true,
+          deletionRequestedAt: true,
+          deletionScheduledFor: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.chatRequest.count({
+        where: {
+          status: 'ACCEPTED',
+        },
+      }),
+      this.prisma.group.count(),
+      this.prisma.message.count({
+        where: {
+          fileUrl: { not: null },
+        },
+      }),
+      this.prisma.message.aggregate({
+        _sum: {
+          fileSize: true,
+        },
+      }),
+      this.prisma.message.count({
+        where: {
+          createdAt: { lt: retentionCutoff },
+        },
+      }),
+      this.prisma.contactPreference.count({
+        where: {
+          updatedAt: { lt: retentionCutoff },
+          chatTheme: { startsWith: '/uploads/chat-themes/' },
+        },
+      }),
+    ]);
 
     const serializedUsers = users
       .map((user) => this.serializeAdminUser(user))
@@ -505,6 +895,10 @@ export class UserService {
         return right.createdAt.getTime() - left.createdAt.getTime();
       });
 
+    const scheduledDeletionUsers = serializedUsers.filter(
+      (user) => user.isScheduledForDeletion,
+    ).length;
+
     return {
       summary: {
         totalUsers: serializedUsers.length,
@@ -516,6 +910,13 @@ export class UserService {
           .length,
         bannedUsers: serializedUsers.filter((user) => user.status === 'banned')
           .length,
+        scheduledDeletionUsers,
+        activeChats: acceptedDirectChats + groupCount,
+        uploadsCount,
+        storageUsageBytes: Number(storageUsage._sum.fileSize ?? 0n),
+        retentionWindowDays: this.getRetentionDays(),
+        expiredMessagesPendingCleanup,
+        expiredThemesPendingCleanup,
       },
       users: serializedUsers,
     };
@@ -812,135 +1213,282 @@ export class UserService {
       }
     }
 
-    const groups = await this.prisma.group.findMany({
-      where: { createdById: targetUserId },
+    return this.deleteUserPermanentlyInternal(user);
+  }
+
+  async bulkUpdateUsersByAdmin(
+    adminUserId: string,
+    data: { action: string; userIds: string[] },
+  ) {
+    const action = String(data.action || '').trim().toLowerCase();
+    const userIds = Array.from(
+      new Set((Array.isArray(data.userIds) ? data.userIds : []).filter(Boolean)),
+    );
+
+    if (!['approve', 'ban', 'unban'].includes(action)) {
+      throw new BadRequestException('Unsupported bulk admin action');
+    }
+    if (!userIds.length) {
+      throw new BadRequestException('Select at least one user first');
+    }
+
+    const results: Array<{
+      userId: string;
+      ok: boolean;
+      message: string;
+    }> = [];
+
+    for (const userId of userIds) {
+      try {
+        if (action === 'approve') {
+          const result = await this.approveUserByAdmin(userId);
+          results.push({
+            userId,
+            ok: true,
+            message: result.message,
+          });
+          continue;
+        }
+
+        if (action === 'ban') {
+          const result = await this.banUserByAdmin(adminUserId, userId);
+          results.push({
+            userId,
+            ok: true,
+            message: result.message,
+          });
+          continue;
+        }
+
+        const result = await this.unbanUserByAdmin(userId);
+        results.push({
+          userId,
+          ok: true,
+          message: result.message,
+        });
+      } catch (error) {
+        results.push({
+          userId,
+          ok: false,
+          message: error instanceof Error ? error.message : 'Action failed',
+        });
+      }
+    }
+
+    const successCount = results.filter((result) => result.ok).length;
+    const failureCount = results.length - successCount;
+
+    return {
+      action,
+      requestedCount: userIds.length,
+      successCount,
+      failureCount,
+      results,
+      message:
+        failureCount > 0
+          ? `${successCount} user${successCount === 1 ? '' : 's'} updated, ${failureCount} failed.`
+          : `${successCount} user${successCount === 1 ? '' : 's'} updated successfully.`,
+    };
+  }
+
+  async requestAccountDeletion(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
       select: {
         id: true,
+        email: true,
+        name: true,
         avatar: true,
+        role: true,
+        emailVerified: true,
+        isApproved: true,
+        approvedAt: true,
+        isBanned: true,
+        bannedAt: true,
+        deletionRequestedAt: true,
+        deletionScheduledFor: true,
+        createdAt: true,
+        updatedAt: true,
       },
     });
-    const createdGroupIds = groups.map((group) => group.id);
-    const messageDeleteFilters: Array<Record<string, unknown>> = [
-      { senderId: targetUserId },
-      { receiverId: targetUserId },
-    ];
 
-    if (createdGroupIds.length) {
-      messageDeleteFilters.push({
-        groupId: { in: createdGroupIds },
-      });
+    if (!user) {
+      throw new NotFoundException('User not found');
     }
 
-    const [messages, themePreferences] = await Promise.all([
-      this.prisma.message.findMany({
-        where: {
-          OR: messageDeleteFilters,
-        },
-        select: {
-          fileUrl: true,
-        },
-      }),
-      this.prisma.contactPreference.findMany({
-        where: {
-          OR: [
-            { ownerId: targetUserId },
-            { contactUserId: targetUserId },
-          ],
-        },
-        select: {
-          chatTheme: true,
-        },
-      }),
-    ]);
+    await this.ensureSelfDeleteAllowed(user);
 
-    const attachmentUrls = Array.from(
-      new Set(
-        messages
-          .map((message) => message.fileUrl)
-          .filter((fileUrl): fileUrl is string => Boolean(fileUrl)),
-      ),
-    );
-    const themePaths = Array.from(
-      new Set(
-        themePreferences
-          .map((preference) => preference.chatTheme)
-          .filter((themePath): themePath is string => Boolean(themePath)),
-      ),
-    );
-    const groupAvatarPaths = Array.from(
-      new Set(groups.map((group) => group.avatar).filter(Boolean)),
-    );
-
-    await this.prisma.$transaction([
-      this.prisma.contactPreference.deleteMany({
-        where: {
-          OR: [
-            { ownerId: targetUserId },
-            { contactUserId: targetUserId },
-          ],
-        },
-      }),
-      this.prisma.chatRequest.deleteMany({
-        where: {
-          OR: [
-            { senderId: targetUserId },
-            { receiverId: targetUserId },
-          ],
-        },
-      }),
-      this.prisma.pushSubscription.deleteMany({
-        where: {
-          userId: targetUserId,
-        },
-      }),
-      this.prisma.message.deleteMany({
-        where: {
-          OR: messageDeleteFilters,
-        },
-      }),
-      this.prisma.user.delete({
-        where: {
-          id: targetUserId,
-        },
-      }),
-    ]);
-
-    for (const attachmentUrl of attachmentUrls) {
-      await this.chatAttachmentStorage
-        .deleteAttachment(attachmentUrl)
-        .catch((error) => {
-          this.logger.warn(
-            `Failed to delete a chat attachment for removed user ${targetUserId}. ${error instanceof Error ? error.message : 'Unknown storage error'}`,
-          );
-        });
+    if (user.deletionScheduledFor) {
+      return {
+        ...this.serializeProfile(user),
+        message: `Account deletion is already scheduled for ${user.deletionScheduledFor.toLocaleString()}.`,
+      };
     }
 
-    await this.deleteManagedUpload(
-      user.avatar,
-      '/uploads/avatars/',
-      ['uploads', 'avatars'],
-    );
+    const deletionRequestedAt = new Date();
+    const deletionScheduledFor =
+      this.getAccountDeletionDeadline(deletionRequestedAt);
 
-    for (const groupAvatarPath of groupAvatarPaths) {
-      await this.deleteManagedUpload(
-        groupAvatarPath,
-        '/uploads/groups/',
-        ['uploads', 'groups'],
-      );
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        deletionRequestedAt,
+        deletionScheduledFor,
+        tokenVersion: { increment: 1 },
+      },
+      select: {
+        id: true,
+        email: true,
+        pendingEmail: true,
+        name: true,
+        avatar: true,
+        role: true,
+        emailVerified: true,
+        isApproved: true,
+        approvedAt: true,
+        isBanned: true,
+        bannedAt: true,
+        backupEnabled: true,
+        backupImages: true,
+        backupVideos: true,
+        backupFiles: true,
+        darkMode: true,
+        publicKey: true,
+        privateKeyBackupCiphertext: true,
+        privateKeyBackupIv: true,
+        publicKeyUpdatedAt: true,
+        deletionRequestedAt: true,
+        deletionScheduledFor: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return {
+      ...this.serializeProfile(updatedUser),
+      message: `Account deletion scheduled for ${deletionScheduledFor.toLocaleString()}. Log in before then if you want to cancel it.`,
+      logoutRequired: true,
+    };
+  }
+
+  async cancelAccountDeletion(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        pendingEmail: true,
+        name: true,
+        avatar: true,
+        role: true,
+        emailVerified: true,
+        isApproved: true,
+        approvedAt: true,
+        isBanned: true,
+        bannedAt: true,
+        backupEnabled: true,
+        backupImages: true,
+        backupVideos: true,
+        backupFiles: true,
+        darkMode: true,
+        publicKey: true,
+        privateKeyBackupCiphertext: true,
+        privateKeyBackupIv: true,
+        publicKeyUpdatedAt: true,
+        deletionRequestedAt: true,
+        deletionScheduledFor: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
     }
 
-    for (const themePath of themePaths) {
-      await this.deleteManagedUpload(
-        themePath,
-        '/uploads/chat-themes/',
-        ['uploads', 'chat-themes'],
-      );
+    if (!user.deletionScheduledFor) {
+      return {
+        ...this.serializeProfile(user),
+        message: 'Account deletion is not scheduled.',
+      };
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        deletionRequestedAt: null,
+        deletionScheduledFor: null,
+      },
+      select: {
+        id: true,
+        email: true,
+        pendingEmail: true,
+        name: true,
+        avatar: true,
+        role: true,
+        emailVerified: true,
+        isApproved: true,
+        approvedAt: true,
+        isBanned: true,
+        bannedAt: true,
+        backupEnabled: true,
+        backupImages: true,
+        backupVideos: true,
+        backupFiles: true,
+        darkMode: true,
+        publicKey: true,
+        privateKeyBackupCiphertext: true,
+        privateKeyBackupIv: true,
+        publicKeyUpdatedAt: true,
+        deletionRequestedAt: true,
+        deletionScheduledFor: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return {
+      ...this.serializeProfile(updatedUser),
+      message: 'Account deletion cancelled. Your account will stay active.',
+    };
+  }
+
+  async cleanupExpiredDeletedAccounts() {
+    const dueUsers = await this.prisma.user.findMany({
+      where: {
+        deletionScheduledFor: {
+          lte: new Date(),
+        },
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatar: true,
+        role: true,
+      },
+      orderBy: {
+        deletionScheduledFor: 'asc',
+      },
+      take: 25,
+    });
+
+    let deletedCount = 0;
+
+    for (const user of dueUsers) {
+      try {
+        await this.deleteUserPermanentlyInternal(user);
+        deletedCount += 1;
+      } catch (error) {
+        this.logger.warn(
+          `Failed to purge expired soft-deleted account ${user.id}. ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
+      }
     }
 
     return {
-      success: true,
-      deletedUserId: targetUserId,
-      message: `Account for ${user.email} was permanently deleted.`,
+      deletedCount,
+      scannedCount: dueUsers.length,
     };
   }
 
@@ -960,6 +1508,7 @@ export class UserService {
           },
           isApproved: true,
           isBanned: false,
+          deletionScheduledFor: null,
           emailVerified: true,
           OR: normalizedQuery
             ? [

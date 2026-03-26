@@ -117,6 +117,16 @@ export class ChatController {
       body.receiverEmail,
     );
     this.chatGateway.emitRequestUpdate(request);
+    this.chatGateway.emitConversationRefresh(
+      [request.senderId, request.receiverId],
+      {
+        otherUserId:
+          request.senderId === req.user.userId
+            ? request.receiverId
+            : request.senderId,
+        conversationType: 'direct',
+      },
+    );
     return request;
   }
 
@@ -148,6 +158,16 @@ export class ChatController {
       req.user.userId,
     );
     this.chatGateway.emitRequestUpdate(request);
+    this.chatGateway.emitConversationRefresh(
+      [request.senderId, request.receiverId],
+      {
+        otherUserId:
+          request.senderId === req.user.userId
+            ? request.receiverId
+            : request.senderId,
+        conversationType: 'direct',
+      },
+    );
     return request;
   }
 
@@ -159,6 +179,16 @@ export class ChatController {
       req.user.userId,
     );
     this.chatGateway.emitRequestUpdate(request);
+    this.chatGateway.emitConversationRefresh(
+      [request.senderId, request.receiverId],
+      {
+        otherUserId:
+          request.senderId === req.user.userId
+            ? request.receiverId
+            : request.senderId,
+        conversationType: 'direct',
+      },
+    );
     return request;
   }
 

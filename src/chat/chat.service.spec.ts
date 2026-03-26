@@ -264,6 +264,7 @@ describe('ChatService', () => {
       {
         senderId: 'user-1',
         receiverId: 'user-2',
+        status: 'ACCEPTED',
         createdAt: new Date('2026-03-23T00:00:00.000Z'),
       },
     ]);
@@ -303,6 +304,41 @@ describe('ChatService', () => {
     expect(result).toEqual([]);
   });
 
+  it('returns pending direct requests in the recent chat list until they are resolved', async () => {
+    prisma.userBlock.findMany.mockResolvedValue([]);
+    prisma.groupMember.findMany.mockResolvedValue([]);
+    prisma.message.findMany.mockResolvedValueOnce([]);
+    prisma.chatRequest.findMany.mockResolvedValue([
+      {
+        senderId: 'user-2',
+        receiverId: 'user-1',
+        status: 'PENDING',
+        createdAt: new Date('2026-03-24T00:00:00.000Z'),
+      },
+    ]);
+    prisma.user.findMany.mockResolvedValue([
+      {
+        id: 'user-2',
+        email: 'user2@example.com',
+        name: 'User Two',
+        avatar: null,
+      },
+    ]);
+    prisma.contactPreference.findMany.mockResolvedValue([]);
+
+    const result = await service.getRecentChats('user-1');
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: 'user-2',
+        chatType: 'direct',
+        displayName: 'User Two',
+        lastMessagePreview: 'Sent you a chat request',
+        lastMessageAt: '2026-03-24T00:00:00.000Z',
+      }),
+    ]);
+  });
+
   it('hides direct chats when either side has blocked the other user', async () => {
     prisma.userBlock.findMany.mockResolvedValue([
       { blockerId: 'user-1', blockedUserId: 'user-2' },
@@ -314,11 +350,13 @@ describe('ChatService', () => {
       {
         senderId: 'user-1',
         receiverId: 'user-2',
+        status: 'ACCEPTED',
         createdAt: new Date('2026-03-23T00:00:00.000Z'),
       },
       {
         senderId: 'user-3',
         receiverId: 'user-1',
+        status: 'PENDING',
         createdAt: new Date('2026-03-23T00:00:00.000Z'),
       },
     ]);

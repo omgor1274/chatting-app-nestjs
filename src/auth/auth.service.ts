@@ -45,6 +45,8 @@ export class AuthService {
     backupVideos?: boolean;
     backupFiles?: boolean;
     darkMode?: boolean;
+    deletionRequestedAt?: Date | null;
+    deletionScheduledFor?: Date | null;
   }) {
     return {
       id: user.id,
@@ -63,6 +65,9 @@ export class AuthService {
       backupVideos: user.backupVideos ?? true,
       backupFiles: user.backupFiles ?? true,
       darkMode: user.darkMode ?? false,
+      deletionRequestedAt: user.deletionRequestedAt ?? null,
+      deletionScheduledFor: user.deletionScheduledFor ?? null,
+      isScheduledForDeletion: Boolean(user.deletionScheduledFor),
     };
   }
 
@@ -229,7 +234,11 @@ export class AuthService {
         });
 
     return {
-      message: 'Login successful',
+      message: resolvedUser.deletionScheduledFor
+        ? `Login successful. Your account is scheduled for deletion on ${new Date(
+            resolvedUser.deletionScheduledFor,
+          ).toLocaleString()}.`
+        : 'Login successful',
       token: this.signAuthToken(resolvedUser),
       user: this.serializeUser(resolvedUser),
     };
