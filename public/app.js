@@ -147,7 +147,7 @@ let sharedMediaErrorMessage = '';
 let sharedMediaBrowserKind = 'image';
 const OFFLINE_QUEUE_KEY = 'ochat_offline_message_queue';
 const RINGTONE_PREFERENCE_KEY = 'ochat_ringtone_preference';
-const CLIENT_CACHE_VERSION = '20260324-smooth28';
+const CLIENT_CACHE_VERSION = '20260326-admin2';
 const CHAT_SHELL_CACHE_TTL_MS = 2 * 60 * 1000;
 const CHAT_SHELL_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const CONVERSATION_CACHE_TTL_MS = 90 * 1000;
@@ -163,6 +163,8 @@ let backgroundUsersRefreshPromise = null;
 let conversationDraftPersistTimer = 0;
 const surfaceRefreshTimers = new Map();
 let pendingUserListPreviewSyncTimer = 0;
+let reportModalTarget = null;
+let reportSubmitInFlight = false;
 
 function getConfigCandidates() {
   const candidates = [
@@ -4635,6 +4637,15 @@ function updateSettingsUI() {
   const confirmOtpInput = document.getElementById(
     'settings-email-confirm-otp-input',
   );
+  const accountDeletionStatus = document.getElementById(
+    'settings-account-deletion-status',
+  );
+  const accountDeletionButton = document.getElementById(
+    'settings-account-delete-btn',
+  );
+  const cancelAccountDeletionButton = document.getElementById(
+    'settings-account-delete-cancel-btn',
+  );
   document.getElementById('profile-name-input').value = currentUser.name || '';
   document.getElementById('profile-email-input').value =
     currentUser.email || '';
@@ -4660,6 +4671,32 @@ function updateSettingsUI() {
   pendingOtpInput.value = '';
   confirmOtpInput.value = '';
   verificationStatus.innerText = `Email: ${currentUser.email}`;
+
+  if (
+    accountDeletionStatus &&
+    accountDeletionButton &&
+    cancelAccountDeletionButton
+  ) {
+    if (currentUser.deletionScheduledFor) {
+      accountDeletionStatus.innerText = `Account deletion is scheduled for ${formatAdminUserDateTime(
+        currentUser.deletionScheduledFor,
+      )}. Log in before then if you want to cancel it.`;
+      accountDeletionButton.textContent = 'Deletion Scheduled';
+      accountDeletionButton.disabled = true;
+      accountDeletionButton.classList.add('cursor-not-allowed', 'opacity-60');
+      cancelAccountDeletionButton.classList.remove('hidden');
+    } else {
+      accountDeletionStatus.innerText =
+        'Schedule your account for deletion. O-chat keeps it for 7 days in case you change your mind.';
+      accountDeletionButton.textContent = 'Delete In 7 Days';
+      accountDeletionButton.disabled = false;
+      accountDeletionButton.classList.remove(
+        'cursor-not-allowed',
+        'opacity-60',
+      );
+      cancelAccountDeletionButton.classList.add('hidden');
+    }
+  }
 
   renderBlockedUsers();
   syncAdminPanelVisibility();
@@ -6025,6 +6062,7 @@ function updateChatContactPanel() {
   const clearThemeBtn = document.getElementById('contact-theme-clear-btn');
   const renameBtn = document.getElementById('contact-rename-btn');
   const blockBtn = document.getElementById('contact-block-btn');
+  const reportBtn = document.getElementById('contact-report-btn');
   const manageGroupBtn = document.getElementById('contact-manage-group-btn');
 
   if (!panelTitle || !avatar || !name || !status) {
@@ -6036,6 +6074,8 @@ function updateChatContactPanel() {
     name.innerText = 'Contact';
     status.innerText = 'Offline';
     status.className = 'mt-1 text-sm font-medium text-slate-500';
+    reportBtn?.classList.add('hidden');
+    syncReportModalContent();
     sharedMediaItems = [];
     sharedMediaLoading = false;
     sharedMediaErrorMessage = '';
@@ -6081,7 +6121,9 @@ function updateChatContactPanel() {
   clearThemeBtn?.classList.toggle('hidden', isGroup || !selectedUser.chatTheme);
   renameBtn?.classList.toggle('hidden', isGroup);
   blockBtn?.classList.toggle('hidden', isGroup);
+  reportBtn?.classList.remove('hidden');
   manageGroupBtn?.classList.toggle('hidden', !isGroup);
+  syncReportModalContent(getActiveReportTarget(selectedUser));
   renderSharedMedia();
   renderStarredMessages();
   if (isChatContactPanelOpen()) {
@@ -6261,6 +6303,141 @@ function closeProfileModal(event) {
   }
   document.getElementById('profile-modal').classList.add('hidden');
   document.getElementById('profile-modal').classList.remove('flex');
+}
+
+function getActiveReportTarget(target = reportModalTarget || selectedUser) {
+  if (!target?.id) {
+    return null;
+  }
+
+  return {
+    id: target.id,
+    name: displayName(target),
+    isGroup: isGroupConversation(target),
+  };
+}
+
+function syncReportModalContent(target = getActiveReportTarget()) {
+  const reportLabel = document.getElementById('contact-report-btn-label');
+  const reportCopy = document.getElementById('contact-report-btn-copy');
+  const modalTitle = document.getElementById('report-modal-title');
+  const modalCopy = document.getElementById('report-modal-copy');
+
+  if (reportLabel && reportCopy) {
+    reportLabel.innerText = target?.isGroup ? 'Report group' : 'Report user';
+    reportCopy.innerText = target?.isGroup
+      ? 'Flag spam, abuse, or unsafe group activity for admin review.'
+      : 'Flag spam, abuse, or suspicious behavior for admin review.';
+  }
+
+  if (modalTitle && modalCopy) {
+    if (!target) {
+      modalTitle.innerText = 'Report this conversation';
+      modalCopy.innerText =
+        'Tell the admins what happened so they can review it from the moderation queue.';
+      return;
+    }
+
+    modalTitle.innerText = target.isGroup
+      ? `Report ${target.name || 'this group'}`
+      : `Report ${target.name || 'this user'}`;
+    modalCopy.innerText = target.isGroup
+      ? 'Tell the admins what happened in this group so they can review it from the moderation queue.'
+      : 'Tell the admins what happened in this conversation so they can review it from the moderation queue.';
+  }
+}
+
+function setReportSubmitState(isSubmitting) {
+  reportSubmitInFlight = isSubmitting;
+  const submitBtn = document.getElementById('report-submit-btn');
+  if (!submitBtn) {
+    return;
+  }
+
+  submitBtn.disabled = isSubmitting;
+  submitBtn.classList.toggle('cursor-wait', isSubmitting);
+  submitBtn.classList.toggle('opacity-70', isSubmitting);
+  submitBtn.textContent = isSubmitting ? 'Sending...' : 'Send Report';
+}
+
+function openReportModal() {
+  const target = getActiveReportTarget(selectedUser);
+  if (!target) {
+    alert('Choose a conversation first.');
+    return;
+  }
+
+  reportModalTarget = target;
+  syncReportModalContent(target);
+  document.getElementById('report-reason-input').value = 'SPAM';
+  document.getElementById('report-details-input').value = '';
+  setReportSubmitState(false);
+  document.getElementById('report-modal').classList.remove('hidden');
+  document.getElementById('report-modal').classList.add('flex');
+  document.getElementById('report-details-input')?.focus();
+}
+
+function closeReportModal(event) {
+  if (event && event.target !== event.currentTarget) {
+    return;
+  }
+
+  reportModalTarget = null;
+  setReportSubmitState(false);
+  document.getElementById('report-modal').classList.add('hidden');
+  document.getElementById('report-modal').classList.remove('flex');
+}
+
+async function submitConversationReport() {
+  if (reportSubmitInFlight) {
+    return;
+  }
+
+  const target = getActiveReportTarget();
+  if (!target) {
+    alert('Choose a conversation to report first.');
+    return;
+  }
+
+  const reason = document.getElementById('report-reason-input').value.trim();
+  const details = document.getElementById('report-details-input').value.trim();
+
+  setReportSubmitState(true);
+
+  try {
+    const res = await api('/users/reports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        reason,
+        ...(details ? { details } : {}),
+        ...(target.isGroup
+          ? { groupId: target.id }
+          : { targetUserId: target.id }),
+      }),
+    });
+    const data = await readJsonResponse(
+      res,
+      {},
+      'Failed to submit the report.',
+    );
+
+    if (!res.ok) {
+      alert(
+        Array.isArray(data.message)
+          ? data.message.join(', ')
+          : data.message || 'Failed to submit the report.',
+      );
+      return;
+    }
+
+    closeReportModal();
+    alert(data.message || 'Report submitted successfully.');
+  } finally {
+    if (document.getElementById('report-modal')) {
+      setReportSubmitState(false);
+    }
+  }
 }
 
 async function openRenameModal() {
@@ -6735,6 +6912,85 @@ async function loadProfile() {
   }
 
   applyCurrentUser(data);
+}
+
+async function requestAccountDeletion() {
+  if (!currentUser) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    'Schedule your account for deletion in 7 days? You will be logged out right away, and logging back in before the deadline will let you cancel it.',
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  const res = await api('/users/account/delete/request', {
+    method: 'POST',
+  });
+  const data = await readJsonResponse(
+    res,
+    {},
+    'Failed to schedule account deletion.',
+  );
+
+  if (!res.ok) {
+    alert(
+      Array.isArray(data.message)
+        ? data.message.join(', ')
+        : data.message || 'Failed to schedule account deletion.',
+    );
+    return;
+  }
+
+  if (data?.id) {
+    applyCurrentUser(data);
+  }
+
+  if (data.logoutRequired) {
+    forceSessionLogout(data.message || 'Account deletion scheduled.');
+    return;
+  }
+
+  alert(data.message || 'Account deletion scheduled.');
+}
+
+async function cancelAccountDeletion() {
+  if (!currentUser) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    'Cancel your scheduled account deletion and keep this account active?',
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  const res = await api('/users/account/delete/cancel', {
+    method: 'POST',
+  });
+  const data = await readJsonResponse(
+    res,
+    {},
+    'Failed to cancel account deletion.',
+  );
+
+  if (!res.ok) {
+    alert(
+      Array.isArray(data.message)
+        ? data.message.join(', ')
+        : data.message || 'Failed to cancel account deletion.',
+    );
+    return;
+  }
+
+  if (data?.id) {
+    applyCurrentUser(data);
+  }
+
+  alert(data.message || 'Scheduled account deletion cancelled.');
 }
 
 async function saveProfile() {

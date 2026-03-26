@@ -1291,6 +1291,392 @@ export class UserService {
     };
   }
 
+  async createReport(
+    userId: string,
+    data: {
+      targetUserId?: string;
+      groupId?: string;
+      messageId?: string;
+      reason: UserReportReason;
+      details?: string;
+    },
+  ) {
+    const details = data.details?.trim() || null;
+    let targetUserId = data.targetUserId?.trim() || null;
+    let groupId = data.groupId?.trim() || null;
+    const messageId = data.messageId?.trim() || null;
+
+    if (!targetUserId && !groupId && !messageId) {
+      throw new BadRequestException(
+        'Choose a user, group, or message to report.',
+      );
+    }
+
+    if (targetUserId && groupId) {
+      throw new BadRequestException(
+        'A report can target either one user or one group at a time.',
+      );
+    }
+
+    if (targetUserId === userId) {
+      throw new BadRequestException('You cannot report your own account.');
+    }
+
+    if (messageId) {
+      const message = await this.prisma.message.findUnique({
+        where: { id: messageId },
+        select: {
+          id: true,
+          senderId: true,
+          receiverId: true,
+          groupId: true,
+        },
+      });
+
+      if (!message) {
+        throw new NotFoundException('Message not found.');
+      }
+
+      if (message.groupId) {
+        const membership = await this.prisma.groupMember.findUnique({
+          where: {
+            groupId_userId: {
+              groupId: message.groupId,
+              userId,
+            },
+          },
+          select: { groupId: true },
+        });
+
+        if (!membership) {
+          throw new ForbiddenException('You cannot report this message.');
+        }
+
+        groupId = groupId ?? message.groupId;
+      } else {
+        const isParticipant =
+          message.senderId === userId || message.receiverId === userId;
+
+        if (!isParticipant) {
+          throw new ForbiddenException('You cannot report this message.');
+        }
+
+        const otherUserId =
+          message.senderId === userId ? message.receiverId : message.senderId;
+
+        if (otherUserId) {
+          targetUserId = targetUserId ?? otherUserId;
+        }
+      }
+    }
+
+    if (targetUserId) {
+      const targetUser = await this.prisma.user.findUnique({
+        where: { id: targetUserId },
+        select: { id: true },
+      });
+
+      if (!targetUser) {
+        throw new NotFoundException('Reported user not found.');
+      }
+    }
+
+    if (groupId) {
+      const membership = await this.prisma.groupMember.findUnique({
+        where: {
+          groupId_userId: {
+            groupId,
+            userId,
+          },
+        },
+        select: { groupId: true },
+      });
+
+      if (!membership) {
+        throw new ForbiddenException('You can report only groups you belong to.');
+      }
+    }
+
+    if (!targetUserId && !groupId) {
+      throw new BadRequestException('The report target could not be resolved.');
+    }
+
+    const report = await this.prisma.userReport.create({
+      data: {
+        reporterId: userId,
+        targetUserId,
+        groupId,
+        messageId,
+        reason: data.reason,
+        details,
+      },
+      select: {
+        id: true,
+        reason: true,
+        details: true,
+        status: true,
+        adminNote: true,
+        handledAt: true,
+        createdAt: true,
+        updatedAt: true,
+        reporter: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+          },
+        },
+        targetUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+            role: true,
+            isBanned: true,
+          },
+        },
+        group: {
+          select: {
+            id: true,
+            name: true,
+            avatar: true,
+          },
+        },
+        message: {
+          select: {
+            id: true,
+            content: true,
+            ciphertext: true,
+            messageType: true,
+            fileName: true,
+            fileMimeType: true,
+            deletedForEveryoneAt: true,
+            createdAt: true,
+          },
+        },
+        handledBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    return {
+      message: 'Report submitted. Admins can review it from the moderation queue.',
+      report: this.serializeAdminReport(report),
+    };
+  }
+
+  async getAdminReportOverview() {
+    const reports = await this.prisma.userReport.findMany({
+      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+      select: {
+        id: true,
+        reason: true,
+        details: true,
+        status: true,
+        adminNote: true,
+        handledAt: true,
+        createdAt: true,
+        updatedAt: true,
+        reporter: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+          },
+        },
+        targetUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+            role: true,
+            isBanned: true,
+          },
+        },
+        group: {
+          select: {
+            id: true,
+            name: true,
+            avatar: true,
+          },
+        },
+        message: {
+          select: {
+            id: true,
+            content: true,
+            ciphertext: true,
+            messageType: true,
+            fileName: true,
+            fileMimeType: true,
+            deletedForEveryoneAt: true,
+            createdAt: true,
+          },
+        },
+        handledBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    const serializedReports = reports.map((report) =>
+      this.serializeAdminReport(report),
+    );
+
+    return {
+      summary: {
+        totalReports: serializedReports.length,
+        openReports: serializedReports.filter(
+          (report) => report.status === UserReportStatus.OPEN,
+        ).length,
+        inReviewReports: serializedReports.filter(
+          (report) => report.status === UserReportStatus.IN_REVIEW,
+        ).length,
+        resolvedReports: serializedReports.filter(
+          (report) => report.status === UserReportStatus.RESOLVED,
+        ).length,
+        dismissedReports: serializedReports.filter(
+          (report) => report.status === UserReportStatus.DISMISSED,
+        ).length,
+      },
+      reports: serializedReports,
+    };
+  }
+
+  async reviewReportByAdmin(
+    adminUserId: string,
+    reportId: string,
+    data: {
+      status?: UserReportStatus;
+      adminNote?: string;
+      banTargetUser?: boolean;
+    },
+  ) {
+    const report = await this.prisma.userReport.findUnique({
+      where: { id: reportId },
+      select: {
+        id: true,
+        targetUserId: true,
+      },
+    });
+
+    if (!report) {
+      throw new NotFoundException('Report not found.');
+    }
+
+    if (data.banTargetUser && !report.targetUserId) {
+      throw new BadRequestException(
+        'Only reports against a user can ban the reported account.',
+      );
+    }
+
+    let banMessage: string | null = null;
+    if (data.banTargetUser && report.targetUserId) {
+      const banResult = await this.banUserByAdmin(adminUserId, report.targetUserId);
+      banMessage = banResult.message;
+    }
+
+    const nextStatus =
+      data.status ?? (data.banTargetUser ? UserReportStatus.RESOLVED : undefined);
+    const handledAt =
+      nextStatus && nextStatus !== UserReportStatus.OPEN ? new Date() : null;
+
+    const updatedReport = await this.prisma.userReport.update({
+      where: { id: reportId },
+      data: {
+        ...(nextStatus ? { status: nextStatus } : {}),
+        adminNote:
+          data.adminNote === undefined ? undefined : data.adminNote.trim() || null,
+        handledById:
+          nextStatus === undefined
+            ? undefined
+            : nextStatus === UserReportStatus.OPEN
+              ? null
+              : adminUserId,
+        handledAt:
+          nextStatus === undefined
+            ? undefined
+            : nextStatus === UserReportStatus.OPEN
+              ? null
+              : handledAt,
+      },
+      select: {
+        id: true,
+        reason: true,
+        details: true,
+        status: true,
+        adminNote: true,
+        handledAt: true,
+        createdAt: true,
+        updatedAt: true,
+        reporter: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+          },
+        },
+        targetUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+            role: true,
+            isBanned: true,
+          },
+        },
+        group: {
+          select: {
+            id: true,
+            name: true,
+            avatar: true,
+          },
+        },
+        message: {
+          select: {
+            id: true,
+            content: true,
+            ciphertext: true,
+            messageType: true,
+            fileName: true,
+            fileMimeType: true,
+            deletedForEveryoneAt: true,
+            createdAt: true,
+          },
+        },
+        handledBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    return {
+      message: data.banTargetUser
+        ? 'Report updated and the reported user action was applied.'
+        : 'Report updated successfully.',
+      banMessage,
+      report: this.serializeAdminReport(updatedReport),
+    };
+  }
+
   async requestAccountDeletion(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },

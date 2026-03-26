@@ -1,11 +1,13 @@
-const CACHE_NAME = 'ochat-shell-v32';
+const CACHE_NAME = 'ochat-shell-v34';
 const APP_SHELL = [
   '/',
   '/auth',
   '/chat',
   '/settings',
+  '/admin',
   '/public/app.css',
   '/public/app.js',
+  '/public/admin.js',
   '/public/auth.js',
   '/public/runtime.js',
   '/manifest.webmanifest',
@@ -66,6 +68,10 @@ self.addEventListener('fetch', (event) => {
 
           if (url.pathname.startsWith('/settings')) {
             return caches.match('/settings');
+          }
+
+          if (url.pathname.startsWith('/admin')) {
+            return caches.match('/admin');
           }
 
           return caches.match('/');

@@ -31,6 +31,12 @@ export class AppController {
     return res.sendFile(resolveAppRootPath('settings.html'));
   }
 
+  @Get('admin')
+  getAdmin(@Res() res: Response) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.sendFile(resolveAppRootPath('admin.html'));
+  }
+
   @Get('health')
   getHealth() {
     return this.appService.getHealth();

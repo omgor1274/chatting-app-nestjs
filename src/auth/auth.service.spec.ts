@@ -98,7 +98,7 @@ describe('AuthService', () => {
       password: 'secret123',
     });
 
-    expect(result.token).toBeUndefined();
+    expect(result).not.toHaveProperty('token');
     expect(result.approvalRequired).toBe(true);
     expect(result.user.isApproved).toBe(false);
     expect(jwtService.sign).not.toHaveBeenCalled();

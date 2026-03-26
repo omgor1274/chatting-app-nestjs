@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 
 describe('MailService', () => {
   const appendFileSync = jest.fn();
+  const accessSync = jest.fn();
   const mkdirSync = jest.fn();
   const sendMail = jest.fn();
 
@@ -26,6 +27,10 @@ describe('MailService', () => {
   it('falls back to the dev mailbox when smtp send fails', async () => {
     jest.doMock('fs', () => ({
       appendFileSync,
+      accessSync,
+      constants: {
+        W_OK: 2,
+      },
       mkdirSync,
     }));
     jest.doMock('nodemailer', () => ({
@@ -38,14 +43,17 @@ describe('MailService', () => {
     }));
 
     sendMail.mockRejectedValueOnce(new Error('SMTP auth failed'));
-    let FreshMailService: typeof import('./mail.service').MailService;
+    let FreshMailService:
+      | typeof import('./mail.service').MailService
+      | undefined;
     jest.isolateModules(() => {
       ({ MailService: FreshMailService } = require('./mail.service'));
     });
+    expect(FreshMailService).toBeDefined();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [FreshMailService],
+      providers: [FreshMailService!],
     }).compile();
-    const service = module.get(FreshMailService);
+    const service = module.get(FreshMailService!);
 
     await service.sendMail({
       to: 'user@example.com',

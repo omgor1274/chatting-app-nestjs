@@ -136,7 +136,14 @@ describe('ChatService', () => {
         id: 'receiver-1',
       });
 
-    jest.spyOn(service, 'assertUsersCanChat').mockResolvedValue(undefined);
+    jest.spyOn(service, 'assertUsersCanChat').mockResolvedValue({
+      canChat: true,
+      acceptedRequestId: 'accepted-request',
+      incomingRequestId: null,
+      outgoingRequestId: null,
+      blockedByMe: false,
+      blockedByUser: false,
+    });
 
     prisma.message.create
       .mockRejectedValueOnce(
