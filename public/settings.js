@@ -330,9 +330,9 @@ function updateCloseLink() {
 function prefetchChatShell() {
   const hrefs = [
     getLastChatRoute(),
-    '/public/app.js?v=20260324-smooth28',
+    '/public/app.js?v=20260326-compact1',
     '/public/runtime.js?v=20260324-admin2',
-    '/public/app.css?v=20260323-smooth11',
+    '/public/app.css?v=20260326-compact1',
   ];
 
   hrefs.forEach((href) => {
@@ -950,18 +950,6 @@ async function boot() {
       blockedUsersResult.reason?.message || 'Failed to load blocked users.',
       'error',
     );
-  }
-
-  if (currentProfile?.role === 'ADMIN') {
-    try {
-      await loadAdminUsers();
-    } catch (error) {
-      console.error(error);
-      setAdminUsersState(
-        error?.message || 'Failed to load admin users.',
-        'error',
-      );
-    }
   }
 
 }

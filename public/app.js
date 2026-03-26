@@ -147,7 +147,7 @@ let sharedMediaErrorMessage = '';
 let sharedMediaBrowserKind = 'image';
 const OFFLINE_QUEUE_KEY = 'ochat_offline_message_queue';
 const RINGTONE_PREFERENCE_KEY = 'ochat_ringtone_preference';
-const CLIENT_CACHE_VERSION = '20260326-admin2';
+const CLIENT_CACHE_VERSION = '20260326-compact1';
 const CHAT_SHELL_CACHE_TTL_MS = 2 * 60 * 1000;
 const CHAT_SHELL_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const CONVERSATION_CACHE_TTL_MS = 90 * 1000;
@@ -4055,6 +4055,10 @@ function normalizeUser(user, existingUser = null) {
     avatar,
     nickname,
     chatType,
+    isChatAccepted:
+      user?.isChatAccepted ??
+      existingUser?.isChatAccepted ??
+      (chatType === 'group' ? null : false),
     memberCount: user?.memberCount ?? existingUser?.memberCount ?? null,
     role: user?.role ?? existingUser?.role ?? null,
     members: user?.members ?? existingUser?.members ?? [],
@@ -4064,6 +4068,44 @@ function normalizeUser(user, existingUser = null) {
         ? user?.displayName || existingUser?.displayName || name
         : nickname || user?.displayName || existingUser?.displayName || name,
   };
+}
+
+function isAcceptedDirectChatUser(user) {
+  if (!user || isGroupConversation(user)) {
+    return false;
+  }
+
+  if (typeof user.isChatAccepted === 'boolean') {
+    return user.isChatAccepted;
+  }
+
+  const preview = String(user.lastMessagePreview || '').trim();
+  return preview !== 'Chat request sent' && preview !== 'Sent you a chat request';
+}
+
+function getAcceptedGroupCandidates() {
+  const seen = new Set();
+  return (Array.isArray(users) ? users : []).filter((user) => {
+    if (
+      !isAcceptedDirectChatUser(user) ||
+      !user?.id ||
+      user.id === currentUser?.id ||
+      seen.has(user.id)
+    ) {
+      return false;
+    }
+
+    seen.add(user.id);
+    return true;
+  });
+}
+
+function renderEmptyGroupCandidateState(message) {
+  return `
+    <div class="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-6 text-sm leading-6 text-slate-500">
+      ${escapeHtml(message)}
+    </div>
+  `;
 }
 
 function resetSelectedConversation() {
@@ -6272,27 +6314,11 @@ async function openProfileModal() {
   if (!currentUser) return;
   updateSettingsUI();
   updateInstallAppUI();
-  const loadTasks = [loadBlockedUsers()];
-  if (currentUser.role === 'ADMIN') {
-    if (!adminUsersPayload.users.length) {
-      setAdminUsersState('Loading admin data...');
-    }
-    loadTasks.push(loadAdminUsers());
+  try {
+    await loadBlockedUsers();
+  } catch (error) {
+    console.error(error);
   }
-  const results = await Promise.allSettled(loadTasks);
-  results.forEach((result, index) => {
-    if (result.status !== 'rejected') {
-      return;
-    }
-
-    console.error(result.reason);
-    if (index > 0) {
-      setAdminUsersState(
-        result.reason?.message || 'Failed to load admin users.',
-        'error',
-      );
-    }
-  });
   document.getElementById('profile-modal').classList.remove('hidden');
   document.getElementById('profile-modal').classList.add('flex');
 }
@@ -7828,10 +7854,38 @@ function updateArchivedChatsToggle() {
   const archivedCount = users.filter((user) =>
     isConversationArchived(user),
   ).length;
+  const label = showArchivedChats
+    ? 'Back to active chats'
+    : archivedCount
+      ? `Show archived chats (${archivedCount})`
+      : 'Show archived chats';
   button.classList.toggle('hidden', archivedCount === 0 && !showArchivedChats);
-  button.textContent = showArchivedChats
-    ? 'Back to Active Chats'
-    : `Show Archived${archivedCount ? ` (${archivedCount})` : ''}`;
+  button.setAttribute('aria-label', label);
+  button.setAttribute('title', label);
+  button.innerHTML = `
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class="h-5 w-5"
+      aria-hidden="true"
+    >
+      ${
+        showArchivedChats
+          ? '<path d="M19 12H5"></path><path d="m12 19-7-7 7-7"></path>'
+          : '<path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"></path><path d="M23 3H1v5h22V3Z"></path><path d="M10 12h4"></path>'
+      }
+    </svg>
+    <span class="sr-only">${escapeHtml(label)}</span>
+    ${
+      !showArchivedChats && archivedCount
+        ? `<span class="sidebar-icon-badge">${archivedCount}</span>`
+        : ''
+    }
+  `;
 }
 
 function toggleArchivedChatsView() {
@@ -9481,8 +9535,9 @@ async function rejectIncomingRequest() {
 }
 
 async function openCreateGroupModal() {
-  await loadPeopleDirectory();
+  await loadUsers();
   const container = document.getElementById('create-group-members');
+  const candidates = getAcceptedGroupCandidates();
   document.getElementById('create-group-name').value = '';
   document.getElementById('create-group-avatar-input').value = '';
   syncGroupAvatarLabel(
@@ -9490,20 +9545,24 @@ async function openCreateGroupModal() {
     'create-group-avatar-name',
     'No photo selected',
   );
-  container.innerHTML = peopleDirectory
-    .map(
-      (user) => `
-              <label class="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3">
-                <input type="checkbox" value="${user.id}" class="h-4 w-4 rounded border-slate-300">
-                <img src="${userAvatar(user)}" class="h-10 w-10 rounded-xl object-cover">
-                <div class="min-w-0">
-                  <p class="truncate text-sm font-semibold text-slate-900">${escapeHtml(displayName(user))}</p>
-                  <p class="truncate text-xs text-slate-500">${escapeHtml(user.email || '')}</p>
-                </div>
-              </label>
-            `,
-    )
-    .join('');
+  container.innerHTML = candidates.length
+    ? candidates
+        .map(
+          (user) => `
+                <label class="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 transition hover:border-slate-300 hover:bg-slate-50">
+                  <input type="checkbox" value="${user.id}" class="h-4 w-4 rounded border-slate-300">
+                  <img src="${userAvatar(user)}" class="h-10 w-10 rounded-xl object-cover">
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate text-sm font-semibold text-slate-900">${escapeHtml(displayName(user))}</p>
+                    <p class="truncate text-xs text-slate-500">${escapeHtml(user.email || '')}</p>
+                  </div>
+                </label>
+              `,
+        )
+        .join('')
+    : renderEmptyGroupCandidateState(
+        'Only accepted one-to-one chats appear here. Accept a chat request first, then create the group.',
+      );
   document.getElementById('create-group-modal').classList.remove('hidden');
   document.getElementById('create-group-modal').classList.add('flex');
 }
@@ -9579,7 +9638,7 @@ async function openManageGroupModal() {
     return;
   }
 
-  await loadPeopleDirectory();
+  await loadUsers();
 
   const res = await api(`/chat/groups/${encodeURIComponent(selectedUser.id)}`);
   const data = await readJsonResponse(res, {}, 'Failed to load group details.');
@@ -9646,27 +9705,34 @@ async function openManageGroupModal() {
     )
     .join('');
 
-  document.getElementById('manage-group-candidates').innerHTML = peopleDirectory
-    .filter((person) => !memberIds.has(person.id))
-    .map(
-      (person) => `
-            <div class="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3">
-              <img src="${userAvatar(person)}" class="h-10 w-10 rounded-xl object-cover">
-              <div class="min-w-0 flex-1">
-                <p class="truncate text-sm font-semibold text-slate-900">${escapeHtml(displayName(person))}</p>
-                <p class="truncate text-xs text-slate-500">${escapeHtml(person.email || '')}</p>
-              </div>
-              <button
-                onclick="inviteUserToGroup('${person.id}')"
-                class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-                ${selectedUser.role !== 'ADMIN' || pendingIds.has(person.id) ? 'disabled' : ''}
-              >
-                ${pendingIds.has(person.id) ? 'Pending' : 'Invite'}
-              </button>
-            </div>
-          `,
-    )
-    .join('');
+  const inviteCandidates = getAcceptedGroupCandidates().filter(
+    (person) => !memberIds.has(person.id),
+  );
+  document.getElementById('manage-group-candidates').innerHTML =
+    inviteCandidates.length
+      ? inviteCandidates
+          .map(
+            (person) => `
+                  <div class="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3">
+                    <img src="${userAvatar(person)}" class="h-10 w-10 rounded-xl object-cover">
+                    <div class="min-w-0 flex-1">
+                      <p class="truncate text-sm font-semibold text-slate-900">${escapeHtml(displayName(person))}</p>
+                      <p class="truncate text-xs text-slate-500">${escapeHtml(person.email || '')}</p>
+                    </div>
+                    <button
+                      onclick="inviteUserToGroup('${person.id}')"
+                      class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                      ${selectedUser.role !== 'ADMIN' || pendingIds.has(person.id) ? 'disabled' : ''}
+                    >
+                      ${pendingIds.has(person.id) ? 'Pending' : 'Invite'}
+                    </button>
+                  </div>
+                `,
+          )
+          .join('')
+      : renderEmptyGroupCandidateState(
+          'Only accepted chat contacts can be invited here.',
+        );
 
   document.getElementById('manage-group-modal').classList.remove('hidden');
   document.getElementById('manage-group-modal').classList.add('flex');

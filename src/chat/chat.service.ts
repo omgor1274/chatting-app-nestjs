@@ -675,6 +675,7 @@ export class ChatService {
       return {
         id: user.id,
         chatType: 'direct',
+        isChatAccepted: Boolean(latest || acceptedRequest),
         email: user.email,
         name: user.name,
         avatar: user.avatar,
