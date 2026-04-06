@@ -3,8 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#2563eb" />
+    <meta name="theme-color" content="#20352f" />
     <title>O-chat Settings</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
     <script>
       if (localStorage.getItem('chat_dark_mode') === '1') {
         document.documentElement.classList.add('prefers-dark-mode');
@@ -17,7 +23,7 @@
   <body class="settings-page mobile-page min-h-screen bg-slate-100 p-4 sm:p-6">
     <main class="mobile-page-shell mx-auto max-w-5xl space-y-6">
       <header
-        class="mobile-sticky-header glass flex flex-wrap items-center justify-between gap-3 rounded-[28px] border border-white/70 bg-white px-5 py-4 shadow-[0_30px_120px_rgba(15,23,42,0.12)] sm:px-6"
+        class="settings-hero mobile-sticky-header glass flex flex-wrap items-center justify-between gap-3 rounded-[28px] border border-white/70 bg-white px-5 py-4 shadow-[0_30px_120px_rgba(15,23,42,0.12)] sm:px-6"
       >
         <div>
           <p
@@ -25,12 +31,17 @@
           >
             O-chat
           </p>
-          <h1 class="mt-1 text-2xl font-bold text-slate-900">Settings</h1>
+          <h1 class="display-font mt-1 text-2xl font-bold text-slate-900">
+            Settings
+          </h1>
+          <p class="mt-2 max-w-xl text-sm leading-6 text-slate-500">
+            Keep your workspace private, slim, and quietly yours.
+          </p>
         </div>
         <a
           id="settings-close-link"
           href="/chat"
-          class="mobile-full-btn rounded-2xl bg-blue-600 px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-blue-700"
+          class="ui-primary-btn mobile-full-btn rounded-2xl bg-blue-600 px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-blue-700"
         >
           Close Settings
         </a>
@@ -39,7 +50,7 @@
       <section class="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
         <div class="space-y-6">
           <div
-            class="glass rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_30px_120px_rgba(15,23,42,0.12)]"
+            class="settings-panel glass rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_30px_120px_rgba(15,23,42,0.12)]"
           >
             <div class="flex items-center gap-4">
               <img
@@ -64,14 +75,14 @@
               <button
                 id="change-avatar-btn"
                 type="button"
-                class="mobile-full-btn rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                class="ui-secondary-btn mobile-full-btn rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               >
                 Change Profile Picture
               </button>
               <button
                 id="remove-avatar-btn"
                 type="button"
-                class="mobile-full-btn rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+                class="ui-danger-btn mobile-full-btn rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
               >
                 Remove Profile Picture
               </button>
@@ -97,7 +108,7 @@
 
           <form
             id="profile-form"
-            class="glass space-y-4 rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_30px_120px_rgba(15,23,42,0.12)]"
+            class="settings-panel glass space-y-4 rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_30px_120px_rgba(15,23,42,0.12)]"
           >
             <div>
               <p
@@ -122,14 +133,14 @@
               class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
             />
             <button
-              class="w-full rounded-2xl bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700"
+              class="ui-primary-btn w-full rounded-2xl bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700"
             >
               Save Profile
             </button>
           </form>
 
           <section
-            class="glass space-y-4 rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_30px_120px_rgba(15,23,42,0.12)]"
+            class="settings-panel glass space-y-4 rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_30px_120px_rgba(15,23,42,0.12)]"
           >
             <div>
               <p
@@ -151,7 +162,7 @@
         <div class="space-y-6">
           <form
             id="preferences-form"
-            class="glass space-y-4 rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_30px_120px_rgba(15,23,42,0.12)]"
+            class="settings-panel glass space-y-4 rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_30px_120px_rgba(15,23,42,0.12)]"
           >
             <div>
               <p
@@ -214,7 +225,7 @@
               />
             </label>
             <button
-              class="w-full rounded-2xl bg-slate-900 py-3 font-semibold text-white transition hover:bg-slate-800"
+              class="ui-primary-btn w-full rounded-2xl bg-slate-900 py-3 font-semibold text-white transition hover:bg-slate-800"
             >
               Save Preferences
             </button>
@@ -222,7 +233,7 @@
 
           <form
             id="password-form"
-            class="glass space-y-4 rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_30px_120px_rgba(15,23,42,0.12)]"
+            class="settings-panel glass space-y-4 rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_30px_120px_rgba(15,23,42,0.12)]"
           >
             <div>
               <p
@@ -253,7 +264,7 @@
               class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
             />
             <button
-              class="w-full rounded-2xl border border-slate-200 bg-white py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
+              class="ui-secondary-btn w-full rounded-2xl border border-slate-200 bg-white py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
             >
               Update Password
             </button>
@@ -261,7 +272,7 @@
 
           <button
             id="logout-btn"
-            class="glass w-full rounded-[28px] border border-rose-200 bg-rose-50 px-6 py-4 text-sm font-semibold text-rose-700 shadow-[0_30px_120px_rgba(15,23,42,0.08)] transition hover:bg-rose-100"
+            class="ui-danger-btn glass w-full rounded-[28px] border border-rose-200 bg-rose-50 px-6 py-4 text-sm font-semibold text-rose-700 shadow-[0_30px_120px_rgba(15,23,42,0.08)] transition hover:bg-rose-100"
           >
             Log Out
           </button>
@@ -270,9 +281,11 @@
 
       <section
         id="settings-admin-panel"
-        class="glass hidden space-y-5 rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_30px_120px_rgba(15,23,42,0.12)]"
+        class="settings-panel glass hidden space-y-5 rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_30px_120px_rgba(15,23,42,0.12)]"
       >
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div
+          class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+        >
           <div>
             <p
               class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400"
@@ -288,7 +301,7 @@
           </div>
           <a
             href="/admin"
-            class="mobile-full-btn rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+            class="ui-primary-btn mobile-full-btn rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
           >
             Open Dashboard
           </a>

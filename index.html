@@ -3,62 +3,76 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#2563eb" />
+    <meta name="theme-color" content="#20352f" />
     <title>O-chat</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/public/app.css?v=20260406-structured1" />
   </head>
 
-  <body class="mobile-page min-h-screen bg-slate-100 text-slate-900">
+  <body
+    class="landing-page mobile-page min-h-screen bg-slate-100 text-slate-900"
+  >
     <main
-      class="mobile-page-shell mx-auto flex min-h-screen max-w-xl items-center justify-center p-6"
+      class="landing-shell mobile-page-shell mx-auto flex min-h-screen max-w-6xl items-center justify-center p-6"
     >
       <section
-        class="loader-card glass w-full overflow-hidden rounded-[32px] border border-white/70 bg-white p-8 shadow-[0_30px_120px_rgba(15,23,42,0.12)]"
+        class="landing-card loader-card glass w-full overflow-hidden rounded-[32px] border border-white/70 bg-white p-8 shadow-[0_30px_120px_rgba(15,23,42,0.12)]"
       >
         <div class="loader-card-glow" aria-hidden="true"></div>
-        <div class="relative z-[1]">
-          <div class="loader-stage" aria-hidden="true">
-            <div class="loader-orbit loader-orbit-outer"></div>
-            <div class="loader-orbit loader-orbit-middle"></div>
-            <div class="loader-core">
-              <span>O</span>
+        <div class="landing-grid relative z-[1]">
+          <div class="landing-copy">
+            <p class="landing-kicker">O-chat</p>
+            <h1 class="landing-title display-font">
+              Quiet conversations, sharper focus.
+            </h1>
+            <p class="mt-4 max-w-md text-sm leading-7 text-slate-500">
+              Preparing your sessions, encrypted history, and realtime channels
+              so the workspace opens with less noise and more clarity.
+            </p>
+            <div class="landing-actions mt-8 grid gap-3 sm:grid-cols-2">
+              <a
+                href="/auth"
+                class="ui-secondary-btn rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Open Auth
+              </a>
+              <a
+                href="/chat"
+                class="ui-primary-btn rounded-2xl bg-blue-600 px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-blue-700"
+              >
+                Open Chats
+              </a>
             </div>
-            <div class="loader-pulse loader-pulse-one"></div>
-            <div class="loader-pulse loader-pulse-two"></div>
           </div>
-          <p
-            class="mt-6 text-sm font-semibold uppercase tracking-[0.24em] text-slate-500"
-          >
-            O-chat
-          </p>
-          <h1 class="mt-3 text-3xl font-bold tracking-tight text-slate-900">
-            Syncing your workspace
-          </h1>
-          <p class="mt-3 text-sm leading-6 text-slate-500">
-            Preparing conversations, keys, and message history before the app opens.
-          </p>
-          <div class="loader-progress" aria-hidden="true">
-            <span class="loader-progress-bar"></span>
+          <div class="landing-visual">
+            <div class="loader-stage" aria-hidden="true">
+              <div class="loader-orbit loader-orbit-outer"></div>
+              <div class="loader-orbit loader-orbit-middle"></div>
+              <div class="loader-core">
+                <span>O</span>
+              </div>
+              <div class="loader-pulse loader-pulse-one"></div>
+              <div class="loader-pulse loader-pulse-two"></div>
+            </div>
+            <p
+              class="mt-6 text-sm font-semibold uppercase tracking-[0.24em] text-slate-500"
+            >
+              Workspace Sync
+            </p>
+            <div class="loader-progress" aria-hidden="true">
+              <span class="loader-progress-bar"></span>
+            </div>
+            <div class="loader-status-row" aria-hidden="true">
+              <span class="loader-status-pill">Session</span>
+              <span class="loader-status-pill">Chats</span>
+              <span class="loader-status-pill">Realtime</span>
+            </div>
           </div>
-          <div class="loader-status-row" aria-hidden="true">
-            <span class="loader-status-pill">Session</span>
-            <span class="loader-status-pill">Chats</span>
-            <span class="loader-status-pill">Realtime</span>
-          </div>
-        </div>
-        <div class="mt-8 grid gap-3 sm:grid-cols-2">
-          <a
-            href="/auth"
-            class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            Open Auth
-          </a>
-          <a
-            href="/chat"
-            class="rounded-2xl bg-blue-600 px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-blue-700"
-          >
-            Open Chats
-          </a>
         </div>
       </section>
     </main>

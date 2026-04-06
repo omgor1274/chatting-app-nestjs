@@ -3,11 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#2563eb" />
+    <meta name="theme-color" content="#20352f" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="O-chat" />
     <title>O-chat</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
     <script>
       document.documentElement.classList.add('chat-page-root');
       const readBootStorage = (key) => {
@@ -39,7 +45,9 @@
     <link rel="stylesheet" href="./public/app.css?v=20260406-structured1" />
   </head>
 
-  <body class="chat-page mobile-page min-h-screen bg-slate-100 text-slate-900 lg:p-3">
+  <body
+    class="chat-page mobile-page min-h-screen bg-slate-100 text-slate-900 lg:p-3"
+  >
     <div
       id="app-shell"
       class="mobile-chat-shell glass relative mr-auto flex h-[100dvh] max-w-[1560px] overflow-hidden border border-white/70 shadow-[0_30px_120px_rgba(15,23,42,0.18)] lg:h-[calc(100vh-1.5rem)] lg:rounded-[30px]"
@@ -462,13 +470,12 @@
             class="hidden rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm"
           >
             <div>
-              <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+              <p
+                class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400"
+              >
                 Pinned Chats
               </p>
-              <p
-                id="sidebar-pinned-count"
-                class="mt-1 text-sm text-slate-500"
-              >
+              <p id="sidebar-pinned-count" class="mt-1 text-sm text-slate-500">
                 No pinned chats yet.
               </p>
             </div>
@@ -479,13 +486,12 @@
             class="hidden rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm"
           >
             <div>
-              <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+              <p
+                class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400"
+              >
                 Starred Hub
               </p>
-              <p
-                id="sidebar-starred-count"
-                class="mt-1 text-sm text-slate-500"
-              >
+              <p id="sidebar-starred-count" class="mt-1 text-sm text-slate-500">
                 No starred messages yet.
               </p>
             </div>
@@ -622,10 +628,7 @@
               Reject
             </button>
           </div>
-          <div
-            id="chat-header-shortcuts"
-            class="flex items-center gap-2"
-          >
+          <div id="chat-header-shortcuts" class="flex items-center gap-2">
             <button
               id="voice-call-btn"
               type="button"
@@ -694,8 +697,8 @@
             >
               This is a demo prototype built to stay usable with minimal cost.
               It can become much stronger with real production services, but
-              this version is meant to showcase the core chat experience
-              without expensive infrastructure.
+              this version is meant to showcase the core chat experience without
+              expensive infrastructure.
             </p>
             <button
               onclick="openSidebar()"
@@ -722,10 +725,7 @@
             </span>
             <span id="message-loading-label">Loading messages...</span>
           </div>
-          <div
-            id="messages-list"
-            class="flex w-full flex-col gap-2"
-          ></div>
+          <div id="messages-list" class="flex w-full flex-col gap-2"></div>
         </div>
 
         <div
@@ -739,7 +739,9 @@
             >
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0 flex-1">
-                  <p class="text-xs font-semibold uppercase tracking-[0.24em] text-blue-600">
+                  <p
+                    class="text-xs font-semibold uppercase tracking-[0.24em] text-blue-600"
+                  >
                     Replying to
                   </p>
                   <p
@@ -767,7 +769,9 @@
               <div class="space-y-3">
                 <div class="flex items-start justify-between gap-3">
                   <div class="min-w-0 flex-1">
-                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">
+                    <p
+                      class="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700"
+                    >
                       Special Message
                     </p>
                     <p
@@ -793,7 +797,9 @@
                   class="hidden grid gap-3 sm:grid-cols-2"
                 >
                   <label class="space-y-1.5">
-                    <span class="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">
+                    <span
+                      class="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700"
+                    >
                       Opens At
                     </span>
                     <input
@@ -804,7 +810,9 @@
                     />
                   </label>
                   <label class="space-y-1.5 sm:col-span-2">
-                    <span class="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">
+                    <span
+                      class="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700"
+                    >
                       Note For Later
                     </span>
                     <input
@@ -821,7 +829,8 @@
                   id="spoiler-controls"
                   class="hidden rounded-2xl border border-amber-200/70 bg-white/80 px-3 py-2.5 text-xs leading-5 text-amber-900"
                 >
-                  Recipients will see a reveal card first and can open the spoiler when they are ready.
+                  Recipients will see a reveal card first and can open the
+                  spoiler when they are ready.
                 </div>
               </div>
             </div>
@@ -840,7 +849,8 @@
                       id="attachment-preview-note"
                       class="text-xs leading-5 text-slate-500"
                     >
-                      Choose one or more files and they will upload in the background while you keep chatting.
+                      Choose one or more files and they will upload in the
+                      background while you keep chatting.
                     </p>
                   </div>
                   <button
@@ -1086,11 +1096,11 @@
                 Offline
               </p>
               <p
-                  id="chat-contact-panel-theme-state"
-                  class="mt-3 max-w-md text-sm leading-6 text-slate-500"
-                >
-                  Default chat background active.
-                </p>
+                id="chat-contact-panel-theme-state"
+                class="mt-3 max-w-md text-sm leading-6 text-slate-500"
+              >
+                Default chat background active.
+              </p>
             </div>
           </section>
 
@@ -1105,9 +1115,7 @@
           >
             <div class="flex items-center justify-between gap-3">
               <div>
-                <p class="text-sm font-semibold text-slate-900">
-                  Shared media
-                </p>
+                <p class="text-sm font-semibold text-slate-900">Shared media</p>
                 <p
                   id="chat-contact-panel-media-count"
                   class="mt-1 text-sm text-slate-500"
@@ -1131,10 +1139,7 @@
                 <p class="text-sm font-semibold text-slate-900">
                   Search this chat
                 </p>
-                <p
-                  id="chat-search-summary"
-                  class="mt-1 text-sm text-slate-500"
-                >
+                <p id="chat-search-summary" class="mt-1 text-sm text-slate-500">
                   Search loaded messages, jump by date, or filter media.
                 </p>
               </div>
@@ -1185,7 +1190,9 @@
             ></div>
           </section>
 
-          <section class="mt-4 rounded-[24px] border border-slate-200 bg-white px-4 py-4">
+          <section
+            class="mt-4 rounded-[24px] border border-slate-200 bg-white px-4 py-4"
+          >
             <div class="flex items-center justify-between gap-3">
               <div>
                 <p class="text-sm font-semibold text-slate-900">
@@ -1205,12 +1212,12 @@
             ></div>
           </section>
 
-          <section class="mt-4 rounded-[24px] border border-slate-200 bg-white px-4 py-4">
+          <section
+            class="mt-4 rounded-[24px] border border-slate-200 bg-white px-4 py-4"
+          >
             <div class="flex items-center justify-between gap-3">
               <div>
-                <p class="text-sm font-semibold text-slate-900">
-                  Recent calls
-                </p>
+                <p class="text-sm font-semibold text-slate-900">Recent calls</p>
                 <p
                   id="chat-contact-panel-calls-count"
                   class="mt-1 text-sm text-slate-500"
@@ -1290,7 +1297,8 @@
                 <span
                   id="contact-archive-btn-copy"
                   class="mt-1 block text-sm text-slate-500"
-                  >Hide this conversation from the active list without deleting it.</span
+                  >Hide this conversation from the active list without deleting
+                  it.</span
                 >
               </span>
               <span class="text-slate-400">&rsaquo;</span>
@@ -1386,7 +1394,8 @@
                 <span
                   id="contact-report-btn-copy"
                   class="mt-1 block text-sm text-amber-600"
-                  >Flag spam, abuse, or suspicious behavior for admin review.</span
+                  >Flag spam, abuse, or suspicious behavior for admin
+                  review.</span
                 >
               </span>
               <span class="text-amber-400">&rsaquo;</span>
@@ -1442,7 +1451,7 @@
         class="flex max-h-[min(92vh,860px)] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border border-white/25 bg-white p-6 shadow-2xl sm:p-7"
         onclick="event.stopPropagation()"
       >
-          <div class="flex items-start justify-between gap-4">
+        <div class="flex items-start justify-between gap-4">
           <div>
             <p
               class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400"
@@ -1841,8 +1850,8 @@
                   id="settings-account-deletion-status"
                   class="mt-2 text-sm leading-6 text-rose-800"
                 >
-                  Schedule your account for deletion. O-chat keeps it for 7
-                  days in case you change your mind.
+                  Schedule your account for deletion. O-chat keeps it for 7 days
+                  in case you change your mind.
                 </p>
                 <div class="mt-4 flex flex-wrap gap-3">
                   <button
@@ -1997,7 +2006,8 @@
               id="report-modal-copy"
               class="mt-2 text-sm leading-6 text-slate-500"
             >
-              Tell the admins what happened so they can review it from the moderation queue.
+              Tell the admins what happened so they can review it from the
+              moderation queue.
             </p>
           </div>
           <button
@@ -2111,7 +2121,9 @@
               >No photo selected</span
             >
           </div>
-          <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+          <p
+            class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400"
+          >
             Accepted chat contacts
           </p>
           <div
@@ -2247,7 +2259,9 @@
         <span>Reply</span>
       </button>
       <div class="px-3 pb-2 pt-1">
-        <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+        <p
+          class="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400"
+        >
           Reactions
         </p>
         <div class="mt-2 flex flex-wrap gap-2">
