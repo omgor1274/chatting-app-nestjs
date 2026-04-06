@@ -177,7 +177,7 @@ async function bootstrap() {
   app.use(
     '/auth',
     rateLimit({
-      windowMs: readEnvNumber('AUTH_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000),
+      windowMs: readEnvNumber('AUTH_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000), // default: 15-minute window
       limit: readEnvNumber('AUTH_RATE_LIMIT_MAX', 20),
       standardHeaders: 'draft-8',
       legacyHeaders: false,
