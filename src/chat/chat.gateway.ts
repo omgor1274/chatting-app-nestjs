@@ -24,6 +24,10 @@ import { ChatService } from './chat.service';
 const socketAllowedOrigins = collectConfiguredOrigins();
 
 @WebSocketGateway({
+  transports: ['websocket'],
+  allowUpgrades: false,
+  pingInterval: 25000,
+  pingTimeout: 20000,
   cors: {
     origin: (origin, callback) => {
       callback(null, isAllowedRequestOrigin(origin, socketAllowedOrigins));
@@ -49,6 +53,10 @@ export class ChatGateway
   private readonly presenceChannel = 'ochat:presence:sync';
   private readonly typingChannel = 'ochat:typing:relay';
   private readonly realtimeChannel = 'ochat:realtime:relay';
+  private readonly pendingRealtimeMessages = new Map<
+    string,
+    Awaited<ReturnType<ChatService['prepareRealtimeMessage']>>
+  >();
 
   constructor(
     private jwt: JwtService,
@@ -306,20 +314,103 @@ export class ChatGateway
     receiverId?: string | null;
     groupId?: string | null;
     [key: string]: unknown;
-  }) {
+  }, options: { recipientUserIds?: string[]; includeSenderReceipt?: boolean } = {}) {
     if (message.groupId) {
-      const recipients = await this.getGroupMemberIds(message.groupId, [
-        message.senderId,
-      ]);
+      const recipients =
+        options.recipientUserIds ??
+        (await this.getGroupMemberIds(message.groupId, [message.senderId]));
       this.relayToUsers(recipients, 'receiveMessage', message);
-      this.relayToUsers([message.senderId], 'messageSent', message);
+      if (options.includeSenderReceipt !== false) {
+        this.relayToUsers([message.senderId], 'messageSent', message);
+      }
       return;
     }
 
     if (message.receiverId) {
       this.relayToUsers([message.receiverId], 'receiveMessage', message);
     }
-    this.relayToUsers([message.senderId], 'messageSent', message);
+    if (options.includeSenderReceipt !== false) {
+      this.relayToUsers([message.senderId], 'messageSent', message);
+    }
+  }
+
+  private emitRealtimeMessageCommit(
+    tempId: string,
+    recipientUserIds: string[],
+    message: {
+      senderId: string;
+      receiverId?: string | null;
+      groupId?: string | null;
+      [key: string]: unknown;
+    },
+  ) {
+    this.relayToUsers(
+      [message.senderId, ...recipientUserIds],
+      'message:commit',
+      {
+        tempId,
+        message,
+      },
+    );
+  }
+
+  private emitRealtimeMessageRollback(
+    tempId: string,
+    payload: {
+      senderId: string;
+      receiverId?: string | null;
+      groupId?: string | null;
+      reason: string;
+    },
+    recipientUserIds: string[],
+  ) {
+    this.relayToUsers(
+      [payload.senderId, ...recipientUserIds],
+      'message:rollback',
+      {
+        tempId,
+        ...payload,
+      },
+    );
+  }
+
+  private persistRealtimeMessage(tempId: string) {
+    const pending = this.pendingRealtimeMessages.get(tempId);
+    if (!pending) {
+      return;
+    }
+
+    void this.chatService
+      .persistPreparedMessage(pending.persistence)
+      .then((savedMessage) => {
+        this.emitRealtimeMessageCommit(
+          tempId,
+          pending.persistence.recipientIds,
+          savedMessage,
+        );
+      })
+      .catch((error: unknown) => {
+        const reason =
+          error instanceof Error && error.message
+            ? error.message
+            : 'Message could not be saved.';
+        this.logger.error(
+          `Failed to persist realtime message ${tempId}: ${reason}`,
+        );
+        this.emitRealtimeMessageRollback(
+          tempId,
+          {
+            senderId: pending.draftMessage.senderId,
+            receiverId: pending.draftMessage.receiverId ?? null,
+            groupId: pending.draftMessage.groupId ?? null,
+            reason,
+          },
+          pending.persistence.recipientIds,
+        );
+      })
+      .finally(() => {
+        this.pendingRealtimeMessages.delete(tempId);
+      });
   }
 
   async emitMessageUpdated(message: {
@@ -666,6 +757,7 @@ export class ChatGateway
   async handleMessage(
     @MessageBody()
     data: {
+      realtimeId?: string;
       ciphertext?: string;
       plainText?: string;
       toUserId?: string;
@@ -682,10 +774,11 @@ export class ChatGateway
       return { error: 'Unauthorized' };
     }
 
-    const savedMessage = await this.chatService.createEncryptedMessage({
+    const prepared = await this.chatService.prepareRealtimeMessage({
       senderId: sender.userId,
       receiverId: data.toUserId,
       groupId: data.groupId,
+      realtimeId: data.realtimeId,
       ciphertext: data.ciphertext,
       plainText: data.plainText,
       encryptedKey: data.encryptedKey,
@@ -694,7 +787,18 @@ export class ChatGateway
       messageType: data.messageType ?? MessageType.TEXT,
     });
 
-    await this.emitMessageToConversation(savedMessage);
-    return savedMessage;
+    this.pendingRealtimeMessages.set(prepared.draftMessage.id, prepared);
+    await this.emitMessageToConversation(prepared.draftMessage, {
+      recipientUserIds: prepared.persistence.recipientIds,
+      includeSenderReceipt: false,
+    });
+    void Promise.resolve().then(() =>
+      this.persistRealtimeMessage(prepared.draftMessage.id),
+    );
+
+    return {
+      accepted: true,
+      tempId: prepared.draftMessage.id,
+    };
   }
 }

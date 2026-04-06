@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import {
   GroupJoinRequestStatus,
   GroupMemberRole,
@@ -17,6 +18,52 @@ import { ChatAttachmentStorageService } from './chat-attachment-storage.service'
 const MESSAGE_PAGE_SIZE = 20;
 const DELETE_FOR_EVERYONE_WINDOW_MS = 5 * 60 * 1000;
 const LEGACY_MESSAGE_FILE_SIZE_MAX = BigInt(2147483647);
+
+type OutgoingMessageInput = {
+  senderId: string;
+  receiverId?: string;
+  groupId?: string;
+  realtimeId?: string;
+  ciphertext?: string;
+  plainText?: string;
+  encryptedKey?: string;
+  iv?: string;
+  algorithm?: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileMimeType?: string;
+  fileSize?: number | bigint;
+  messageType?: MessageType;
+};
+
+type PreparedOutgoingMessage = {
+  sender: {
+    id: string;
+    name: string | null;
+    email: string;
+  };
+  senderId: string;
+  receiverId: string | null;
+  groupId: string | null;
+  messageType: MessageType;
+  messageData: {
+    content: string | null;
+    ciphertext: string | null;
+    senderId: string;
+    receiverId: string | null;
+    groupId: string | null;
+    messageType: MessageType;
+    fileUrl: string | null;
+    fileName: string | null;
+    fileMimeType: string | null;
+    fileSize: bigint | null;
+    encryptedKey: string | null;
+    iv: string | null;
+    algorithm: string | null;
+    isEncrypted: boolean;
+  };
+  recipientIds: string[];
+};
 
 @Injectable()
 export class ChatService {
@@ -1315,21 +1362,9 @@ export class ChatService {
     };
   }
 
-  async createEncryptedMessage(input: {
-    senderId: string;
-    receiverId?: string;
-    groupId?: string;
-    ciphertext?: string;
-    plainText?: string;
-    encryptedKey?: string;
-    iv?: string;
-    algorithm?: string;
-    fileUrl?: string;
-    fileName?: string;
-    fileMimeType?: string;
-    fileSize?: number | bigint;
-    messageType?: MessageType;
-  }) {
+  private async prepareOutgoingMessage(
+    input: OutgoingMessageInput,
+  ): Promise<PreparedOutgoingMessage> {
     if (!input.receiverId && !input.groupId) {
       throw new BadRequestException('Receiver or group is required');
     }
@@ -1348,6 +1383,8 @@ export class ChatService {
     let receiverId: string | null = null;
     let groupId: string | null = null;
 
+    let recipientIds: string[] = [];
+
     if (input.receiverId) {
       const receiver = await this.prisma.user.findUnique({
         where: { id: input.receiverId },
@@ -1359,9 +1396,13 @@ export class ChatService {
       }
       await this.assertUsersCanChat(input.senderId, receiver.id);
       receiverId = receiver.id;
+      recipientIds = [receiver.id];
     } else if (input.groupId) {
-      await this.ensureGroupMember(input.groupId, input.senderId);
+      const membership = await this.ensureGroupMember(input.groupId, input.senderId);
       groupId = input.groupId;
+      recipientIds = membership.group.members
+        .map((member) => member.userId)
+        .filter((memberId) => memberId !== input.senderId);
     }
 
     const messageType = input.messageType ?? MessageType.TEXT;
@@ -1392,38 +1433,84 @@ export class ChatService {
         ? null
         : BigInt(input.fileSize);
 
-    const messageData = {
-      content: hasEncryptedText
-        ? null
-        : hasPlainText
-          ? input.plainText?.trim()
-          : null,
-      ciphertext: hasEncryptedText ? input.ciphertext?.trim() : null,
+    return {
+      sender,
       senderId: input.senderId,
       receiverId,
       groupId,
       messageType,
-      fileUrl: input.fileUrl ?? null,
-      fileName: input.fileName ?? null,
-      fileMimeType: input.fileMimeType ?? null,
-      fileSize: normalizedFileSize,
-      encryptedKey: input.encryptedKey?.trim() || null,
-      iv: input.iv?.trim() || null,
-      algorithm: input.algorithm?.trim() || null,
-      isEncrypted:
-        hasEncryptedText || Boolean(input.encryptedKey) || Boolean(input.iv),
+      recipientIds,
+      messageData: {
+        content: hasEncryptedText
+          ? null
+          : hasPlainText
+            ? (input.plainText?.trim() ?? null)
+            : null,
+        ciphertext: hasEncryptedText
+          ? (input.ciphertext?.trim() ?? null)
+          : null,
+        senderId: input.senderId,
+        receiverId,
+        groupId,
+        messageType,
+        fileUrl: input.fileUrl ?? null,
+        fileName: input.fileName ?? null,
+        fileMimeType: input.fileMimeType ?? null,
+        fileSize: normalizedFileSize,
+        encryptedKey: input.encryptedKey?.trim() || null,
+        iv: input.iv?.trim() || null,
+        algorithm: input.algorithm?.trim() || null,
+        isEncrypted:
+          hasEncryptedText || Boolean(input.encryptedKey) || Boolean(input.iv),
+      },
     };
+  }
 
+  private buildRealtimeMessageDraft(
+    prepared: PreparedOutgoingMessage,
+    realtimeId?: string,
+  ) {
+    const normalizedRealtimeId = String(realtimeId || '').trim();
+    const safeRealtimeId = /^[A-Za-z0-9:_-]{1,120}$/.test(normalizedRealtimeId)
+      ? normalizedRealtimeId
+      : '';
+    return {
+      id: safeRealtimeId || `live-${randomUUID()}`,
+      ...prepared.messageData,
+      readAt: null,
+      deletedForEveryoneAt: null,
+      deletedForEveryoneById: null,
+      createdAt: new Date(),
+      fileSize:
+        prepared.messageData.fileSize === null ||
+        prepared.messageData.fileSize === undefined
+          ? null
+          : Number(prepared.messageData.fileSize),
+      readByCount: 0,
+      recipientCount: prepared.recipientIds.length,
+      isRealtimeOnly: true,
+    };
+  }
+
+  async prepareRealtimeMessage(input: OutgoingMessageInput) {
+    const prepared = await this.prepareOutgoingMessage(input);
+    return {
+      draftMessage: this.buildRealtimeMessageDraft(prepared, input.realtimeId),
+      persistence: prepared,
+    };
+  }
+
+  async persistPreparedMessage(prepared: PreparedOutgoingMessage) {
     let createdMessage;
     try {
       createdMessage = await this.prisma.message.create({
-        data: messageData,
+        data: prepared.messageData,
       });
     } catch (error) {
       const canRetryWithoutFileSize =
-        normalizedFileSize !== null &&
-        normalizedFileSize > LEGACY_MESSAGE_FILE_SIZE_MAX &&
-        Boolean(input.fileUrl) &&
+        prepared.messageData.fileSize !== null &&
+        prepared.messageData.fileSize > LEGACY_MESSAGE_FILE_SIZE_MAX &&
+        Boolean(prepared.messageData.fileUrl) &&
         this.shouldRetryMessageCreateWithoutFileSize(error);
 
       if (!canRetryWithoutFileSize) {
@@ -1432,38 +1519,30 @@ export class ChatService {
 
       createdMessage = await this.prisma.message.create({
         data: {
-          ...messageData,
+          ...prepared.messageData,
           fileSize: null,
         },
       });
     }
 
     const preview = this.previewForMessage(createdMessage);
-    if (receiverId) {
-      await this.pushNotifications.notifyUser(receiverId, {
-        title: sender.name || sender.email,
+    if (prepared.receiverId) {
+      await this.pushNotifications.notifyUser(prepared.receiverId, {
+        title: prepared.sender.name || prepared.sender.email,
         body: preview,
-        tag: `chat-${sender.id}-${receiverId}`,
-        url: `/?chat=${sender.id}`,
+        tag: `chat-${prepared.sender.id}-${prepared.receiverId}`,
+        url: `/?chat=${prepared.sender.id}`,
       });
-      return this.serializeDirectMessage(createdMessage, input.senderId);
+      return this.serializeDirectMessage(createdMessage, prepared.senderId);
     }
 
-    const members = await this.prisma.groupMember.findMany({
-      where: { groupId: groupId as string },
-      select: { userId: true },
-    });
-    const recipientIds = members
-      .map((member) => member.userId)
-      .filter((memberId) => memberId !== input.senderId);
-
     await Promise.all(
-      recipientIds.map((memberId) =>
+      prepared.recipientIds.map((memberId) =>
         this.pushNotifications.notifyUser(memberId, {
-          title: sender.name || sender.email,
+          title: prepared.sender.name || prepared.sender.email,
           body: preview,
-          tag: `group-${groupId}`,
-          url: `/?group=${groupId}`,
+          tag: `group-${prepared.groupId}`,
+          url: `/?group=${prepared.groupId}`,
         }),
       ),
     );
@@ -1476,8 +1555,14 @@ export class ChatService {
           ? null
           : Number(createdMessage.fileSize),
       readByCount: 0,
-      recipientCount: recipientIds.length,
+      recipientCount: prepared.recipientIds.length,
     };
+  }
+
+  async createEncryptedMessage(input: OutgoingMessageInput) {
+    const prepared = await this.prepareOutgoingMessage(input);
+
+    return this.persistPreparedMessage(prepared);
   }
 
   async markConversationRead(

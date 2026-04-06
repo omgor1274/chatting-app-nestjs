@@ -15,6 +15,7 @@ let API_URL = appConfig.apiUrl;
 let configLoadPromise = null;
 const DEFAULT_AVATAR_URL = '/icons/default-avatar.svg';
 let socket = null;
+let socketConnectionKey = '';
 let token = null;
 let isLogin = true;
 let currentUser = null;
@@ -63,6 +64,9 @@ let messageReactionsById = new Map();
 let conversationDrafts = new Map();
 let showArchivedChats = false;
 let replyTarget = null;
+let revealedSpoilerMessageIds = new Set();
+let structuredMessageRefreshTimer = 0;
+let specialMessageDraft = createEmptySpecialMessageDraft();
 let offlineQueuedMessages = [];
 let activeDragCounter = 0;
 let ringtonePreference = 'classic';
@@ -114,6 +118,10 @@ const MESSAGE_ACTION_TOUCH_HOLD_MS = 420;
 const MESSAGE_ACTION_MOVE_TOLERANCE_PX = 10;
 const MESSAGE_ACTION_SCROLL_BLOCK_MS = 700;
 const MAX_ATTACHMENT_UPLOAD_AUTO_RETRIES = 4;
+const STRUCTURED_MESSAGE_PREFIX_PATTERN =
+  /^\[\[OCHAT_([A-Z_]+):([A-Za-z0-9+/=_-]+)\]\]\n?/;
+const TIME_CAPSULE_MIN_LEAD_MS = 60 * 1000;
+const TIME_CAPSULE_MAX_LEAD_MS = 365 * 24 * 60 * 60 * 1000;
 let messageActionScrollBlockedUntil = 0;
 const MATROSKA_ATTACHMENT_MIME_TYPES = new Set([
   'video/x-matroska',
@@ -121,6 +129,17 @@ const MATROSKA_ATTACHMENT_MIME_TYPES = new Set([
   'video/mkv',
   'application/x-matroska',
 ]);
+
+function createEmptySpecialMessageDraft() {
+  return {
+    capsule: {
+      enabled: false,
+      unlockAt: '',
+      note: '',
+    },
+    spoiler: false,
+  };
+}
 
 function createEmptyActiveCallState() {
   return {
@@ -1277,6 +1296,7 @@ function renderActiveConversationFromCache(options = {}) {
 
   list.innerHTML = '';
   list.appendChild(fragment);
+  scheduleStructuredMessageRefresh();
 
   window.requestAnimationFrame(() => {
     const state = activeConversationCacheKey
@@ -1650,30 +1670,40 @@ function formatRelativeTime(value) {
   return `${diffDays}d ago`;
 }
 
-function encodeReplyPayload(replyMeta) {
-  if (!replyMeta) {
-    return '';
+function formatDurationCompact(durationMs) {
+  if (!Number.isFinite(durationMs) || durationMs <= 0) {
+    return 'under a minute';
   }
 
+  const totalMinutes = Math.max(1, Math.round(durationMs / 60000));
+  if (totalMinutes < 60) {
+    return `${totalMinutes}m`;
+  }
+
+  const totalHours = Math.round(totalMinutes / 60);
+  if (totalHours < 48) {
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
+  }
+
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  return hours ? `${days}d ${hours}h` : `${days}d`;
+}
+
+function encodeStructuredPayload(payload) {
   try {
     return window.btoa(
-      unescape(
-        encodeURIComponent(
-          JSON.stringify({
-            id: replyMeta.id,
-            senderName: String(replyMeta.senderName || ''),
-            preview: String(replyMeta.preview || ''),
-          }),
-        ),
-      ),
+      unescape(encodeURIComponent(JSON.stringify(payload ?? {}))),
     );
   } catch (error) {
-    console.error('Failed to encode reply payload', error);
+    console.error('Failed to encode structured message payload', error);
     return '';
   }
 }
 
-function decodeReplyPayload(payload) {
+function decodeStructuredPayload(payload) {
   if (!payload) {
     return null;
   }
@@ -1685,40 +1715,540 @@ function decodeReplyPayload(payload) {
   }
 }
 
-function applyStructuredMessageData(message, rawText) {
-  const text = String(rawText || '');
-  const match = text.match(/^\[\[OCHAT_REPLY:([A-Za-z0-9+/=_-]+)\]\]\n?/);
-  if (!match) {
-    message.replyMeta = null;
-    return text;
-  }
-
-  const replyMeta = decodeReplyPayload(match[1]);
+function encodeReplyPayload(replyMeta) {
   if (!replyMeta) {
-    message.replyMeta = null;
-    return text;
+    return '';
   }
 
-  message.replyMeta = {
-    id: String(replyMeta.id || ''),
-    senderName: String(replyMeta.senderName || 'Message'),
+  return encodeStructuredPayload({
+    id: replyMeta.id,
+    senderName: String(replyMeta.senderName || ''),
     preview: String(replyMeta.preview || ''),
-  };
-  return text.slice(match[0].length);
+  });
 }
 
-function encodeMessageForSend(text, replyMeta = replyTarget) {
+function decodeReplyPayload(payload) {
+  const parsed = decodeStructuredPayload(payload);
+  if (!parsed || typeof parsed !== 'object') {
+    return null;
+  }
+
+  return {
+    id: String(parsed.id || ''),
+    senderName: String(parsed.senderName || 'Message'),
+    preview: String(parsed.preview || ''),
+  };
+}
+
+function normalizeCapsuleMeta(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const unlockAtValue = String(payload.unlockAt || '').trim();
+  const unlockAt = new Date(unlockAtValue);
+  if (Number.isNaN(unlockAt.getTime())) {
+    return null;
+  }
+
+  return {
+    unlockAt: unlockAt.toISOString(),
+    note: String(payload.note || '').trim().slice(0, 120),
+  };
+}
+
+function decodeCapsulePayload(payload) {
+  return normalizeCapsuleMeta(decodeStructuredPayload(payload));
+}
+
+function decodeSpoilerPayload(payload) {
+  const parsed = decodeStructuredPayload(payload);
+  if (parsed === null) {
+    return null;
+  }
+
+  return {
+    label: String(parsed.label || '').trim().slice(0, 40),
+  };
+}
+
+function applyStructuredMessageData(message, rawText) {
+  let text = String(rawText || '');
+  const originalText = text;
+  let strippedAnyPrefix = false;
+
+  message.replyMeta = null;
+  message.capsuleMeta = null;
+  message.spoilerMeta = null;
+
+  while (text) {
+    const match = text.match(STRUCTURED_MESSAGE_PREFIX_PATTERN);
+    if (!match) {
+      break;
+    }
+
+    const [prefix, directive, payload] = match;
+    let handled = true;
+    if (directive === 'REPLY') {
+      message.replyMeta = decodeReplyPayload(payload);
+    } else if (directive === 'CAPSULE') {
+      message.capsuleMeta = decodeCapsulePayload(payload);
+    } else if (directive === 'SPOILER') {
+      message.spoilerMeta = decodeSpoilerPayload(payload) || { label: '' };
+    } else {
+      handled = false;
+    }
+
+    if (!handled) {
+      break;
+    }
+
+    strippedAnyPrefix = true;
+    text = text.slice(prefix.length);
+  }
+
+  return strippedAnyPrefix ? text : originalText;
+}
+
+function normalizeStructuredSendOptions(options = {}) {
+  if (
+    options &&
+    typeof options === 'object' &&
+    ('replyMeta' in options ||
+      'capsuleMeta' in options ||
+      'spoilerMeta' in options)
+  ) {
+    return {
+      replyMeta:
+        options.replyMeta === undefined ? replyTarget : options.replyMeta,
+      capsuleMeta: options.capsuleMeta || null,
+      spoilerMeta: options.spoilerMeta || null,
+    };
+  }
+
+  return {
+    replyMeta: options || replyTarget,
+    capsuleMeta: null,
+    spoilerMeta: null,
+  };
+}
+
+function encodeMessageForSend(text, options = {}) {
   const trimmed = String(text || '').trim();
-  if (!replyMeta) {
-    return trimmed;
+  const normalized = normalizeStructuredSendOptions(options);
+  const prefixes = [];
+
+  if (normalized.replyMeta) {
+    const encodedReply = encodeReplyPayload(normalized.replyMeta);
+    if (encodedReply) {
+      prefixes.push(`[[OCHAT_REPLY:${encodedReply}]]`);
+    }
   }
 
-  const encoded = encodeReplyPayload(replyMeta);
-  if (!encoded) {
-    return trimmed;
+  if (normalized.capsuleMeta) {
+    const capsuleMeta = normalizeCapsuleMeta(normalized.capsuleMeta);
+    const encodedCapsule = capsuleMeta
+      ? encodeStructuredPayload(capsuleMeta)
+      : '';
+    if (encodedCapsule) {
+      prefixes.push(`[[OCHAT_CAPSULE:${encodedCapsule}]]`);
+    }
   }
 
-  return `[[OCHAT_REPLY:${encoded}]]\n${trimmed}`;
+  if (normalized.spoilerMeta) {
+    const encodedSpoiler = encodeStructuredPayload({
+      label: String(normalized.spoilerMeta.label || '').trim().slice(0, 40),
+    });
+    if (encodedSpoiler) {
+      prefixes.push(`[[OCHAT_SPOILER:${encodedSpoiler}]]`);
+    }
+  }
+
+  return prefixes.length ? `${prefixes.join('\n')}\n${trimmed}` : trimmed;
+}
+
+function isMessageTimeCapsule(message) {
+  return Boolean(message?.capsuleMeta?.unlockAt);
+}
+
+function getMessageCapsuleUnlockTimestamp(message) {
+  if (!isMessageTimeCapsule(message)) {
+    return Number.NaN;
+  }
+
+  return new Date(message.capsuleMeta.unlockAt).getTime();
+}
+
+function isMessageTimeCapsuleLocked(message) {
+  const unlockAt = getMessageCapsuleUnlockTimestamp(message);
+  if (!Number.isFinite(unlockAt)) {
+    return false;
+  }
+
+  return unlockAt > Date.now() && message?.senderId !== currentUser?.id;
+}
+
+function isMessageSpoiler(message) {
+  return Boolean(message?.spoilerMeta);
+}
+
+function isSpoilerMessageRevealed(message) {
+  return Boolean(message?.id && revealedSpoilerMessageIds.has(message.id));
+}
+
+function isMessageSpoilerHidden(message) {
+  return (
+    isMessageSpoiler(message) &&
+    message?.senderId !== currentUser?.id &&
+    !isSpoilerMessageRevealed(message)
+  );
+}
+
+function getTimeCapsuleUnlockLabel(message) {
+  const unlockTimestamp = getMessageCapsuleUnlockTimestamp(message);
+  if (!Number.isFinite(unlockTimestamp)) {
+    return '';
+  }
+
+  const unlockDate = new Date(unlockTimestamp);
+  const timeLabel = unlockDate.toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  const countdown = formatDurationCompact(unlockTimestamp - Date.now());
+
+  if (unlockTimestamp > Date.now()) {
+    return `Opens ${timeLabel} (${countdown})`;
+  }
+
+  return `Opened ${timeLabel}`;
+}
+
+function formatDateTimeInputValue(value) {
+  if (!value) {
+    return '';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const pad = (part) => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+    date.getDate(),
+  )}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function getDefaultTimeCapsuleUnlockAt(now = Date.now()) {
+  return new Date(
+    now + Math.max(TIME_CAPSULE_MIN_LEAD_MS, 2 * 60 * 60 * 1000),
+  ).toISOString();
+}
+
+function syncComposerActionToggle(button, status, isActive) {
+  if (!button || !status) {
+    return;
+  }
+
+  button.classList.toggle('bg-amber-100', isActive);
+  button.classList.toggle('text-amber-800', isActive);
+  button.classList.toggle('border', isActive);
+  button.classList.toggle('border-amber-200', isActive);
+  status.textContent = isActive ? 'On' : 'Off';
+  status.classList.toggle('text-amber-700', isActive);
+  status.classList.toggle('text-slate-400', !isActive);
+}
+
+function renderSpecialMessageDraftPreview() {
+  const preview = getById('special-message-preview');
+  const summary = getById('special-message-summary');
+  const note = getById('special-message-note');
+  const clearButton = getById('special-message-clear-btn');
+  const capsuleControls = getById('time-capsule-controls');
+  const spoilerControls = getById('spoiler-controls');
+  const capsuleInput = getById('time-capsule-input');
+  const capsuleNoteInput = getById('time-capsule-note-input');
+
+  if (
+    !preview ||
+    !summary ||
+    !note ||
+    !clearButton ||
+    !capsuleControls ||
+    !spoilerControls
+  ) {
+    return;
+  }
+
+  const hasCapsule = Boolean(specialMessageDraft.capsule.enabled);
+  const hasSpoiler = Boolean(specialMessageDraft.spoiler);
+  const hasDraft = hasCapsule || hasSpoiler;
+  preview.classList.toggle('hidden', !hasDraft);
+  clearButton.classList.toggle('hidden', !hasDraft);
+  capsuleControls.classList.toggle('hidden', !hasCapsule);
+  spoilerControls.classList.toggle('hidden', !hasSpoiler);
+
+  syncComposerActionToggle(
+    getById('composer-time-capsule-btn'),
+    getById('composer-time-capsule-status'),
+    hasCapsule,
+  );
+  syncComposerActionToggle(
+    getById('composer-spoiler-btn'),
+    getById('composer-spoiler-status'),
+    hasSpoiler,
+  );
+
+  if (!hasDraft) {
+    summary.textContent = '';
+    note.textContent = '';
+    if (capsuleInput) {
+      capsuleInput.value = '';
+    }
+    if (capsuleNoteInput) {
+      capsuleNoteInput.value = '';
+    }
+    return;
+  }
+
+  const summaryParts = [];
+  const detailParts = [];
+
+  if (hasCapsule) {
+    summaryParts.push('Time capsule');
+    const normalizedCapsule = normalizeCapsuleMeta({
+      unlockAt: specialMessageDraft.capsule.unlockAt,
+      note: specialMessageDraft.capsule.note,
+    });
+
+    if (capsuleInput) {
+      const nextValue = formatDateTimeInputValue(
+        specialMessageDraft.capsule.unlockAt || getDefaultTimeCapsuleUnlockAt(),
+      );
+      if (capsuleInput.value !== nextValue) {
+        capsuleInput.value = nextValue;
+      }
+      capsuleInput.min = formatDateTimeInputValue(
+        new Date(Date.now() + TIME_CAPSULE_MIN_LEAD_MS).toISOString(),
+      );
+      capsuleInput.max = formatDateTimeInputValue(
+        new Date(Date.now() + TIME_CAPSULE_MAX_LEAD_MS).toISOString(),
+      );
+    }
+
+    if (
+      capsuleNoteInput &&
+      capsuleNoteInput.value !== specialMessageDraft.capsule.note
+    ) {
+      capsuleNoteInput.value = specialMessageDraft.capsule.note;
+    }
+
+    if (normalizedCapsule) {
+      const unlockDate = new Date(normalizedCapsule.unlockAt);
+      detailParts.push(
+        `Opens ${unlockDate.toLocaleString([], {
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+        })}.`,
+      );
+      if (normalizedCapsule.note) {
+        detailParts.push(`Note: ${normalizedCapsule.note}`);
+      }
+    } else {
+      detailParts.push('Pick when this message should unlock.');
+    }
+  } else {
+    if (capsuleInput) {
+      capsuleInput.value = '';
+    }
+    if (capsuleNoteInput) {
+      capsuleNoteInput.value = '';
+    }
+  }
+
+  if (hasSpoiler) {
+    summaryParts.push('Spoiler cover');
+    detailParts.push(
+      hasCapsule
+        ? 'It will still need to be revealed after it opens.'
+        : 'Recipients will need to reveal it manually.',
+    );
+  }
+
+  summary.textContent = summaryParts.join(' + ');
+  note.textContent = detailParts.join(' ');
+}
+
+function resetSpecialMessageDraft() {
+  specialMessageDraft = createEmptySpecialMessageDraft();
+  renderSpecialMessageDraftPreview();
+}
+
+function toggleComposerTimeCapsule() {
+  if (specialMessageDraft.capsule.enabled) {
+    specialMessageDraft.capsule = {
+      enabled: false,
+      unlockAt: '',
+      note: '',
+    };
+  } else {
+    specialMessageDraft.capsule.enabled = true;
+    if (
+      !normalizeCapsuleMeta({
+        unlockAt: specialMessageDraft.capsule.unlockAt,
+        note: specialMessageDraft.capsule.note,
+      })
+    ) {
+      specialMessageDraft.capsule.unlockAt = getDefaultTimeCapsuleUnlockAt();
+    }
+  }
+
+  renderSpecialMessageDraftPreview();
+  closeComposerActionsMenu();
+  if (specialMessageDraft.capsule.enabled) {
+    getById('time-capsule-input')?.focus();
+  }
+}
+
+function toggleComposerSpoiler() {
+  specialMessageDraft.spoiler = !specialMessageDraft.spoiler;
+  renderSpecialMessageDraftPreview();
+  closeComposerActionsMenu();
+}
+
+function updateComposerTimeCapsuleUnlockAt(value) {
+  const parsed = new Date(String(value || '').trim());
+  specialMessageDraft.capsule.unlockAt = Number.isNaN(parsed.getTime())
+    ? ''
+    : parsed.toISOString();
+  renderSpecialMessageDraftPreview();
+}
+
+function updateComposerTimeCapsuleNote(value) {
+  specialMessageDraft.capsule.note = String(value || '').slice(0, 120);
+  renderSpecialMessageDraftPreview();
+}
+
+function buildComposerStructuredSendOptions() {
+  const options = {
+    replyMeta: replyTarget,
+    capsuleMeta: null,
+    spoilerMeta: null,
+  };
+
+  if (specialMessageDraft.capsule.enabled) {
+    const capsuleMeta = normalizeCapsuleMeta({
+      unlockAt: specialMessageDraft.capsule.unlockAt,
+      note: specialMessageDraft.capsule.note,
+    });
+
+    if (!capsuleMeta) {
+      throw new Error('Choose a valid unlock time for the time capsule.');
+    }
+
+    const unlockAt = new Date(capsuleMeta.unlockAt).getTime();
+    const leadMs = unlockAt - Date.now();
+    if (leadMs < TIME_CAPSULE_MIN_LEAD_MS) {
+      throw new Error('Time capsules must unlock at least 1 minute from now.');
+    }
+    if (leadMs > TIME_CAPSULE_MAX_LEAD_MS) {
+      throw new Error(
+        'Time capsules can only be scheduled up to 365 days ahead.',
+      );
+    }
+
+    options.capsuleMeta = capsuleMeta;
+  }
+
+  if (specialMessageDraft.spoiler) {
+    options.spoilerMeta = { label: '' };
+  }
+
+  return options;
+}
+
+function clearStructuredMessageRefreshTimer() {
+  if (structuredMessageRefreshTimer) {
+    window.clearTimeout(structuredMessageRefreshTimer);
+    structuredMessageRefreshTimer = 0;
+  }
+}
+
+function syncSelectedConversationPreview() {
+  if (!selectedUser || !conversationMessages.size) {
+    return;
+  }
+
+  const messages = sortMessagesChronologically(conversationMessages.values());
+  const latestMessage = messages[messages.length - 1];
+  if (!latestMessage) {
+    return;
+  }
+
+  updateRecentActivity(selectedUser.id, latestMessage, false);
+}
+
+function refreshStructuredMessages() {
+  const structuredMessages = Array.from(conversationMessages.values()).filter(
+    (message) => isMessageTimeCapsule(message),
+  );
+
+  if (!structuredMessages.length) {
+    return;
+  }
+
+  for (const message of structuredMessages) {
+    if (document.getElementById(`message-${message.id}`)) {
+      replaceRenderedMessage(message);
+    }
+  }
+
+  syncSelectedConversationPreview();
+}
+
+function scheduleStructuredMessageRefresh() {
+  clearStructuredMessageRefreshTimer();
+
+  const now = Date.now();
+  const futureCapsuleUnlocks = Array.from(conversationMessages.values())
+    .filter((message) => isMessageTimeCapsule(message))
+    .map((message) => getMessageCapsuleUnlockTimestamp(message))
+    .filter((unlockAt) => Number.isFinite(unlockAt) && unlockAt > now);
+
+  if (!futureCapsuleUnlocks.length) {
+    return;
+  }
+
+  const nextUnlockAt = Math.min(...futureCapsuleUnlocks);
+  const msUntilMinuteBoundary = 60 * 1000 - (now % (60 * 1000));
+  const delayMs = Math.max(
+    1000,
+    Math.min(nextUnlockAt - now, msUntilMinuteBoundary),
+  );
+
+  structuredMessageRefreshTimer = window.setTimeout(() => {
+    structuredMessageRefreshTimer = 0;
+    refreshStructuredMessages();
+    scheduleStructuredMessageRefresh();
+  }, delayMs);
+}
+
+function revealSpoilerMessage(messageId) {
+  if (!messageId) {
+    return;
+  }
+
+  revealedSpoilerMessageIds.add(messageId);
+  const message = conversationMessages.get(messageId);
+  if (message) {
+    replaceRenderedMessage(message);
+    syncSelectedConversationPreview();
+  }
 }
 
 function getMessageReaction(messageId) {
@@ -2333,7 +2863,9 @@ function removeOptimisticMessage(messageId) {
 
   renderedMessageIds.delete(messageId);
   conversationMessages.delete(messageId);
+  revealedSpoilerMessageIds.delete(messageId);
   document.getElementById(`message-${messageId}`)?.remove();
+  scheduleStructuredMessageRefresh();
 }
 
 function resolveOptimisticMessage(message, isOwnMessage) {
@@ -2379,6 +2911,14 @@ function createRenderableMessage(message) {
 function getResolvedMessageText(message) {
   if (!message) {
     return '[Encrypted message]';
+  }
+
+  if (isMessageTimeCapsuleLocked(message)) {
+    return 'Time capsule message';
+  }
+
+  if (isMessageSpoilerHidden(message)) {
+    return 'Spoiler message';
   }
 
   const text = String(message.displayText || message.content || '').trim();
@@ -2443,9 +2983,13 @@ function retryConversationDecryption() {
   hydrateMessagesInBackground(retryableMessages);
 }
 
-function createOptimisticTextMessage(text, user = selectedUser) {
+function createOptimisticTextMessage(
+  text,
+  user = selectedUser,
+  structuredOptions = {},
+) {
   const now = new Date().toISOString();
-  const structuredText = encodeMessageForSend(text);
+  const structuredText = encodeMessageForSend(text, structuredOptions);
   const optimisticMessage = {
     id: `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     senderId: currentUser.id,
@@ -4113,6 +4657,8 @@ function resetSelectedConversation() {
   selectedUser = null;
   detachedSelectedUser = false;
   clearReplyTarget();
+  resetSpecialMessageDraft();
+  clearStructuredMessageRefreshTimer();
   renderedMessageIds = new Set();
   conversationMessages = new Map();
   messagePagination = createMessagePaginationState();
@@ -8006,6 +8552,7 @@ function emitSocketEvent(eventName, payload) {
 
 function disconnectSocketForPageExit() {
   if (!socket) {
+    socketConnectionKey = '';
     return;
   }
 
@@ -8015,17 +8562,35 @@ function disconnectSocketForPageExit() {
     console.warn('Failed to close realtime connection during page exit', error);
   } finally {
     socket = null;
+    socketConnectionKey = '';
   }
 }
 
 function connectSocket() {
-  if (socket) {
-    socket.disconnect();
+  const nextConnectionKey = `${API_URL}|${token || ''}`;
+  if (socket && socketConnectionKey === nextConnectionKey) {
+    if (!socket.connected && !socket.active) {
+      socket.connect();
+    }
+    return;
   }
 
+  if (socket) {
+    disconnectSocketForPageExit();
+  }
+
+  socketConnectionKey = nextConnectionKey;
   socket = io(API_URL, {
     auth: { token },
-    transports: ['websocket', 'polling'],
+    transports: ['websocket'],
+    upgrade: false,
+    rememberUpgrade: true,
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 600,
+    reconnectionDelayMax: 3000,
+    randomizationFactor: 0.2,
+    timeout: 8000,
     closeOnBeforeunload: true,
   });
 
@@ -8146,6 +8711,14 @@ function connectSocket() {
     handleMessageUpdated(message);
   });
 
+  socket.on('message:commit', (payload) => {
+    commitRealtimeMessage(payload?.tempId, payload?.message);
+  });
+
+  socket.on('message:rollback', (payload) => {
+    rollbackRealtimeMessage(payload);
+  });
+
   socket.on('message:hidden', (payload) => {
     hideMessageLocally(payload?.messageId);
   });
@@ -8242,6 +8815,110 @@ function connectSocket() {
   });
 }
 
+function replaceCachedMessageIdentityEverywhere(tempId, message) {
+  if (!message?.id) {
+    return;
+  }
+
+  let changed = false;
+  for (const state of conversationHistoryCache.values()) {
+    const hadTemp = Boolean(tempId && state.conversationMessages.has(tempId));
+    const hadReal = state.conversationMessages.has(message.id);
+    if (!hadTemp && !hadReal) {
+      continue;
+    }
+
+    if (hadTemp) {
+      state.conversationMessages.delete(tempId);
+      state.renderedMessageIds.delete(tempId);
+    }
+
+    state.conversationMessages.set(message.id, message);
+    state.renderedMessageIds.add(message.id);
+    state.fetchedAt = Date.now();
+    changed = true;
+  }
+
+  if (changed) {
+    schedulePersistConversationHistoryCache();
+  }
+}
+
+function commitRealtimeMessage(tempId, message) {
+  if (!message?.id) {
+    return;
+  }
+
+  const hydratedMessage = createRenderableMessage(message);
+  if (tempId && revealedSpoilerMessageIds.delete(tempId)) {
+    revealedSpoilerMessageIds.add(hydratedMessage.id);
+  }
+
+  replaceCachedMessageIdentityEverywhere(tempId, hydratedMessage);
+  cacheMessageForConversation(hydratedMessage);
+
+  const tempElement = tempId
+    ? document.getElementById(`message-${tempId}`)
+    : null;
+  const existingRealElement = document.getElementById(
+    `message-${hydratedMessage.id}`,
+  );
+  const isActiveConversationMessage = belongsToSelectedConversation(
+    hydratedMessage,
+  );
+
+  if (tempElement || existingRealElement || isActiveConversationMessage) {
+    if (tempId && conversationMessages.has(tempId)) {
+      conversationMessages.delete(tempId);
+      renderedMessageIds.delete(tempId);
+    }
+    conversationMessages.set(hydratedMessage.id, hydratedMessage);
+    renderedMessageIds.add(hydratedMessage.id);
+  }
+
+  if (existingRealElement) {
+    existingRealElement.replaceWith(
+      createMessageElement(hydratedMessage, { animate: false }),
+    );
+    tempElement?.remove();
+  } else if (tempElement) {
+    tempElement.replaceWith(
+      createMessageElement(hydratedMessage, { animate: false }),
+    );
+  } else if (
+    isActiveConversationMessage &&
+    !document.getElementById(`message-${hydratedMessage.id}`)
+  ) {
+    appendMessage(hydratedMessage, { stickToBottom: false });
+  }
+
+  const chatUserId =
+    hydratedMessage.groupId ||
+    (hydratedMessage.senderId === currentUser?.id
+      ? hydratedMessage.receiverId
+      : hydratedMessage.senderId);
+  updateRecentActivity(chatUserId, hydratedMessage, false);
+  scheduleStructuredMessageRefresh();
+
+  void hydrateAndRefreshMessage(hydratedMessage).catch((error) => {
+    console.error('Failed to hydrate committed realtime message', error);
+  });
+}
+
+function rollbackRealtimeMessage(payload) {
+  const tempId = String(payload?.tempId || '');
+  if (!tempId) {
+    return;
+  }
+
+  hideMessageLocally(tempId);
+  scheduleUsersRefreshInBackground({ delayMs: 0 });
+
+  if (payload?.senderId && payload.senderId === currentUser?.id) {
+    alert(payload.reason || 'Message failed to save.');
+  }
+}
+
 async function handleIncomingMessage(message, isOwnMessage) {
   resolveOptimisticMessage(message, isOwnMessage);
   const hydratedMessage = createRenderableMessage(message);
@@ -8331,6 +9008,7 @@ async function selectUser(userId) {
   document.getElementById('messages-list').innerHTML = '';
   clearRecordedAudio();
   clearReplyTarget();
+  resetSpecialMessageDraft();
   restoreComposerDraft(selectedUser);
   closeChatContactPanel();
   closeChatActionsMenu();
@@ -8740,6 +9418,17 @@ function updateChatAccessUI() {
   const fileInput = document.getElementById('file-input');
   const fileLabel = document.getElementById('share-file-label');
   const composerActionsBtn = document.getElementById('composer-actions-btn');
+  const specialMessageClearBtn = document.getElementById(
+    'special-message-clear-btn',
+  );
+  const composerTimeCapsuleBtn = document.getElementById(
+    'composer-time-capsule-btn',
+  );
+  const composerSpoilerBtn = document.getElementById('composer-spoiler-btn');
+  const timeCapsuleInput = document.getElementById('time-capsule-input');
+  const timeCapsuleNoteInput = document.getElementById(
+    'time-capsule-note-input',
+  );
   const note = document.getElementById('chat-access-note');
   const panelNote = document.getElementById('chat-contact-panel-access-note');
   const headerActions = document.querySelector('.mobile-chat-header-actions');
@@ -8772,6 +9461,9 @@ function updateChatAccessUI() {
     voiceRecordBtn,
     voiceSendBtn,
     sendBtn,
+    specialMessageClearBtn,
+    composerTimeCapsuleBtn,
+    composerSpoilerBtn,
   ].filter(Boolean);
 
   const applyGatedState = (enabled) => {
@@ -8789,6 +9481,12 @@ function updateChatAccessUI() {
       button.classList.toggle('opacity-50', !enabled);
       button.classList.toggle('cursor-not-allowed', !enabled);
     }
+
+    [timeCapsuleInput, timeCapsuleNoteInput].filter(Boolean).forEach((field) => {
+      field.disabled = !enabled;
+      field.classList.toggle('opacity-60', !enabled);
+      field.classList.toggle('cursor-not-allowed', !enabled);
+    });
 
     if (composerSendInFlight) {
       setComposerSendingState(true);
@@ -9065,6 +9763,7 @@ function replaceRenderedMessage(message) {
 
   const next = createMessageElement(message, { animate: false });
   existing.replaceWith(next);
+  scheduleStructuredMessageRefresh();
 }
 
 function hideMessageLocally(messageId) {
@@ -9081,7 +9780,9 @@ function hideMessageLocally(messageId) {
   removeCachedMessageEverywhere(messageId);
   renderedMessageIds.delete(messageId);
   conversationMessages.delete(messageId);
+  revealedSpoilerMessageIds.delete(messageId);
   document.getElementById(`message-${messageId}`)?.remove();
+  scheduleStructuredMessageRefresh();
   renderStarredMessages();
   renderSidebarStarredHub();
 }
@@ -9183,7 +9884,7 @@ function bumpConversationForRequest(userId, preview, incrementUnread = false) {
   schedulePersistChatShellCache();
 }
 
-function queueOfflineTextMessage(user, text) {
+function queueOfflineTextMessage(user, text, structuredOptions = {}) {
   const trimmed = String(text || '').trim();
   if (!user || !trimmed) {
     return false;
@@ -9193,7 +9894,7 @@ function queueOfflineTextMessage(user, text) {
     id: `offline-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     conversationId: user.id,
     chatType: isGroupConversation(user) ? 'group' : 'direct',
-    text: encodeMessageForSend(trimmed),
+    text: encodeMessageForSend(trimmed, structuredOptions),
     createdAt: new Date().toISOString(),
   });
   persistOfflineQueuedMessages();
@@ -9258,11 +9959,22 @@ async function sendMessage() {
       getAttachmentTaskConversationKey(task) === selectedConversationKey,
   ).length;
   const voiceFile = recordedAudioFile;
+  let structuredSendOptions = null;
+  let structuredText = '';
+  if (text) {
+    try {
+      structuredSendOptions = buildComposerStructuredSendOptions();
+      structuredText = encodeMessageForSend(text, structuredSendOptions);
+    } catch (error) {
+      alert(error?.message || 'Special message settings are invalid.');
+      return;
+    }
+  }
   const shouldTrackDraftSubmission = Boolean(text || voiceFile);
   const draftFingerprint = shouldTrackDraftSubmission
     ? buildDraftFingerprint({
         roomId: selectedConversationRoomId(conversationTarget),
-        text,
+        text: structuredText || text,
         attachmentFile: null,
         voiceFile,
       })
@@ -9287,7 +9999,11 @@ async function sendMessage() {
   }
 
   const optimisticMessage = text
-    ? createOptimisticTextMessage(text, conversationTarget)
+    ? createOptimisticTextMessage(
+        text,
+        conversationTarget,
+        structuredSendOptions,
+      )
     : null;
 
   try {
@@ -9312,10 +10028,14 @@ async function sendMessage() {
     }
 
     if (!navigator.onLine || !socket?.connected) {
-      if (text && queueOfflineTextMessage(conversationTarget, text)) {
+      if (
+        text &&
+        queueOfflineTextMessage(conversationTarget, text, structuredSendOptions)
+      ) {
         input.value = '';
         clearConversationDraft(conversationTarget);
         clearReplyTarget();
+        resetSpecialMessageDraft();
         return;
       }
       throw new Error('Realtime connection is not available.');
@@ -9335,10 +10055,11 @@ async function sendMessage() {
 
     if (text) {
       const encryptedPayload = await encryptTextForConversation(
-        encodeMessageForSend(text),
+        structuredText,
         conversationTarget,
       );
       await emitSocketEvent('sendMessage', {
+        realtimeId: optimisticMessage?.id,
         ...encryptedPayload,
         ...(isGroupConversation(conversationTarget)
           ? { groupId: conversationTarget.id }
@@ -9368,7 +10089,10 @@ async function sendMessage() {
       await handleIncomingMessage(uploadedVoiceMessage, true);
       clearRecordedAudio();
     }
-    clearReplyTarget();
+    if (text) {
+      clearReplyTarget();
+      resetSpecialMessageDraft();
+    }
   } catch (error) {
     if (shouldTrackDraftSubmission) {
       clearDraftSubmissionGuard(draftFingerprint);
@@ -11084,6 +11808,152 @@ function renderMessageReactionHtml(message) {
   `;
 }
 
+function formatMessageTextHtml(text) {
+  return escapeHtml(text).replace(/\n/g, '<br>');
+}
+
+function renderTimeCapsuleMessageMetaHtml(message, isSent, metaTone) {
+  if (!isMessageTimeCapsule(message)) {
+    return '';
+  }
+
+  const isLocked = isMessageTimeCapsuleLocked(message);
+  const surfaceTone = isSent
+    ? 'border-white/15 bg-white/10'
+    : isLocked
+      ? 'border-amber-300/80 bg-amber-50/90'
+      : 'border-slate-200/90 bg-black/5';
+  const labelTone = isSent
+    ? 'text-blue-100/90'
+    : isLocked
+      ? 'text-amber-700'
+      : metaTone;
+  const titleTone = isSent
+    ? 'text-white'
+    : isLocked
+      ? 'text-amber-950'
+      : 'text-slate-900';
+  const note = String(message?.capsuleMeta?.note || '').trim();
+
+  return `
+    <div class="mb-3 rounded-2xl border ${surfaceTone} px-3 py-2.5 text-left">
+      <p class="text-[11px] font-semibold uppercase tracking-[0.2em] ${labelTone}">
+        ${isLocked ? 'Time capsule sealed' : 'Time capsule'}
+      </p>
+      <p class="mt-1 text-sm font-semibold ${titleTone}">
+        ${escapeHtml(getTimeCapsuleUnlockLabel(message) || 'Scheduled message')}
+      </p>
+      ${
+        note
+          ? `<p class="mt-1 text-xs leading-5 ${labelTone}">${escapeHtml(note)}</p>`
+          : ''
+      }
+    </div>
+  `;
+}
+
+function renderSpoilerMessageMetaHtml(message, isSent, metaTone) {
+  if (!isMessageSpoiler(message) || isMessageSpoilerHidden(message)) {
+    return '';
+  }
+
+  const label = String(message?.spoilerMeta?.label || '').trim();
+  const title = label
+    ? label
+    : message.senderId === currentUser?.id
+      ? 'Spoiler cover is on'
+      : isSpoilerMessageRevealed(message)
+        ? 'Spoiler revealed'
+        : 'Spoiler message';
+
+  return `
+    <div class="mb-3 rounded-2xl border ${
+      isSent ? 'border-white/15 bg-white/10' : 'border-slate-200/90 bg-black/5'
+    } px-3 py-2.5 text-left">
+      <p class="text-[11px] font-semibold uppercase tracking-[0.2em] ${metaTone}">
+        Spoiler
+      </p>
+      <p class="mt-1 text-sm font-semibold ${isSent ? 'text-white' : 'text-slate-900'}">
+        ${escapeHtml(title)}
+      </p>
+      <p class="mt-1 text-xs leading-5 ${metaTone}">
+        ${
+          message.senderId === currentUser?.id
+            ? 'Recipients will reveal this manually.'
+            : isSpoilerMessageRevealed(message)
+              ? 'Revealed for you.'
+              : 'Hidden until you reveal it.'
+        }
+      </p>
+    </div>
+  `;
+}
+
+function renderTextMessageContentHtml(message, isSent, metaTone) {
+  const contentTone = isSent ? 'text-white' : 'text-slate-800';
+  const surfaceTone = isSent
+    ? 'border-white/15 bg-white/10'
+    : 'border-slate-200/90 bg-black/5';
+  const capsuleMeta = renderTimeCapsuleMessageMetaHtml(message, isSent, metaTone);
+
+  if (isMessageTimeCapsuleLocked(message)) {
+    return `
+      ${capsuleMeta}
+      <div class="rounded-2xl border border-dashed ${
+        isSent ? 'border-white/25 bg-white/10' : 'border-amber-300 bg-white/85'
+      } px-3 py-3 text-left">
+        <p class="text-sm font-semibold ${isSent ? 'text-white' : 'text-amber-900'}">
+          Message sealed until it opens.
+        </p>
+        <p class="mt-1 text-xs leading-5 ${
+          isSent ? 'text-blue-100/90' : 'text-amber-800/80'
+        }">
+          The contents will appear automatically when the unlock time arrives.
+        </p>
+      </div>
+    `;
+  }
+
+  if (isMessageSpoilerHidden(message)) {
+    const label = String(message?.spoilerMeta?.label || '').trim();
+    return `
+      ${capsuleMeta}
+      <button
+        type="button"
+        onclick="revealSpoilerMessage('${escapeHtml(message.id)}')"
+        class="flex w-full items-center justify-between gap-3 rounded-2xl border ${surfaceTone} px-3 py-3 text-left transition hover:opacity-90"
+      >
+        <span class="min-w-0 flex-1">
+          <span class="block text-[11px] font-semibold uppercase tracking-[0.2em] ${metaTone}">
+            Spoiler
+          </span>
+          <span class="mt-1 block truncate text-sm font-semibold ${contentTone}">
+            ${escapeHtml(label || 'Tap to reveal')}
+          </span>
+          <span class="mt-1 block text-xs leading-5 ${metaTone}">
+            Hidden until you choose to reveal it.
+          </span>
+        </span>
+        <span
+          class="shrink-0 rounded-full ${
+            isSent ? 'bg-white/15 text-white' : 'bg-white text-slate-600'
+          } px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide"
+        >
+          Reveal
+        </span>
+      </button>
+    `;
+  }
+
+  return `
+    ${capsuleMeta}
+    ${renderSpoilerMessageMetaHtml(message, isSent, metaTone)}
+    <div class="${contentTone} whitespace-pre-wrap break-words">
+      ${formatMessageTextHtml(getResolvedMessageText(message))}
+    </div>
+  `;
+}
+
 function createMessageElement(message, options = {}) {
   const div = document.createElement('div');
   const isSent = message.senderId === currentUser.id;
@@ -11116,6 +11986,7 @@ function createMessageElement(message, options = {}) {
         `;
   const replySnippet = renderMessageReplySnippetHtml(message, metaTone);
   const reactionChip = renderMessageReactionHtml(message);
+  const textContent = renderTextMessageContentHtml(message, isSent, metaTone);
   const messageFileUrl = message.fileUrl
     ? escapeHtml(getFileUrl(message.fileUrl))
     : '';
@@ -11196,7 +12067,7 @@ function createMessageElement(message, options = {}) {
     div.innerHTML = `
             <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,40rem)] px-3 py-2 text-[14px] leading-[1.55]">
               ${replySnippet}
-              ${escapeHtml(getResolvedMessageText(message))}
+              ${textContent}
               ${footer}
               ${reactionChip}
             </div>
@@ -11360,6 +12231,7 @@ function appendMessages(messages, options = {}) {
   }
 
   list.appendChild(fragment);
+  scheduleStructuredMessageRefresh();
 
   if (options.stickToBottom) {
     scheduleMessageContainerBottom();
@@ -11395,6 +12267,7 @@ function prependMessages(messages) {
   }
 
   list.prepend(fragment);
+  scheduleStructuredMessageRefresh();
 }
 
 async function ensureServiceWorkerReady() {
@@ -11636,6 +12509,7 @@ function forceSessionLogout(message = '') {
   currentUser = null;
 
   disconnectSocketForPageExit();
+  clearStructuredMessageRefreshTimer();
 
   if (backgroundUsersRefreshTimer) {
     window.clearTimeout(backgroundUsersRefreshTimer);
@@ -12008,6 +12882,7 @@ applyViewportHeight();
 updateInstallAppUI();
 updateVoiceComposerUI();
 renderAttachmentUploadQueue();
+renderSpecialMessageDraftPreview();
 bindChatActionsMenu();
 ensureServiceWorkerReady().catch((error) => {
   console.error(error);
