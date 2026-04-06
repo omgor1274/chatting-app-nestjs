@@ -4,6 +4,9 @@ import {
   resolveDefaultAppOrigin,
   resolveRequestOrigin,
 } from './common/origin-config';
+import { ensureEnvLoaded } from './common/env';
+
+ensureEnvLoaded();
 
 @Injectable()
 export class AppService {
@@ -34,7 +37,9 @@ export class AppService {
       defaultApiOrigin,
       avatarBaseUrl:
         process.env.UI_AVATAR_BASE_URL || '/icons/default-avatar.svg',
-      stunServers: (process.env.STUN_SERVER_URLS || 'stun:stun.l.google.com:19302')
+      stunServers: (
+        process.env.STUN_SERVER_URLS || 'stun:stun.l.google.com:19302'
+      )
         .split(',')
         .map((value) => value.trim())
         .filter(Boolean),

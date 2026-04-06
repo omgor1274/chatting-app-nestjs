@@ -9,6 +9,9 @@ import { ChatController } from './chat.controller';
 import { ChatRetentionService } from './chat-retention.service';
 import { ChatUploadService } from './chat-upload.service';
 import { ChatService } from './chat.service';
+import { ensureEnvLoaded } from '../common/env';
+
+ensureEnvLoaded();
 
 @Module({
   imports: [

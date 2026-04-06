@@ -3,11 +3,9 @@ import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import express from 'express';
-import { config as loadEnv } from 'dotenv';
 import { mkdirSync } from 'fs';
 import { AppModule } from './app.module';
 import {
-  getEnvFilePath,
   resolveAppRootPath,
   getWritableDataDir,
   recoverWritableDataDirFromError,
@@ -18,8 +16,9 @@ import {
   isAllowedRequestOrigin,
 } from './common/origin-config';
 import { resolveRateLimitClientKey } from './common/rate-limit-client-key';
+import { ensureEnvLoaded } from './common/env';
 
-loadEnv({ path: getEnvFilePath(), override: false });
+ensureEnvLoaded();
 
 function readEnvNumber(name: string, fallback: number) {
   const raw = process.env[name];
@@ -48,10 +47,7 @@ function resolveTrustProxy(value?: string) {
   return Number.isFinite(numericValue) ? numericValue : value;
 }
 
-function setStaticAssetHeaders(
-  res: express.Response,
-  filePath: string,
-) {
+function setStaticAssetHeaders(res: express.Response, filePath: string) {
   const normalizedPath = filePath.replaceAll('\\', '/');
 
   if (normalizedPath.endsWith('/sw.js')) {
@@ -100,6 +96,18 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const expressApp = app.getHttpAdapter().getInstance();
   const port = readEnvNumber('PORT', 8080);
+  const requestTimeoutMs = readEnvNumber(
+    'SERVER_REQUEST_TIMEOUT_MS',
+    5 * 60 * 1000,
+  );
+  const keepAliveTimeoutMs = readEnvNumber(
+    'SERVER_KEEP_ALIVE_TIMEOUT_MS',
+    5 * 1000,
+  );
+  const headersTimeoutMs = Math.max(
+    readEnvNumber('SERVER_HEADERS_TIMEOUT_MS', 65 * 1000),
+    keepAliveTimeoutMs + 1000,
+  );
   const configuredOrigins = collectConfiguredOrigins();
   const allowedOrigins = configuredOrigins.length
     ? configuredOrigins
@@ -225,8 +233,9 @@ async function bootstrap() {
   console.log('Resolved server port:', port);
   console.log('Writable data directory:', getWritableDataDir());
   const server = await app.listen(port, '0.0.0.0');
-  server.requestTimeout = 0;
-  server.headersTimeout = 0;
+  server.requestTimeout = requestTimeoutMs;
+  server.keepAliveTimeout = keepAliveTimeoutMs;
+  server.headersTimeout = headersTimeoutMs;
   console.log(`O-chat server listening on 0.0.0.0:${port}`);
 }
 bootstrap();

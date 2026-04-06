@@ -8,6 +8,9 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AccountDeletionService } from './account-deletion.service';
 import { UserController } from './user.controller';
 import { UserService } from './user.service';
+import { ensureEnvLoaded } from '../common/env';
+
+ensureEnvLoaded();
 
 @Module({
   imports: [

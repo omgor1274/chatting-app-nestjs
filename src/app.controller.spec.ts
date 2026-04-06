@@ -35,4 +35,19 @@ describe('AppController', () => {
     expect(setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store');
     expect(sendFile).toHaveBeenCalled();
   });
+
+  it('serves public config with no-store and vary headers', () => {
+    const setHeader = jest.fn();
+    const response = {
+      setHeader,
+    } as unknown as Response;
+
+    appController.getConfig(undefined as never, response);
+
+    expect(setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store');
+    expect(setHeader).toHaveBeenCalledWith(
+      'Vary',
+      'Host, X-Forwarded-Host, X-Forwarded-Proto',
+    );
+  });
 });

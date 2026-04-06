@@ -3,9 +3,14 @@ import type { Request, Response } from 'express';
 import { AppService } from './app.service';
 import { resolveAppRootPath } from './common/app-paths';
 
+function setPublicConfigHeaders(res: Response) {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Vary', 'Host, X-Forwarded-Host, X-Forwarded-Proto');
+}
+
 @Controller()
 export class AppController {
-  constructor(private readonly appService: AppService) { }
+  constructor(private readonly appService: AppService) {}
 
   @Get()
   getIndex(@Res() res: Response) {
@@ -43,14 +48,15 @@ export class AppController {
   }
 
   @Get('config')
-  getConfig(@Req() req: Request) {
+  getConfig(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    setPublicConfigHeaders(res);
     return this.appService.getPublicConfig(req);
   }
 
   @Get('runtime-config.js')
   getRuntimeConfig(@Req() req: Request, @Res() res: Response) {
     const config = this.appService.getPublicConfig(req);
-    res.setHeader('Cache-Control', 'no-store');
+    setPublicConfigHeaders(res);
     res.type('application/javascript');
     return res.send(
       `window.__OCHAT_RUNTIME_CONFIG__ = ${JSON.stringify({

@@ -5,6 +5,9 @@ import { MailModule } from '../mail/mail.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { JwtModule } from '@nestjs/jwt';
 import { AdminBootstrapService } from './admin-bootstrap.service';
+import { ensureEnvLoaded } from '../common/env';
+
+ensureEnvLoaded();
 
 @Module({
   imports: [
@@ -18,4 +21,4 @@ import { AdminBootstrapService } from './admin-bootstrap.service';
   controllers: [AuthController],
   providers: [AuthService, AdminBootstrapService],
 })
-export class AuthModule { }
+export class AuthModule {}

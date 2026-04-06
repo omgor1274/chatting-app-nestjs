@@ -3,8 +3,10 @@ const defaultApiOrigin =
   window.__OCHAT_RUNTIME_CONFIG__?.defaultApiOrigin || 'http://localhost:8080';
 const localBackendOrigin = defaultApiOrigin;
 const isHostedOrigin =
-  !isFileOrigin && !/^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
+  !isFileOrigin &&
+  !/^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
 const KEY_BACKUP_UNLOCK_MATERIAL_PREFIX = 'ochat_key_unlock_material_';
+const PUBLIC_CONFIG_FETCH_TIMEOUT_MS = 5000;
 
 let appConfig = {
   apiUrl: localBackendOrigin,
@@ -98,9 +100,13 @@ function getConfigCandidates() {
   try {
     const parsed = new URL(localBackendOrigin);
     if (parsed.hostname === 'localhost') {
-      candidates.push(`${parsed.protocol}//127.0.0.1${parsed.port ? `:${parsed.port}` : ''}`);
+      candidates.push(
+        `${parsed.protocol}//127.0.0.1${parsed.port ? `:${parsed.port}` : ''}`,
+      );
     } else if (parsed.hostname === '127.0.0.1') {
-      candidates.push(`${parsed.protocol}//localhost${parsed.port ? `:${parsed.port}` : ''}`);
+      candidates.push(
+        `${parsed.protocol}//localhost${parsed.port ? `:${parsed.port}` : ''}`,
+      );
     }
   } catch {
     // Ignore invalid env-driven defaults and keep the explicit candidates above.
@@ -116,6 +122,36 @@ function resolveHostedApiUrl(candidate, data) {
   }
 
   return configuredApiUrl || candidate;
+}
+
+async function fetchPublicConfigCandidate(candidate) {
+  let timeoutId = null;
+  let signal;
+
+  if (
+    typeof AbortSignal !== 'undefined' &&
+    typeof AbortSignal.timeout === 'function'
+  ) {
+    signal = AbortSignal.timeout(PUBLIC_CONFIG_FETCH_TIMEOUT_MS);
+  } else if (typeof AbortController !== 'undefined') {
+    const controller = new AbortController();
+    signal = controller.signal;
+    timeoutId = window.setTimeout(
+      () => controller.abort(),
+      PUBLIC_CONFIG_FETCH_TIMEOUT_MS,
+    );
+  }
+
+  try {
+    return await fetch(`${candidate}/config`, {
+      cache: 'no-store',
+      signal,
+    });
+  } finally {
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId);
+    }
+  }
 }
 
 export function getApiUrl() {
@@ -299,11 +335,13 @@ export async function loadPublicConfig() {
   }
 
   configLoadPromise = (async () => {
-    const candidates = isHostedOrigin ? [window.location.origin] : getConfigCandidates();
+    const candidates = isHostedOrigin
+      ? [window.location.origin]
+      : getConfigCandidates();
 
     for (const candidate of candidates) {
       try {
-        const response = await fetch(`${candidate}/config`);
+        const response = await fetchPublicConfigCandidate(candidate);
         if (!response.ok) {
           continue;
         }
@@ -321,7 +359,7 @@ export async function loadPublicConfig() {
         API_URL = appConfig.apiUrl || candidate;
         return appConfig;
       } catch (error) {
-        console.error(error);
+        console.error(`Failed to load public config from ${candidate}`, error);
       }
     }
 

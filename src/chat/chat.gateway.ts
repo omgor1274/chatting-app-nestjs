@@ -21,8 +21,6 @@ import {
 } from '../common/origin-config';
 import { ChatService } from './chat.service';
 
-const socketAllowedOrigins = collectConfiguredOrigins();
-
 @WebSocketGateway({
   transports: ['websocket'],
   allowUpgrades: false,
@@ -30,7 +28,10 @@ const socketAllowedOrigins = collectConfiguredOrigins();
   pingTimeout: 20000,
   cors: {
     origin: (origin, callback) => {
-      callback(null, isAllowedRequestOrigin(origin, socketAllowedOrigins));
+      callback(
+        null,
+        isAllowedRequestOrigin(origin, collectConfiguredOrigins()),
+      );
     },
   },
 })
@@ -132,8 +133,8 @@ export class ChatGateway
 
       if (channel === this.realtimeChannel) {
         if (
-          typeof payload.eventName !== 'string'
-          || !Array.isArray(payload.recipientUserIds)
+          typeof payload.eventName !== 'string' ||
+          !Array.isArray(payload.recipientUserIds)
         ) {
           return;
         }
@@ -166,9 +167,7 @@ export class ChatGateway
     const presenceFields = await redis.hkeys(this.onlineUsersRedisKey);
     return Array.from(
       new Set(
-        presenceFields
-          .map((field) => field.split(':')[0])
-          .filter(Boolean),
+        presenceFields.map((field) => field.split(':')[0]).filter(Boolean),
       ),
     );
   }
@@ -270,7 +269,9 @@ export class ChatGateway
     payload: unknown,
   ) {
     this.emitToUsers(userIds, eventName, payload);
-    void this.publishRealtimeEvent(eventName, userIds, payload).catch(() => undefined);
+    void this.publishRealtimeEvent(eventName, userIds, payload).catch(
+      () => undefined,
+    );
   }
 
   private getPresenceRedisField(userId: string) {
@@ -296,10 +297,16 @@ export class ChatGateway
       return;
     }
 
-    await redis.hdel(this.onlineUsersRedisKey, this.getPresenceRedisField(userId));
+    await redis.hdel(
+      this.onlineUsersRedisKey,
+      this.getPresenceRedisField(userId),
+    );
   }
 
-  private async getGroupMemberIds(groupId: string, excludeUserIds: string[] = []) {
+  private async getGroupMemberIds(
+    groupId: string,
+    excludeUserIds: string[] = [],
+  ) {
     const members = await this.prisma.groupMember.findMany({
       where: { groupId },
       select: { userId: true },
@@ -309,12 +316,18 @@ export class ChatGateway
       .filter((userId) => !excludeUserIds.includes(userId));
   }
 
-  async emitMessageToConversation(message: {
-    senderId: string;
-    receiverId?: string | null;
-    groupId?: string | null;
-    [key: string]: unknown;
-  }, options: { recipientUserIds?: string[]; includeSenderReceipt?: boolean } = {}) {
+  async emitMessageToConversation(
+    message: {
+      senderId: string;
+      receiverId?: string | null;
+      groupId?: string | null;
+      [key: string]: unknown;
+    },
+    options: {
+      recipientUserIds?: string[];
+      includeSenderReceipt?: boolean;
+    } = {},
+  ) {
     if (message.groupId) {
       const recipients =
         options.recipientUserIds ??
@@ -443,9 +456,11 @@ export class ChatGateway
     }
 
     if (payload.groupId) {
-      this.getGroupMemberIds(payload.groupId, [payload.userId]).then((members) => {
-        this.relayToUsers(members, 'messages:read', payload);
-      });
+      this.getGroupMemberIds(payload.groupId, [payload.userId]).then(
+        (members) => {
+          this.relayToUsers(members, 'messages:read', payload);
+        },
+      );
     }
   }
 
@@ -575,7 +590,9 @@ export class ChatGateway
 
     if (data.groupId) {
       await this.chatService.getGroupDetails(sender.userId, data.groupId);
-      const members = await this.getGroupMemberIds(data.groupId, [sender.userId]);
+      const members = await this.getGroupMemberIds(data.groupId, [
+        sender.userId,
+      ]);
       this.emitToUsers(members, 'typing', {
         fromUserId: sender.userId,
         groupId: data.groupId,

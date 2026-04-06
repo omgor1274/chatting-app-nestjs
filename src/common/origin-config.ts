@@ -1,3 +1,7 @@
+import { ensureEnvLoaded } from './env';
+
+ensureEnvLoaded();
+
 function safeParseOrigin(value: string) {
   try {
     return new URL(value).origin.toLowerCase();

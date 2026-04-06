@@ -6,6 +6,7 @@ const localBackendOrigin = defaultApiOrigin;
 const isHostedOrigin =
   !isFileOrigin &&
   !/^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
+const PUBLIC_CONFIG_FETCH_TIMEOUT_MS = 5000;
 let appConfig = {
   apiUrl: localBackendOrigin,
   avatarBaseUrl: '/icons/default-avatar.svg',
@@ -216,6 +217,36 @@ function resolveHostedApiUrl(candidate, data) {
   }
 
   return configuredApiUrl || candidate;
+}
+
+async function fetchPublicConfigCandidate(candidate) {
+  let timeoutId = null;
+  let signal;
+
+  if (
+    typeof AbortSignal !== 'undefined' &&
+    typeof AbortSignal.timeout === 'function'
+  ) {
+    signal = AbortSignal.timeout(PUBLIC_CONFIG_FETCH_TIMEOUT_MS);
+  } else if (typeof AbortController !== 'undefined') {
+    const controller = new AbortController();
+    signal = controller.signal;
+    timeoutId = window.setTimeout(
+      () => controller.abort(),
+      PUBLIC_CONFIG_FETCH_TIMEOUT_MS,
+    );
+  }
+
+  try {
+    return await fetch(`${candidate}/config`, {
+      cache: 'no-store',
+      signal,
+    });
+  } finally {
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId);
+    }
+  }
 }
 
 function getById(id) {
@@ -628,7 +659,10 @@ async function resolveCurrentUserPrivateKeyForBackup() {
 
     writeStoredValue(privateKeyStorageKey(currentUser.id), restoredPrivateKey);
     if (currentUser.publicKey) {
-      writeStoredValue(publicKeyStorageKey(currentUser.id), currentUser.publicKey);
+      writeStoredValue(
+        publicKeyStorageKey(currentUser.id),
+        currentUser.publicKey,
+      );
     }
     return restoredPrivateKey;
   } catch (error) {
@@ -738,7 +772,10 @@ async function ensureEncryptionKeys(forceSync = false) {
     return;
   }
 
-  let savedPrivateKey = readStoredValue(privateKeyStorageKey(currentUser.id), '');
+  let savedPrivateKey = readStoredValue(
+    privateKeyStorageKey(currentUser.id),
+    '',
+  );
   let savedPublicKey = readStoredValue(publicKeyStorageKey(currentUser.id), '');
   let generatedNewKeyPair = false;
   const hasServerKeyBackup = Boolean(
@@ -1753,7 +1790,9 @@ function normalizeCapsuleMeta(payload) {
 
   return {
     unlockAt: unlockAt.toISOString(),
-    note: String(payload.note || '').trim().slice(0, 120),
+    note: String(payload.note || '')
+      .trim()
+      .slice(0, 120),
   };
 }
 
@@ -1768,7 +1807,9 @@ function decodeSpoilerPayload(payload) {
   }
 
   return {
-    label: String(parsed.label || '').trim().slice(0, 40),
+    label: String(parsed.label || '')
+      .trim()
+      .slice(0, 40),
   };
 }
 
@@ -1857,7 +1898,9 @@ function encodeMessageForSend(text, options = {}) {
 
   if (normalized.spoilerMeta) {
     const encodedSpoiler = encodeStructuredPayload({
-      label: String(normalized.spoilerMeta.label || '').trim().slice(0, 40),
+      label: String(normalized.spoilerMeta.label || '')
+        .trim()
+        .slice(0, 40),
     });
     if (encodedSpoiler) {
       prefixes.push(`[[OCHAT_SPOILER:${encodedSpoiler}]]`);
@@ -3180,7 +3223,7 @@ async function loadPublicConfig() {
 
     for (const candidate of candidates) {
       try {
-        const response = await fetch(`${candidate}/config`);
+        const response = await fetchPublicConfigCandidate(candidate);
         if (!response.ok) {
           continue;
         }
@@ -3203,7 +3246,7 @@ async function loadPublicConfig() {
         };
         return appConfig;
       } catch (error) {
-        console.error(error);
+        console.error(`Failed to load public config from ${candidate}`, error);
       }
     }
 
@@ -4624,7 +4667,9 @@ function isAcceptedDirectChatUser(user) {
   }
 
   const preview = String(user.lastMessagePreview || '').trim();
-  return preview !== 'Chat request sent' && preview !== 'Sent you a chat request';
+  return (
+    preview !== 'Chat request sent' && preview !== 'Sent you a chat request'
+  );
 }
 
 function getAcceptedGroupCandidates() {
@@ -5131,7 +5176,8 @@ function setAuthMode(nextIsLogin) {
 
 function applyDarkMode(enabled) {
   const nextEnabled = Boolean(enabled);
-  const bodyAlreadyMatches = document.body.classList.contains('dark-mode') === nextEnabled;
+  const bodyAlreadyMatches =
+    document.body.classList.contains('dark-mode') === nextEnabled;
   writeStoredValue('chat_dark_mode', nextEnabled ? '1' : '0');
   const darkModeInput = document.getElementById('settings-darkmode-input');
   if (darkModeInput) {
@@ -5394,7 +5440,9 @@ function formatAdminUserDateTime(value) {
 }
 
 function filterAdminUsers(usersList, query) {
-  const normalizedQuery = String(query || '').trim().toLowerCase();
+  const normalizedQuery = String(query || '')
+    .trim()
+    .toLowerCase();
   if (!normalizedQuery) {
     return usersList;
   }
@@ -5429,7 +5477,8 @@ function renderAdminUsers(payload = adminUsersPayload) {
 
   const stats = payload?.summary || {};
   const usersList = Array.isArray(payload?.users) ? payload.users : [];
-  const searchQuery = getById('settings-admin-search-input')?.value?.trim() || '';
+  const searchQuery =
+    getById('settings-admin-search-input')?.value?.trim() || '';
   const filteredUsers = filterAdminUsers(usersList, searchQuery);
 
   summary.innerHTML = `
@@ -5704,9 +5753,12 @@ async function loadAdminUsers() {
 }
 
 async function approveAdminUser(userId) {
-  const res = await api(`/users/admin/users/${encodeURIComponent(userId)}/approve`, {
-    method: 'POST',
-  });
+  const res = await api(
+    `/users/admin/users/${encodeURIComponent(userId)}/approve`,
+    {
+      method: 'POST',
+    },
+  );
   const data = await readJsonResponse(res, {}, 'Failed to approve the user.');
 
   if (!res.ok) {
@@ -5725,9 +5777,12 @@ async function banAdminUser(userId) {
     return;
   }
 
-  const res = await api(`/users/admin/users/${encodeURIComponent(userId)}/ban`, {
-    method: 'POST',
-  });
+  const res = await api(
+    `/users/admin/users/${encodeURIComponent(userId)}/ban`,
+    {
+      method: 'POST',
+    },
+  );
   const data = await readJsonResponse(res, {}, 'Failed to ban the user.');
 
   if (!res.ok) {
@@ -5739,14 +5794,19 @@ async function banAdminUser(userId) {
 }
 
 async function unbanAdminUser(userId) {
-  const confirmed = window.confirm('Unban this user and restore website access?');
+  const confirmed = window.confirm(
+    'Unban this user and restore website access?',
+  );
   if (!confirmed) {
     return;
   }
 
-  const res = await api(`/users/admin/users/${encodeURIComponent(userId)}/unban`, {
-    method: 'POST',
-  });
+  const res = await api(
+    `/users/admin/users/${encodeURIComponent(userId)}/unban`,
+    {
+      method: 'POST',
+    },
+  );
   const data = await readJsonResponse(res, {}, 'Failed to unban the user.');
 
   if (!res.ok) {
@@ -5769,7 +5829,11 @@ async function removeAdminRoleFromUser(userId) {
       method: 'POST',
     },
   );
-  const data = await readJsonResponse(res, {}, 'Failed to remove the admin role.');
+  const data = await readJsonResponse(
+    res,
+    {},
+    'Failed to remove the admin role.',
+  );
 
   if (!res.ok) {
     throw new Error(data.message || 'Failed to remove the admin role');
@@ -5787,9 +5851,12 @@ async function deleteAdminUserPermanently(userId) {
     return;
   }
 
-  const res = await api(`/users/admin/users/${encodeURIComponent(userId)}/delete`, {
-    method: 'POST',
-  });
+  const res = await api(
+    `/users/admin/users/${encodeURIComponent(userId)}/delete`,
+    {
+      method: 'POST',
+    },
+  );
   const data = await readJsonResponse(
     res,
     {},
@@ -8863,9 +8930,8 @@ function commitRealtimeMessage(tempId, message) {
   const existingRealElement = document.getElementById(
     `message-${hydratedMessage.id}`,
   );
-  const isActiveConversationMessage = belongsToSelectedConversation(
-    hydratedMessage,
-  );
+  const isActiveConversationMessage =
+    belongsToSelectedConversation(hydratedMessage);
 
   if (tempElement || existingRealElement || isActiveConversationMessage) {
     if (tempId && conversationMessages.has(tempId)) {
@@ -9482,11 +9548,13 @@ function updateChatAccessUI() {
       button.classList.toggle('cursor-not-allowed', !enabled);
     }
 
-    [timeCapsuleInput, timeCapsuleNoteInput].filter(Boolean).forEach((field) => {
-      field.disabled = !enabled;
-      field.classList.toggle('opacity-60', !enabled);
-      field.classList.toggle('cursor-not-allowed', !enabled);
-    });
+    [timeCapsuleInput, timeCapsuleNoteInput]
+      .filter(Boolean)
+      .forEach((field) => {
+        field.disabled = !enabled;
+        field.classList.toggle('opacity-60', !enabled);
+        field.classList.toggle('cursor-not-allowed', !enabled);
+      });
 
     if (composerSendInFlight) {
       setComposerSendingState(true);
@@ -10647,7 +10715,10 @@ function openMessageActions(x, y, message) {
   try {
     window.getSelection?.()?.removeAllRanges?.();
   } catch (error) {
-    console.warn('Failed to clear text selection before opening actions', error);
+    console.warn(
+      'Failed to clear text selection before opening actions',
+      error,
+    );
   }
   messageActionTarget = message;
   if (starButton) {
@@ -11894,7 +11965,11 @@ function renderTextMessageContentHtml(message, isSent, metaTone) {
   const surfaceTone = isSent
     ? 'border-white/15 bg-white/10'
     : 'border-slate-200/90 bg-black/5';
-  const capsuleMeta = renderTimeCapsuleMessageMetaHtml(message, isSent, metaTone);
+  const capsuleMeta = renderTimeCapsuleMessageMetaHtml(
+    message,
+    isSent,
+    metaTone,
+  );
 
   if (isMessageTimeCapsuleLocked(message)) {
     return `
@@ -12839,7 +12914,10 @@ getById('settings-admin-refresh-btn')?.addEventListener('click', async () => {
     await loadAdminUsers();
   } catch (error) {
     console.error(error);
-    setAdminUsersState(error?.message || 'Failed to load admin users.', 'error');
+    setAdminUsersState(
+      error?.message || 'Failed to load admin users.',
+      'error',
+    );
     alert(error?.message || 'Failed to load admin users.');
   }
 });
