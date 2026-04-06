@@ -1,26 +1,40 @@
-const CACHE_NAME = 'ochat-shell-v35';
+const SHELL_VERSION = '20260406-structured1';
+const CACHE_NAME = `ochat-shell-${SHELL_VERSION}`;
 const APP_SHELL = [
   '/',
   '/auth',
   '/chat',
   '/settings',
   '/admin',
-  '/public/app.css',
-  '/public/app.js',
-  '/public/admin.js',
-  '/public/auth.js',
-  '/public/runtime.js',
-  '/manifest.webmanifest',
+  `/public/app.css?v=${SHELL_VERSION}`,
+  `/public/app.js?v=${SHELL_VERSION}`,
+  `/public/admin.js?v=${SHELL_VERSION}`,
+  `/public/auth.js?v=${SHELL_VERSION}`,
+  `/public/runtime.js?v=${SHELL_VERSION}`,
+  `/public/settings.js?v=${SHELL_VERSION}`,
+  `/manifest.webmanifest?v=${SHELL_VERSION}`,
   '/icons/default-avatar.svg',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
 ];
+const APP_SHELL_PATHS = new Set(
+  APP_SHELL.map((entry) => new URL(entry, self.location.origin).pathname),
+);
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) => cache.addAll(APP_SHELL))
+      .then((cache) =>
+        cache.addAll(
+          APP_SHELL.map(
+            (entry) =>
+              new Request(entry, {
+                cache: 'reload',
+              }),
+          ),
+        ),
+      )
       .then(() => self.skipWaiting()),
   );
 });
@@ -81,7 +95,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (!APP_SHELL.includes(url.pathname)) {
+  if (!APP_SHELL_PATHS.has(url.pathname)) {
     return;
   }
 

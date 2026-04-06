@@ -166,7 +166,7 @@ let sharedMediaErrorMessage = '';
 let sharedMediaBrowserKind = 'image';
 const OFFLINE_QUEUE_KEY = 'ochat_offline_message_queue';
 const RINGTONE_PREFERENCE_KEY = 'ochat_ringtone_preference';
-const CLIENT_CACHE_VERSION = '20260326-compact1';
+const CLIENT_CACHE_VERSION = '20260406-structured1';
 const CHAT_SHELL_CACHE_TTL_MS = 2 * 60 * 1000;
 const CHAT_SHELL_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const CONVERSATION_CACHE_TTL_MS = 90 * 1000;
@@ -12276,8 +12276,12 @@ async function ensureServiceWorkerReady() {
   }
 
   if (!swRegistration) {
-    swRegistration = await navigator.serviceWorker.register('/sw.js');
+    swRegistration = await navigator.serviceWorker.register('/sw.js', {
+      updateViaCache: 'none',
+    });
   }
+
+  swRegistration.update().catch(() => null);
 
   if (!serviceWorkerMessageBound) {
     navigator.serviceWorker.addEventListener('message', (event) => {
