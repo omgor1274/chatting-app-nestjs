@@ -12693,7 +12693,7 @@ function createMessageElement(message, options = {}) {
     ? '<span class="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">Starred</span>'
     : '';
   div.id = `message-${message.id}`;
-  div.className = `message-row ${isSent ? 'message-row-outgoing self-end' : 'message-row-incoming self-start'} max-w-full`;
+  div.className = `message-row ${isSent ? 'message-row-outgoing self-end' : 'message-row-incoming self-start'} flex w-full max-w-full`;
   if (options.animate !== false) {
     div.classList.add('chat-message-enter');
     div.style.setProperty('--message-enter-x', isSent ? '14px' : '-14px');
@@ -12724,7 +12724,7 @@ function createMessageElement(message, options = {}) {
 
   if (message.deletedForEveryoneAt) {
     div.innerHTML = `
-            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,34rem)] px-2.5 py-1.5 text-[12px] italic opacity-80">
+            <div class="message-bubble-shell message-bubble-status ${bubbleTone} w-fit max-w-[min(100%,34rem)] px-2.5 py-1.5 text-[12px] italic opacity-80">
               ${escapeHtml(message.senderId === currentUser.id ? 'You unsent this message.' : 'This message was deleted.')}
               ${footer}
               ${reactionChip}
@@ -12732,7 +12732,7 @@ function createMessageElement(message, options = {}) {
           `;
   } else if (message.messageType === 'IMAGE' && message.fileUrl) {
     div.innerHTML = `
-            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,34rem)] overflow-hidden p-1.5">
+            <div class="message-bubble-shell message-bubble-image ${bubbleTone} w-fit max-w-[min(100%,34rem)] overflow-hidden p-1.5">
               ${replySnippet}
               <a href="${messageFileUrl}" target="_blank" rel="noopener noreferrer">
                 <img src="${messageFileUrl}" loading="lazy" decoding="async" class="mb-2 max-h-80 w-auto rounded-2xl border border-black/5">
@@ -12747,7 +12747,7 @@ function createMessageElement(message, options = {}) {
           `;
   } else if (message.messageType === 'AUDIO' && message.fileUrl) {
     div.innerHTML = `
-            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,34rem)] px-2.5 py-2">
+            <div class="message-bubble-shell message-bubble-audio ${bubbleTone} w-fit max-w-[min(100%,34rem)] px-2.5 py-2">
               <div class="space-y-3">
                 ${replySnippet}
                 <p class="text-sm font-semibold">${escapeHtml(message.fileName || 'Voice message')}</p>
@@ -12762,7 +12762,7 @@ function createMessageElement(message, options = {}) {
     String(message.fileMimeType || '').startsWith('video/')
   ) {
     div.innerHTML = `
-            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,34rem)] overflow-hidden p-1.5">
+            <div class="message-bubble-shell message-bubble-video ${bubbleTone} w-fit max-w-[min(100%,34rem)] overflow-hidden p-1.5">
               <div class="space-y-3">
                 ${replySnippet}
                 <video controls playsinline preload="metadata" class="max-h-80 w-full rounded-2xl border border-black/5 bg-black">
@@ -12780,7 +12780,7 @@ function createMessageElement(message, options = {}) {
           `;
   } else if (message.messageType === 'DOCUMENT' && message.fileUrl) {
     div.innerHTML = `
-            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,34rem)] px-2.5 py-2">
+            <div class="message-bubble-shell message-bubble-document ${bubbleTone} w-fit max-w-[min(100%,34rem)] px-2.5 py-2">
               <div class="space-y-2">
                 ${replySnippet}
                 <p class="text-sm font-semibold">${escapeHtml(message.fileName || 'Document')}</p>
@@ -12796,7 +12796,7 @@ function createMessageElement(message, options = {}) {
           `;
   } else {
     div.innerHTML = `
-            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,34rem)] px-2.5 py-1.5 text-[13px] leading-[1.5]">
+            <div class="message-bubble-shell message-bubble-text ${bubbleTone} w-fit max-w-[min(100%,34rem)] px-2.5 py-1.5 text-[13px] leading-[1.5]">
               ${replySnippet}
               ${textContent}
               ${footer}

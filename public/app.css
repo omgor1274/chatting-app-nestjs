@@ -3283,3 +3283,77 @@ body.startup-loading {
     background: rgba(255, 255, 255, 0.08);
   }
 }
+
+.message-row {
+  width: 100%;
+  display: flex;
+}
+
+.message-row-outgoing {
+  justify-content: flex-end;
+}
+
+.message-row-incoming {
+  justify-content: flex-start;
+}
+
+body.chat-page .message-row .message-bubble-shell {
+  display: inline-flex;
+  flex-direction: column;
+  width: auto;
+  min-width: 0;
+}
+
+body.chat-page .message-row .message-bubble-text,
+body.chat-page .message-row .message-bubble-status {
+  max-width: min(100%, 21rem) !important;
+  padding: 0.48rem 0.72rem !important;
+}
+
+body.chat-page .message-row .message-bubble-document,
+body.chat-page .message-row .message-bubble-audio {
+  max-width: min(100%, 22.5rem) !important;
+  padding: 0.58rem 0.72rem !important;
+}
+
+body.chat-page .message-row .message-bubble-image,
+body.chat-page .message-row .message-bubble-video {
+  max-width: min(100%, 24rem) !important;
+  padding: 0.32rem !important;
+}
+
+body.chat-page .message-row .message-bubble-footer {
+  margin-top: 0.3rem !important;
+  gap: 0.28rem !important;
+}
+
+body.chat-page .message-row .message-reply-snippet {
+  margin-bottom: 0.36rem !important;
+  padding: 0.36rem 0.52rem !important;
+}
+
+body.chat-page .message-row .message-bubble-shell audio {
+  max-width: min(100%, 18rem) !important;
+}
+
+body.chat-page .message-row .message-bubble-shell img,
+body.chat-page .message-row .message-bubble-shell video {
+  border-radius: 0.92rem !important;
+}
+
+@media (min-width: 1024px) {
+  body.chat-page .message-row .message-bubble-text,
+  body.chat-page .message-row .message-bubble-status {
+    max-width: min(50%, 31rem) !important;
+  }
+
+  body.chat-page .message-row .message-bubble-document,
+  body.chat-page .message-row .message-bubble-audio {
+    max-width: min(54%, 33rem) !important;
+  }
+
+  body.chat-page .message-row .message-bubble-image,
+  body.chat-page .message-row .message-bubble-video {
+    max-width: min(52%, 33rem) !important;
+  }
+}
