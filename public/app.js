@@ -12679,7 +12679,7 @@ function renderTextMessageContentHtml(message, isSent, metaTone) {
   return `
     ${capsuleMeta}
     ${renderSpoilerMessageMetaHtml(message, isSent, metaTone)}
-    <div class="${contentTone} whitespace-pre-wrap break-words">
+    <div class="message-text-copy ${contentTone} whitespace-pre-wrap break-words">
       ${formatMessageTextHtml(getResolvedMessageText(message))}
     </div>
   `;
@@ -12692,6 +12692,7 @@ function createMessageElement(message, options = {}) {
   const starredBadge = isMessageStarred(message.id)
     ? '<span class="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">Starred</span>'
     : '';
+  const hasReactionChip = Boolean(getMessageReaction(message.id));
   div.id = `message-${message.id}`;
   div.className = `message-row ${isSent ? 'message-row-outgoing self-end' : 'message-row-incoming self-start'} flex w-full max-w-full`;
   if (options.animate !== false) {
@@ -12700,13 +12701,16 @@ function createMessageElement(message, options = {}) {
   }
 
   const bubbleTone = isSent
-    ? `rounded-[18px] rounded-br-sm text-white shadow-sm ${
+    ? `rounded-[14px] rounded-br-[4px] text-white shadow-sm ${
         message.isPending ? 'bg-blue-500/85' : 'bg-blue-600'
       }`
-    : 'rounded-[18px] rounded-bl-sm border border-slate-200/90 bg-white/95 text-slate-800 shadow-sm';
+    : 'rounded-[14px] rounded-bl-[4px] border border-slate-200/90 bg-white/95 text-slate-800 shadow-sm';
   const eye = isSent
     ? `<span class="inline-flex items-center gap-1 ${messageWasRead(message) ? 'text-emerald-200' : 'opacity-70'}">${messageWasRead(message) ? '&#128065;' : ''}</span>`
     : '';
+  const useFloatingMeta =
+    !hasReactionChip && !message.isPending && !isMessageStarred(message.id);
+  const metaLayoutClass = useFloatingMeta ? 'message-bubble-floating-meta' : '';
   const footer = `
           <div class="message-bubble-footer mt-2 flex items-center justify-end gap-1.5 text-[10px] ${metaTone}">
             ${starredBadge}
@@ -12724,8 +12728,8 @@ function createMessageElement(message, options = {}) {
 
   if (message.deletedForEveryoneAt) {
     div.innerHTML = `
-            <div class="message-bubble-shell message-bubble-status ${bubbleTone} w-fit max-w-[min(100%,34rem)] px-2.5 py-1.5 text-[12px] italic opacity-80">
-              ${escapeHtml(message.senderId === currentUser.id ? 'You unsent this message.' : 'This message was deleted.')}
+            <div class="message-bubble-shell message-bubble-status ${metaLayoutClass} ${bubbleTone} w-fit max-w-[min(100%,34rem)] px-2.5 py-1.5 text-[12px] italic opacity-80">
+              <span class="message-text-copy">${escapeHtml(message.senderId === currentUser.id ? 'You unsent this message.' : 'This message was deleted.')}</span>
               ${footer}
               ${reactionChip}
             </div>
@@ -12796,7 +12800,7 @@ function createMessageElement(message, options = {}) {
           `;
   } else {
     div.innerHTML = `
-            <div class="message-bubble-shell message-bubble-text ${bubbleTone} w-fit max-w-[min(100%,34rem)] px-2.5 py-1.5 text-[13px] leading-[1.5]">
+            <div class="message-bubble-shell message-bubble-text ${metaLayoutClass} ${bubbleTone} w-fit max-w-[min(100%,34rem)] px-2.5 py-1.5 text-[13px] leading-[1.5]">
               ${replySnippet}
               ${textContent}
               ${footer}

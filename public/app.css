@@ -3204,14 +3204,14 @@ body.startup-loading {
     background: linear-gradient(180deg, #14532d, #103b26) !important;
     border: 1px solid rgba(37, 211, 102, 0.14) !important;
     color: #f3fff8 !important;
-    box-shadow: 0 16px 30px rgba(0, 0, 0, 0.24);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16);
   }
 
   body.chat-page .message-row-incoming .message-bubble-shell {
     background: #202c33 !important;
     border: 1px solid rgba(255, 255, 255, 0.06) !important;
     color: #e9edef !important;
-    box-shadow: 0 16px 30px rgba(0, 0, 0, 0.18);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.14);
   }
 
   body.chat-page .message-row-outgoing .message-bubble-footer {
@@ -3282,6 +3282,11 @@ body.startup-loading {
   body.chat-page .message-actions-divider {
     background: rgba(255, 255, 255, 0.08);
   }
+
+  body.chat-page .message-bubble-shell:hover {
+    transform: none;
+    box-shadow: inherit;
+  }
 }
 
 .message-row {
@@ -3306,54 +3311,98 @@ body.chat-page .message-row .message-bubble-shell {
 
 body.chat-page .message-row .message-bubble-text,
 body.chat-page .message-row .message-bubble-status {
-  max-width: min(100%, 21rem) !important;
-  padding: 0.48rem 0.72rem !important;
+  max-width: min(100%, 18.5rem) !important;
+  padding: 0.34rem 0.62rem !important;
 }
 
 body.chat-page .message-row .message-bubble-document,
 body.chat-page .message-row .message-bubble-audio {
-  max-width: min(100%, 22.5rem) !important;
-  padding: 0.58rem 0.72rem !important;
+  max-width: min(100%, 20.5rem) !important;
+  padding: 0.5rem 0.68rem !important;
 }
 
 body.chat-page .message-row .message-bubble-image,
 body.chat-page .message-row .message-bubble-video {
-  max-width: min(100%, 24rem) !important;
-  padding: 0.32rem !important;
+  max-width: min(100%, 22rem) !important;
+  padding: 0.26rem !important;
 }
 
 body.chat-page .message-row .message-bubble-footer {
-  margin-top: 0.3rem !important;
-  gap: 0.28rem !important;
+  margin-top: 0.18rem !important;
+  gap: 0.22rem !important;
+  line-height: 1;
 }
 
 body.chat-page .message-row .message-reply-snippet {
-  margin-bottom: 0.36rem !important;
-  padding: 0.36rem 0.52rem !important;
+  margin-bottom: 0.28rem !important;
+  padding: 0.3rem 0.46rem !important;
 }
 
 body.chat-page .message-row .message-bubble-shell audio {
-  max-width: min(100%, 18rem) !important;
+  max-width: min(100%, 16.5rem) !important;
 }
 
 body.chat-page .message-row .message-bubble-shell img,
 body.chat-page .message-row .message-bubble-shell video {
-  border-radius: 0.92rem !important;
+  border-radius: 0.82rem !important;
+}
+
+body.chat-page .message-row .message-bubble-text .message-text-copy,
+body.chat-page .message-row .message-bubble-status .message-text-copy {
+  display: block;
+  font-size: 0.92rem;
+  line-height: 1.32;
+  word-break: break-word;
+}
+
+body.chat-page .message-row .message-bubble-text.message-bubble-floating-meta,
+body.chat-page .message-row .message-bubble-status.message-bubble-floating-meta {
+  position: relative;
+  padding-right: 4.25rem !important;
+  padding-bottom: 0.38rem !important;
+}
+
+body.chat-page
+  .message-row
+  .message-bubble-text.message-bubble-floating-meta
+  .message-bubble-footer,
+body.chat-page
+  .message-row
+  .message-bubble-status.message-bubble-floating-meta
+  .message-bubble-footer {
+  position: absolute;
+  right: 0.58rem;
+  bottom: 0.34rem;
+  margin-top: 0 !important;
+  font-size: 0.68rem !important;
+}
+
+body.chat-page
+  .message-row
+  .message-bubble-text.message-bubble-floating-meta
+  .message-bubble-footer
+  > span:empty,
+body.chat-page
+  .message-row
+  .message-bubble-status.message-bubble-floating-meta
+  .message-bubble-footer
+  > span:empty {
+  display: none;
 }
 
 @media (min-width: 1024px) {
   body.chat-page .message-row .message-bubble-text,
   body.chat-page .message-row .message-bubble-status {
-    max-width: min(50%, 31rem) !important;
+    max-width: min(46%, 27rem) !important;
   }
 
   body.chat-page .message-row .message-bubble-document,
   body.chat-page .message-row .message-bubble-audio {
-    max-width: min(54%, 33rem) !important;
+    max-width: min(48%, 28rem) !important;
   }
 
   body.chat-page .message-row .message-bubble-image,
   body.chat-page .message-row .message-bubble-video {
-    max-width: min(52%, 33rem) !important;
+    max-width: min(48%, 28rem) !important;
   }
 }
