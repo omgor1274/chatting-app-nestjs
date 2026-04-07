@@ -38,11 +38,11 @@
         pointer-events: none;
       }
     </style>
-    <link rel="manifest" href="/manifest.webmanifest?v=20260406-structured1" />
+    <link rel="manifest" href="/manifest.webmanifest?v=20260406-minimal2" />
     <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="./public/app.css?v=20260406-structured1" />
+    <link rel="stylesheet" href="./public/app.css?v=20260406-minimal2" />
   </head>
 
   <body
@@ -2592,12 +2592,12 @@
       "
     />
 
-    <script src="/runtime-config.js?v=20260406-structured1"></script>
+    <script src="/runtime-config.js?v=20260406-minimal2"></script>
     <script type="module">
       import {
         hasValidSession,
         loadPublicConfig,
-      } from '/public/runtime.js?v=20260406-structured1';
+      } from '/public/runtime.js?v=20260406-minimal2';
 
       const loadScript = (src) =>
         new Promise((resolve, reject) => {
@@ -2615,7 +2615,7 @@
         window.location.replace('/auth');
       } else {
         loadScript('https://cdn.socket.io/4.7.2/socket.io.min.js')
-          .then(() => loadScript('/public/app.js?v=20260406-structured1'))
+          .then(() => loadScript('/public/app.js?v=20260406-minimal2'))
           .catch((error) =>
             console.error('Failed to load chat runtime', error),
           );

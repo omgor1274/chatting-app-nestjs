@@ -5,7 +5,7 @@ import {
   getAvatarUrl,
   loadPublicConfig,
   readJsonResponse,
-} from './runtime.js?v=20260406-structured1';
+} from './runtime.js?v=20260406-minimal2';
 
 let currentUser = null;
 let userOverview = { summary: {}, users: [] };

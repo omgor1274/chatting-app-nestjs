@@ -34,6 +34,9 @@ let swRegistration = null;
 let deferredInstallPrompt = null;
 let serviceWorkerMessageBound = false;
 let typingTimeout = null;
+let activeTypingConversation = null;
+let activeTypingSignalSent = false;
+let lastTypingSignalAt = 0;
 let typingUsers = new Map();
 let sidebarOpen = false;
 let attachmentUploadTasks = [];
@@ -73,6 +76,9 @@ let activeDragCounter = 0;
 let ringtonePreference = 'classic';
 let callHistoryByConversation = new Map();
 let missedCallCountsByConversation = new Map();
+let queuedConversationMessageRenders = [];
+let queuedConversationMessageFrame = 0;
+let scheduledConversationReadTimer = 0;
 let messagePagination = {
   nextBefore: null,
   hasMore: false,
@@ -118,6 +124,8 @@ const NOTIFICATION_PERMISSION_KEY = 'ochat_notification_permission_requested';
 const MESSAGE_ACTION_TOUCH_HOLD_MS = 420;
 const MESSAGE_ACTION_MOVE_TOLERANCE_PX = 10;
 const MESSAGE_ACTION_SCROLL_BLOCK_MS = 700;
+const TYPING_START_THROTTLE_MS = 900;
+const TYPING_STOP_DELAY_MS = 1200;
 const MAX_ATTACHMENT_UPLOAD_AUTO_RETRIES = 4;
 const STRUCTURED_MESSAGE_PREFIX_PATTERN =
   /^\[\[OCHAT_([A-Z_]+):([A-Za-z0-9+/=_-]+)\]\]\n?/;
@@ -167,7 +175,7 @@ let sharedMediaErrorMessage = '';
 let sharedMediaBrowserKind = 'image';
 const OFFLINE_QUEUE_KEY = 'ochat_offline_message_queue';
 const RINGTONE_PREFERENCE_KEY = 'ochat_ringtone_preference';
-const CLIENT_CACHE_VERSION = '20260406-structured1';
+const CLIENT_CACHE_VERSION = '20260406-minimal2';
 const CHAT_SHELL_CACHE_TTL_MS = 2 * 60 * 1000;
 const CHAT_SHELL_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const CONVERSATION_CACHE_TTL_MS = 90 * 1000;
@@ -1302,16 +1310,72 @@ function replaceConversationHistoryState(user, overrides = {}) {
   return nextState;
 }
 
+function compareMessagesChronologically(left, right) {
+  const leftTime = new Date(left?.createdAt || 0).getTime();
+  const rightTime = new Date(right?.createdAt || 0).getTime();
+  if (leftTime !== rightTime) {
+    return leftTime - rightTime;
+  }
+
+  return String(left?.id || '').localeCompare(String(right?.id || ''));
+}
+
 function sortMessagesChronologically(messages) {
-  return [...messages].sort((left, right) => {
-    const leftTime = new Date(left?.createdAt || 0).getTime();
-    const rightTime = new Date(right?.createdAt || 0).getTime();
-    if (leftTime !== rightTime) {
-      return leftTime - rightTime;
+  return [...messages].sort(compareMessagesChronologically);
+}
+
+function getRenderedMessageId(element) {
+  const elementId = String(element?.id || '');
+  if (!elementId.startsWith('message-')) {
+    return '';
+  }
+
+  return elementId.slice('message-'.length);
+}
+
+function renderMessageInConversationOrder(message, options = {}) {
+  if (!selectedUser || !message || !belongsToSelectedConversation(message)) {
+    return { rendered: false, insertedAtEnd: false };
+  }
+
+  const list = document.getElementById('messages-list');
+  if (!list) {
+    return { rendered: false, insertedAtEnd: false };
+  }
+
+  const existingElement = document.getElementById(`message-${message.id}`);
+  conversationMessages.set(message.id, message);
+  renderedMessageIds.add(message.id);
+
+  let insertBeforeElement = null;
+  for (const child of Array.from(list.children)) {
+    const childMessageId = getRenderedMessageId(child);
+    if (!childMessageId || childMessageId === message.id) {
+      continue;
     }
 
-    return String(left?.id || '').localeCompare(String(right?.id || ''));
+    const existingMessage = conversationMessages.get(childMessageId);
+    if (
+      existingMessage &&
+      compareMessagesChronologically(message, existingMessage) < 0
+    ) {
+      insertBeforeElement = child;
+      break;
+    }
+  }
+
+  const nextElement = createMessageElement(message, {
+    animate: options.animate !== false && !existingElement,
   });
+  existingElement?.remove();
+
+  if (insertBeforeElement) {
+    list.insertBefore(nextElement, insertBeforeElement);
+    return { rendered: true, insertedAtEnd: false };
+  }
+
+  list.appendChild(nextElement);
+  return { rendered: true, insertedAtEnd: true };
 }
 
 function renderActiveConversationFromCache(options = {}) {
@@ -8618,6 +8682,7 @@ function emitSocketEvent(eventName, payload) {
 }
 
 function disconnectSocketForPageExit() {
+  clearOutgoingTypingState({ emit: false });
   if (!socket) {
     socketConnectionKey = '';
     return;
@@ -8631,6 +8696,106 @@ function disconnectSocketForPageExit() {
     socket = null;
     socketConnectionKey = '';
   }
+}
+
+function getTypingConversationPayload(user = selectedUser) {
+  if (!user) {
+    return null;
+  }
+
+  return isGroupConversation(user)
+    ? { groupId: user.id }
+    : { toUserId: user.id };
+}
+
+function getTypingConversationKey(user = selectedUser) {
+  if (!user) {
+    return '';
+  }
+
+  return `${isGroupConversation(user) ? 'group' : 'direct'}:${user.id}`;
+}
+
+function emitTypingState(payload, isTyping) {
+  if (!socket?.connected || !payload) {
+    return;
+  }
+
+  socket.emit('typing', {
+    ...payload,
+    isTyping: Boolean(isTyping),
+  });
+}
+
+function clearOutgoingTypingState(options = {}) {
+  if (typingTimeout) {
+    clearTimeout(typingTimeout);
+    typingTimeout = null;
+  }
+
+  if (
+    options.emit !== false &&
+    activeTypingConversation &&
+    activeTypingSignalSent
+  ) {
+    emitTypingState(activeTypingConversation.payload, false);
+  }
+
+  activeTypingConversation = null;
+  activeTypingSignalSent = false;
+  lastTypingSignalAt = 0;
+}
+
+function scheduleOutgoingTypingStop(conversation) {
+  if (typingTimeout) {
+    clearTimeout(typingTimeout);
+  }
+
+  typingTimeout = setTimeout(() => {
+    if (!conversation || activeTypingConversation?.key !== conversation.key) {
+      return;
+    }
+
+    if (activeTypingSignalSent) {
+      emitTypingState(conversation.payload, false);
+    }
+
+    activeTypingConversation = null;
+    activeTypingSignalSent = false;
+    lastTypingSignalAt = 0;
+    typingTimeout = null;
+  }, TYPING_STOP_DELAY_MS);
+}
+
+function signalOutgoingTyping(user = selectedUser) {
+  const payload = getTypingConversationPayload(user);
+  const key = getTypingConversationKey(user);
+  if (!payload || !key || !socket?.connected) {
+    return;
+  }
+
+  if (activeTypingConversation && activeTypingConversation.key !== key) {
+    if (activeTypingSignalSent) {
+      emitTypingState(activeTypingConversation.payload, false);
+    }
+    activeTypingSignalSent = false;
+    lastTypingSignalAt = 0;
+  }
+
+  const now = Date.now();
+  const shouldEmitStart =
+    !activeTypingSignalSent ||
+    activeTypingConversation?.key !== key ||
+    now - lastTypingSignalAt >= TYPING_START_THROTTLE_MS;
+
+  activeTypingConversation = { key, payload };
+  if (shouldEmitStart) {
+    emitTypingState(payload, true);
+    activeTypingSignalSent = true;
+    lastTypingSignalAt = now;
+  }
+
+  scheduleOutgoingTypingStop(activeTypingConversation);
 }
 
 function connectSocket() {
@@ -8933,29 +9098,22 @@ function commitRealtimeMessage(tempId, message) {
   const isActiveConversationMessage =
     belongsToSelectedConversation(hydratedMessage);
 
-  if (tempElement || existingRealElement || isActiveConversationMessage) {
-    if (tempId && conversationMessages.has(tempId)) {
-      conversationMessages.delete(tempId);
-      renderedMessageIds.delete(tempId);
-    }
-    conversationMessages.set(hydratedMessage.id, hydratedMessage);
-    renderedMessageIds.add(hydratedMessage.id);
+  if (tempId && conversationMessages.has(tempId)) {
+    conversationMessages.delete(tempId);
+    renderedMessageIds.delete(tempId);
+  }
+  if (tempId && tempId !== hydratedMessage.id) {
+    renderedMessageIds.delete(tempId);
+  }
+  if (tempElement) {
+    tempElement.remove();
   }
 
-  if (existingRealElement) {
-    existingRealElement.replaceWith(
-      createMessageElement(hydratedMessage, { animate: false }),
-    );
-    tempElement?.remove();
-  } else if (tempElement) {
-    tempElement.replaceWith(
-      createMessageElement(hydratedMessage, { animate: false }),
-    );
-  } else if (
-    isActiveConversationMessage &&
-    !document.getElementById(`message-${hydratedMessage.id}`)
-  ) {
-    appendMessage(hydratedMessage, { stickToBottom: false });
+  if (existingRealElement || isActiveConversationMessage) {
+    replaceRenderedMessage(hydratedMessage, {
+      animate: false,
+      stickToBottom: false,
+    });
   }
 
   const chatUserId =
@@ -8964,7 +9122,6 @@ function commitRealtimeMessage(tempId, message) {
       ? hydratedMessage.receiverId
       : hydratedMessage.senderId);
   updateRecentActivity(chatUserId, hydratedMessage, false);
-  scheduleStructuredMessageRefresh();
 
   void hydrateAndRefreshMessage(hydratedMessage).catch((error) => {
     console.error('Failed to hydrate committed realtime message', error);
@@ -9011,12 +9168,10 @@ async function handleIncomingMessage(message, isOwnMessage) {
   }
 
   if (selectedUser && belongsToSelectedConversation(hydratedMessage)) {
-    appendMessage(hydratedMessage, {
+    queueConversationMessageRender(hydratedMessage, {
       stickToBottom: true,
+      markRead: !isOwnMessage,
     });
-    if (!isOwnMessage) {
-      void markSelectedConversationRead();
-    }
   }
 
   cacheMessageForConversation(hydratedMessage);
@@ -9814,24 +9969,23 @@ function belongsToSelectedConversation(message) {
   );
 }
 
-function replaceRenderedMessage(message) {
+function replaceRenderedMessage(message, options = {}) {
   if (!message?.id) {
     return;
   }
 
   updateCachedMessageEverywhere(message);
-  conversationMessages.set(message.id, message);
-  const existing = document.getElementById(`message-${message.id}`);
-  if (!existing) {
-    if (belongsToSelectedConversation(message)) {
-      appendMessage(message);
-    }
+  const result = renderMessageInConversationOrder(message, {
+    animate: options.animate === true,
+  });
+  if (!result.rendered) {
     return;
   }
 
-  const next = createMessageElement(message, { animate: false });
-  existing.replaceWith(next);
   scheduleStructuredMessageRefresh();
+  if (options.stickToBottom && result.insertedAtEnd) {
+    scheduleMessageContainerBottom();
+  }
 }
 
 function hideMessageLocally(messageId) {
@@ -9915,15 +10069,45 @@ async function markSelectedConversationRead() {
   });
 }
 
+function scheduleSelectedConversationRead(delayMs = 160) {
+  if (!selectedUser) {
+    return;
+  }
+
+  const conversationKey = getConversationCacheKey(selectedUser);
+  if (!conversationKey) {
+    return;
+  }
+
+  if (scheduledConversationReadTimer) {
+    clearTimeout(scheduledConversationReadTimer);
+  }
+
+  scheduledConversationReadTimer = window.setTimeout(() => {
+    scheduledConversationReadTimer = 0;
+    if (getConversationCacheKey(selectedUser) !== conversationKey) {
+      return;
+    }
+
+    void markSelectedConversationRead().catch((error) => {
+      console.error('Failed to mark selected conversation as read', error);
+    });
+  }, delayMs);
+}
+
 function updateRecentActivity(userId, message, incrementUnread, options = {}) {
   const current = recentActivity.get(userId) || {
     lastAt: 0,
     preview: '',
     unread: 0,
   };
+  const messageTime = new Date(message.createdAt || Date.now()).getTime();
+  const shouldAdvancePreview = messageTime >= current.lastAt || !current.preview;
   recentActivity.set(userId, {
-    lastAt: new Date(message.createdAt || Date.now()).getTime(),
-    preview: getMessagePreview(message),
+    lastAt: shouldAdvancePreview ? messageTime : current.lastAt,
+    preview: shouldAdvancePreview
+      ? getMessagePreview(message)
+      : current.preview,
     unread: incrementUnread ? current.unread + 1 : current.unread,
   });
   if (options.scheduleRender !== false) {
@@ -10135,12 +10319,7 @@ async function sendMessage() {
       });
     }
 
-    socket.emit('typing', {
-      ...(isGroupConversation(conversationTarget)
-        ? { groupId: conversationTarget.id }
-        : { toUserId: conversationTarget.id }),
-      isTyping: false,
-    });
+    clearOutgoingTypingState();
 
     const queuedAttachments = queuePendingAttachmentUploads(
       selectedConversationKey,
@@ -12278,37 +12457,26 @@ function appendMessages(messages, options = {}) {
     return;
   }
 
-  const list = document.getElementById('messages-list');
-  const fragment = document.createDocumentFragment();
-  let appendedCount = 0;
+  let renderedCount = 0;
+  let appendedToEnd = false;
 
-  for (const message of messages) {
+  for (const message of sortMessagesChronologically(messages)) {
     if (!message || renderedMessageIds.has(message.id)) {
       continue;
     }
 
-    if (!belongsToSelectedConversation(message)) {
-      continue;
-    }
-
-    renderedMessageIds.add(message.id);
-    conversationMessages.set(message.id, message);
-    fragment.appendChild(
-      createMessageElement(message, {
-        animate: options.animate !== false,
-      }),
-    );
-    appendedCount += 1;
+    const result = renderMessageInConversationOrder(message, options);
+    renderedCount += result.rendered ? 1 : 0;
+    appendedToEnd = appendedToEnd || result.insertedAtEnd;
   }
 
-  if (!appendedCount) {
+  if (!renderedCount) {
     return;
   }
 
-  list.appendChild(fragment);
   scheduleStructuredMessageRefresh();
 
-  if (options.stickToBottom) {
+  if (options.stickToBottom && appendedToEnd) {
     scheduleMessageContainerBottom();
   }
 }
@@ -12316,6 +12484,52 @@ function appendMessages(messages, options = {}) {
 function appendMessage(message, options = {}) {
   appendMessages([message], {
     stickToBottom: options.stickToBottom !== false,
+  });
+}
+
+function flushQueuedConversationMessageRenders() {
+  queuedConversationMessageFrame = 0;
+  if (!queuedConversationMessageRenders.length) {
+    return;
+  }
+
+  const pending = queuedConversationMessageRenders;
+  queuedConversationMessageRenders = [];
+  const activeEntries = pending.filter(
+    (entry) => entry?.message && belongsToSelectedConversation(entry.message),
+  );
+  const activeMessages = activeEntries.map((entry) => entry.message);
+
+  if (!activeMessages.length) {
+    return;
+  }
+
+  appendMessages(activeMessages, {
+    stickToBottom: activeEntries.some((entry) => entry?.stickToBottom !== false),
+  });
+
+  if (activeEntries.some((entry) => entry?.markRead)) {
+    scheduleSelectedConversationRead();
+  }
+}
+
+function queueConversationMessageRender(message, options = {}) {
+  if (!message) {
+    return;
+  }
+
+  queuedConversationMessageRenders.push({
+    message,
+    stickToBottom: options.stickToBottom !== false,
+    markRead: Boolean(options.markRead),
+  });
+
+  if (queuedConversationMessageFrame) {
+    return;
+  }
+
+  queuedConversationMessageFrame = window.requestAnimationFrame(() => {
+    flushQueuedConversationMessageRenders();
   });
 }
 
@@ -12691,29 +12905,11 @@ document.addEventListener('input', (event) => {
   markComposerDraftDirty();
   saveConversationDraft(selectedUser, event.target.value);
 
-  if (!socket) {
+  if (!socket?.connected) {
     return;
   }
 
-  socket.emit('typing', {
-    ...(isGroupConversation(selectedUser)
-      ? { groupId: selectedUser.id }
-      : { toUserId: selectedUser.id }),
-    isTyping: true,
-  });
-
-  if (typingTimeout) {
-    clearTimeout(typingTimeout);
-  }
-
-  typingTimeout = setTimeout(() => {
-    socket.emit('typing', {
-      ...(isGroupConversation(selectedUser)
-        ? { groupId: selectedUser.id }
-        : { toUserId: selectedUser.id }),
-      isTyping: false,
-    });
-  }, 1200);
+  signalOutgoingTyping(selectedUser);
 });
 
 document.addEventListener('keydown', (event) => {
