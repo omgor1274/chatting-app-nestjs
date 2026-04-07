@@ -35,6 +35,10 @@ function getRailwayPublicOrigin() {
   return normalizeOrigin(`https://${publicDomain}`);
 }
 
+function getRenderPublicOrigin() {
+  return normalizeOrigin(process.env.RENDER_EXTERNAL_URL);
+}
+
 export function collectConfiguredOrigins() {
   return Array.from(
     new Set(
@@ -47,6 +51,7 @@ export function collectConfiguredOrigins() {
         .flatMap((value) => String(value).split(','))
         .map((origin) => normalizeOrigin(origin))
         .filter((origin): origin is string => Boolean(origin))
+        .concat(getRenderPublicOrigin() ?? [])
         .concat(getRailwayPublicOrigin() ?? []),
     ),
   );
@@ -78,6 +83,7 @@ export function isAllowedRequestOrigin(
 export function resolveDefaultAppOrigin() {
   return (
     normalizeOrigin(process.env.APP_ORIGIN) ??
+    getRenderPublicOrigin() ??
     getRailwayPublicOrigin() ??
     `http://localhost:${process.env.PORT ?? 8080}`
   );

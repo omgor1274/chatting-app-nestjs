@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: o-chat
+    runtime: node
+    buildCommand: npm ci && npm run prisma:generate && npm run build
+    startCommand: npm run prisma:migrate:deploy && npm run start:prod
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: o-chat-data
+      mountPath: /data
+      sizeGB: 5
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: APP_DATA_DIR
+        value: /data
+      - key: TRUST_PROXY
+        value: "true"

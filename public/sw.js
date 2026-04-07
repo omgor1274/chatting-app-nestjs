@@ -1,4 +1,4 @@
-const SHELL_VERSION = '20260406-minimal2';
+const SHELL_VERSION = '20260407-scrollfix1';
 const CACHE_NAME = `ochat-shell-${SHELL_VERSION}`;
 const APP_SHELL = [
   '/',

@@ -10366,6 +10366,10 @@ function replaceRenderedMessage(message, options = {}) {
     return;
   }
 
+  const shouldStickToBottom =
+    options.stickToBottom &&
+    (Date.now() <= stickToLatestUntil || isMessageContainerNearBottom());
+
   updateCachedMessageEverywhere(message);
   const result = renderMessageInConversationOrder(message, {
     animate: options.animate === true,
@@ -10375,7 +10379,7 @@ function replaceRenderedMessage(message, options = {}) {
   }
 
   scheduleStructuredMessageRefresh();
-  if (options.stickToBottom && result.insertedAtEnd) {
+  if (shouldStickToBottom) {
     scheduleMessageContainerBottom();
   }
 }
@@ -12964,8 +12968,10 @@ function appendMessages(messages, options = {}) {
     return;
   }
 
+  const shouldStickToBottom =
+    options.stickToBottom &&
+    (Date.now() <= stickToLatestUntil || isMessageContainerNearBottom());
   let renderedCount = 0;
-  let appendedToEnd = false;
 
   for (const message of sortMessagesChronologically(messages)) {
     if (!message || renderedMessageIds.has(message.id)) {
@@ -12974,7 +12980,6 @@ function appendMessages(messages, options = {}) {
 
     const result = renderMessageInConversationOrder(message, options);
     renderedCount += result.rendered ? 1 : 0;
-    appendedToEnd = appendedToEnd || result.insertedAtEnd;
   }
 
   if (!renderedCount) {
@@ -12983,7 +12988,7 @@ function appendMessages(messages, options = {}) {
 
   scheduleStructuredMessageRefresh();
 
-  if (options.stickToBottom && appendedToEnd) {
+  if (shouldStickToBottom) {
     scheduleMessageContainerBottom();
   }
 }
