@@ -38,11 +38,11 @@
         pointer-events: none;
       }
     </style>
-    <link rel="manifest" href="/manifest.webmanifest?v=20260406-minimal2" />
+    <link rel="manifest" href="/manifest.webmanifest?v=20260407-desktopwave1" />
     <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="./public/app.css?v=20260406-minimal2" />
+    <link rel="stylesheet" href="./public/app.css?v=20260407-desktopwave1" />
   </head>
 
   <body
@@ -303,6 +303,155 @@
         onclick="closeSidebar()"
       ></div>
 
+      <div
+        id="startup-loader"
+        class="pointer-events-auto absolute inset-0 z-[55] hidden items-center justify-center bg-[#0d1418] px-6 py-8 text-[#e9edef]"
+      >
+        <div
+          class="startup-loader-panel mx-auto flex w-full max-w-md flex-col items-center text-center"
+        >
+          <div class="startup-loader-mark">
+            <span class="startup-loader-mark-ring"></span>
+            <span class="startup-loader-mark-letter">O</span>
+          </div>
+          <div class="mt-7 w-full space-y-3">
+            <p
+              id="startup-loader-title"
+              class="text-[1.15rem] font-semibold tracking-[-0.02em] text-white"
+            >
+              Loading your chats [12%]
+            </p>
+            <div
+              class="startup-loader-progress h-1.5 w-full overflow-hidden rounded-full bg-white/12"
+            >
+              <div
+                id="startup-loader-bar"
+                class="startup-loader-progress-bar h-full w-[12%] rounded-full"
+              ></div>
+            </div>
+            <p
+              id="startup-loader-detail"
+              class="startup-loader-detail text-sm leading-6 text-[#aebac1]"
+            >
+              Restoring your secure desktop workspace.
+            </p>
+          </div>
+          <div
+            class="mt-6 inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/4 px-4 py-2 text-sm text-[#aebac1]"
+          >
+            <span class="text-xs" aria-hidden="true">&#128274;</span>
+            <span>End-to-end encrypted</span>
+          </div>
+          <button
+            type="button"
+            onclick="logout()"
+            class="mt-24 rounded-full bg-black/55 px-7 py-3 text-sm font-semibold text-[#d7dfe3] transition hover:bg-black/70"
+          >
+            Log out
+          </button>
+          <p class="mt-5 max-w-sm text-sm leading-6 text-[#aebac1]">
+            Don't close this window. Your recent chats are being restored and
+            synced in the background.
+          </p>
+        </div>
+      </div>
+
+      <nav
+        id="desktop-chat-rail"
+        class="desktop-chat-rail hidden w-[84px] shrink-0 flex-col border-r border-white/6 bg-[#111b21] px-3 py-4 lg:flex"
+      >
+        <div class="flex flex-col items-center gap-3">
+          <button
+            type="button"
+            onclick="setActiveChatListFilter('all'); showUsersList()"
+            class="desktop-rail-brand"
+            aria-label="Open chats"
+            title="Chats"
+          >
+            <span class="desktop-rail-brand-ring"></span>
+            <span class="desktop-rail-brand-letter">O</span>
+          </button>
+          <button
+            type="button"
+            onclick="setActiveChatListFilter('all'); showUsersList()"
+            class="desktop-rail-btn is-active"
+            data-rail-action="all"
+            aria-label="All chats"
+            title="All chats"
+          >
+            <span class="desktop-rail-btn-icon" aria-hidden="true">&#9776;</span>
+            <span id="desktop-rail-chat-badge" class="desktop-rail-btn-badge"
+              >0</span
+            >
+          </button>
+          <button
+            type="button"
+            onclick="setActiveChatListFilter('unread'); showUsersList()"
+            class="desktop-rail-btn"
+            data-rail-action="unread"
+            aria-label="Unread chats"
+            title="Unread chats"
+          >
+            <span class="desktop-rail-btn-icon" aria-hidden="true">&#9679;</span>
+            <span id="desktop-rail-unread-badge" class="desktop-rail-btn-badge"
+              >0</span
+            >
+          </button>
+          <button
+            type="button"
+            onclick="setActiveChatListFilter('groups'); showUsersList()"
+            class="desktop-rail-btn"
+            data-rail-action="groups"
+            aria-label="Groups"
+            title="Groups"
+          >
+            <span class="desktop-rail-btn-icon" aria-hidden="true"
+              >&#128101;</span
+            >
+          </button>
+          <button
+            type="button"
+            onclick="toggleArchivedChatsView()"
+            class="desktop-rail-btn"
+            data-rail-action="archived"
+            aria-label="Archived chats"
+            title="Archived chats"
+          >
+            <span class="desktop-rail-btn-icon" aria-hidden="true"
+              >&#10515;</span
+            >
+          </button>
+        </div>
+        <div class="mt-auto flex flex-col items-center gap-3 pt-4">
+          <button
+            type="button"
+            onclick="openCreateGroupModal()"
+            class="desktop-rail-btn"
+            data-rail-action="compose"
+            aria-label="Create group"
+            title="Create group"
+          >
+            <span class="desktop-rail-btn-icon" aria-hidden="true"
+              >&#65291;</span
+            >
+          </button>
+          <button
+            type="button"
+            onclick="openProfileModal()"
+            class="desktop-rail-profile"
+            aria-label="Open profile"
+            title="Profile"
+          >
+            <img
+              id="desktop-rail-avatar"
+              alt="Your profile photo"
+              src="https://ui-avatars.com/api/?name=You&background=E2E8F0&color=475569&size=256"
+              class="h-11 w-11 rounded-2xl object-cover"
+            />
+          </button>
+        </div>
+      </nav>
+
       <aside
         id="sidebar"
         class="mobile-chat-sidebar sidebar-panel sidebar-closed absolute inset-y-0 left-0 z-40 flex w-[84vw] max-w-[312px] flex-col border-r border-slate-200 bg-white/92 lg:static lg:z-auto lg:w-[304px] lg:max-w-none lg:translate-x-0"
@@ -412,7 +561,7 @@
               <input
                 id="user-search"
                 type="text"
-                placeholder="Search"
+                placeholder="Search or start a new chat"
                 oninput="handleUserSearchInput()"
                 class="sidebar-search-input w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 pl-10 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
               />
@@ -462,6 +611,44 @@
                 <path d="M19 8v6"></path>
                 <path d="M16 11h6"></path>
               </svg>
+            </button>
+          </div>
+          <div id="chat-list-filters" class="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              id="chat-filter-all"
+              onclick="setActiveChatListFilter('all')"
+              class="chat-filter-chip is-active"
+              data-filter="all"
+            >
+              All
+            </button>
+            <button
+              type="button"
+              id="chat-filter-unread"
+              onclick="setActiveChatListFilter('unread')"
+              class="chat-filter-chip"
+              data-filter="unread"
+            >
+              Unread
+            </button>
+            <button
+              type="button"
+              id="chat-filter-groups"
+              onclick="setActiveChatListFilter('groups')"
+              class="chat-filter-chip"
+              data-filter="groups"
+            >
+              Groups
+            </button>
+            <button
+              type="button"
+              id="chat-filter-pinned"
+              onclick="setActiveChatListFilter('pinned')"
+              class="chat-filter-chip"
+              data-filter="pinned"
+            >
+              Pinned
             </button>
           </div>
           <div id="group-invites" class="hidden mt-3 space-y-2"></div>
@@ -679,27 +866,64 @@
           id="empty-state"
           class="flex-1 flex flex-col items-center justify-center px-6 py-10 text-center text-slate-500 chat-bg"
         >
-          <div
-            class="rounded-[28px] border border-white/70 bg-white/85 p-8 shadow-lg"
-          >
-            <div
-              class="mx-auto flex h-20 w-20 items-center justify-center rounded-[24px] bg-slate-950 text-3xl font-bold text-white shadow-lg"
-            >
-              O
+          <div class="desktop-empty-state-shell">
+            <div class="desktop-empty-state-mark">O</div>
+            <div class="desktop-empty-state-copy">
+              <p class="desktop-empty-state-kicker">Private desktop chat</p>
+              <h2
+                class="display-font mt-4 text-2xl font-bold text-slate-900 sm:text-3xl"
+              >
+                Pick up your conversations without the clutter
+              </h2>
+              <p
+                class="mx-auto mt-3 max-w-xl text-sm leading-7 text-slate-500 sm:text-base"
+              >
+                Recent chats stay ready first, older history streams in when you
+                actually open it, and the workspace stays calm instead of
+                dumping everything on screen at once.
+              </p>
             </div>
-            <h2
-              class="display-font mt-6 text-2xl font-bold text-slate-900 sm:text-3xl"
-            >
-              Choose a chat to begin
-            </h2>
-            <p
-              class="mx-auto mt-3 max-w-md text-sm leading-7 text-slate-500 sm:text-base"
-            >
-              This is a demo prototype built to stay usable with minimal cost.
-              It can become much stronger with real production services, but
-              this version is meant to showcase the core chat experience without
-              expensive infrastructure.
-            </p>
+            <div class="desktop-empty-state-actions">
+              <button
+                type="button"
+                onclick="focusChatSearch()"
+                class="desktop-empty-action"
+              >
+                <span class="desktop-empty-action-icon" aria-hidden="true"
+                  >&#128269;</span
+                >
+                <span class="desktop-empty-action-label">Find a chat</span>
+                <span class="desktop-empty-action-copy"
+                  >Jump into recent chats or start a new one.</span
+                >
+              </button>
+              <button
+                type="button"
+                onclick="openCreateGroupModal()"
+                class="desktop-empty-action"
+              >
+                <span class="desktop-empty-action-icon" aria-hidden="true"
+                  >&#128101;</span
+                >
+                <span class="desktop-empty-action-label">Create group</span>
+                <span class="desktop-empty-action-copy"
+                  >Spin up a focused room for your team or friends.</span
+                >
+              </button>
+              <button
+                type="button"
+                onclick="setActiveChatListFilter('pinned')"
+                class="desktop-empty-action"
+              >
+                <span class="desktop-empty-action-icon" aria-hidden="true"
+                  >&#9733;</span
+                >
+                <span class="desktop-empty-action-label">Pinned chats</span>
+                <span class="desktop-empty-action-copy"
+                  >Keep the people you open most right at the top.</span
+                >
+              </button>
+            </div>
             <button
               onclick="openSidebar()"
               class="mt-6 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-700 lg:hidden"
@@ -2249,22 +2473,31 @@
 
     <div
       id="message-actions-menu"
-      class="floating-menu fixed z-[72] hidden min-w-[220px] max-w-[calc(100vw-24px)] rounded-[22px] border border-slate-200 bg-white p-2 shadow-xl"
+      class="floating-menu fixed z-[72] hidden min-w-[260px] max-w-[calc(100vw-24px)] rounded-[24px] border border-slate-200 bg-white p-2 shadow-xl"
     >
+      <button
+        id="message-action-info"
+        onclick="showSelectedMessageInfo()"
+        class="message-action-row"
+      >
+        <span>Message info</span>
+        <span class="message-action-row-copy">View sender and timestamp</span>
+      </button>
       <button
         id="message-action-reply"
         onclick="startReplyToSelectedMessage()"
-        class="flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+        class="message-action-row"
       >
         <span>Reply</span>
+        <span class="message-action-row-copy">Respond inline to this message</span>
       </button>
-      <div class="px-3 pb-2 pt-1">
+      <div class="message-actions-reactions px-1 pb-2 pt-1">
         <p
           class="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400"
         >
           Reactions
         </p>
-        <div class="mt-2 flex flex-wrap gap-2">
+        <div class="message-actions-reaction-row">
           <button
             type="button"
             onclick="toggleSelectedMessageReaction('👍')"
@@ -2296,25 +2529,39 @@
         </div>
       </div>
       <button
+        id="message-action-copy"
+        onclick="copySelectedMessageText()"
+        class="message-action-row"
+      >
+        <span>Copy</span>
+        <span class="message-action-row-copy">Copy text or attachment name</span>
+      </button>
+      <button
         id="message-action-star"
         onclick="toggleSelectedMessageStar()"
-        class="flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+        class="message-action-row"
       >
         <span>Star message</span>
+        <span class="message-action-row-copy">Keep this in your starred hub</span>
       </button>
+      <div class="message-actions-divider"></div>
       <button
         id="message-action-delete-me"
         onclick="deleteSelectedMessageForMe()"
-        class="flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+        class="message-action-row"
       >
         <span>Delete for me</span>
+        <span class="message-action-row-copy">Remove it from this device</span>
       </button>
       <button
         id="message-action-delete-all"
         onclick="deleteSelectedMessageForEveryone()"
-        class="flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+        class="message-action-row message-action-row-danger"
       >
         <span>Unsend for everyone</span>
+        <span class="message-action-row-copy"
+          >Delete it for everyone in the chat</span
+        >
       </button>
     </div>
 
@@ -2615,7 +2862,7 @@
         window.location.replace('/auth');
       } else {
         loadScript('https://cdn.socket.io/4.7.2/socket.io.min.js')
-          .then(() => loadScript('/public/app.js?v=20260406-minimal2'))
+          .then(() => loadScript('/public/app.js?v=20260407-desktopwave1'))
           .catch((error) =>
             console.error('Failed to load chat runtime', error),
           );
