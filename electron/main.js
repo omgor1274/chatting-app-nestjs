@@ -16,6 +16,7 @@ let backendProcess = null;
 let backendLog = '';
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+app.commandLine.appendSwitch('disable-http-cache');
 
 function isDevelopment() {
   return !app.isPackaged;
@@ -252,7 +253,7 @@ function stopBackend() {
   backendProcess = null;
 }
 
-function createWindow() {
+async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 840,
@@ -279,6 +280,16 @@ function createWindow() {
   });
 
   configureDesktopSessionPermissions(mainWindow);
+  const session = mainWindow.webContents.session;
+
+  try {
+    await session.clearCache();
+    await session.clearStorageData({
+      storages: ['serviceworkers', 'cachestorage'],
+    });
+  } catch (error) {
+    console.warn('Failed to clear stale desktop frontend cache', error);
+  }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
@@ -293,7 +304,7 @@ async function bootDesktopApp() {
   try {
     loadDesktopEnvFile();
     await startBackend();
-    createWindow();
+    await createWindow();
   } catch (error) {
     const details = error instanceof Error ? error.message : 'Unknown startup error';
     dialog.showErrorBox(
