@@ -12708,9 +12708,13 @@ function createMessageElement(message, options = {}) {
   const eye = isSent
     ? `<span class="inline-flex items-center gap-1 ${messageWasRead(message) ? 'text-emerald-200' : 'opacity-70'}">${messageWasRead(message) ? '&#128065;' : ''}</span>`
     : '';
-  const useFloatingMeta =
-    !hasReactionChip && !message.isPending && !isMessageStarred(message.id);
-  const metaLayoutClass = useFloatingMeta ? 'message-bubble-floating-meta' : '';
+  const useInlineTextMeta =
+    !hasReactionChip &&
+    !message.isPending &&
+    !isMessageStarred(message.id) &&
+    !message.replyMeta &&
+    !isMessageTimeCapsule(message) &&
+    !isMessageSpoiler(message);
   const footer = `
           <div class="message-bubble-footer mt-2 flex items-center justify-end gap-1.5 text-[10px] ${metaTone}">
             ${starredBadge}
@@ -12718,6 +12722,16 @@ function createMessageElement(message, options = {}) {
             ${eye}
             <span>${escapeHtml(formatMessageTime(message.createdAt))}</span>
           </div>
+        `;
+  const inlineMeta = `
+          <span class="message-inline-meta ${metaTone}">
+            <span>${escapeHtml(formatMessageTime(message.createdAt))}</span>
+            ${
+              isSent
+                ? `<span class="message-inline-check ${messageWasRead(message) ? 'is-read' : ''}">&#10003;&#10003;</span>`
+                : ''
+            }
+          </span>
         `;
   const replySnippet = renderMessageReplySnippetHtml(message, metaTone);
   const reactionChip = renderMessageReactionHtml(message);
@@ -12728,7 +12742,7 @@ function createMessageElement(message, options = {}) {
 
   if (message.deletedForEveryoneAt) {
     div.innerHTML = `
-            <div class="message-bubble-shell message-bubble-status ${metaLayoutClass} ${bubbleTone} w-fit max-w-[min(100%,34rem)] px-2.5 py-1.5 text-[12px] italic opacity-80">
+            <div class="message-bubble-shell message-bubble-status ${bubbleTone} w-fit max-w-[min(100%,34rem)] px-2.5 py-1.5 text-[12px] italic opacity-80">
               <span class="message-text-copy">${escapeHtml(message.senderId === currentUser.id ? 'You unsent this message.' : 'This message was deleted.')}</span>
               ${footer}
               ${reactionChip}
@@ -12799,14 +12813,26 @@ function createMessageElement(message, options = {}) {
             </div>
           `;
   } else {
-    div.innerHTML = `
-            <div class="message-bubble-shell message-bubble-text ${metaLayoutClass} ${bubbleTone} w-fit max-w-[min(100%,34rem)] px-2.5 py-1.5 text-[13px] leading-[1.5]">
+    if (useInlineTextMeta) {
+      div.innerHTML = `
+            <div class="message-bubble-shell message-bubble-text message-bubble-inline-meta ${bubbleTone} w-fit max-w-[min(100%,34rem)] px-2.5 py-1.5 text-[13px] leading-[1.5]">
+              <div class="message-inline-content">
+                <span class="message-text-copy ${isSent ? 'text-white' : 'text-slate-800'} whitespace-pre-wrap break-words">${formatMessageTextHtml(getResolvedMessageText(message))}</span>
+                ${inlineMeta}
+              </div>
+              ${reactionChip}
+            </div>
+          `;
+    } else {
+      div.innerHTML = `
+            <div class="message-bubble-shell message-bubble-text ${bubbleTone} w-fit max-w-[min(100%,34rem)] px-2.5 py-1.5 text-[13px] leading-[1.5]">
               ${replySnippet}
               ${textContent}
               ${footer}
               ${reactionChip}
             </div>
           `;
+    }
   }
 
   div.querySelectorAll('img').forEach((image) => {

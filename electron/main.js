@@ -111,6 +111,17 @@ function loadDesktopEnvFile() {
   dotenv.config({ path: envFilePath, override: false });
 }
 
+function logDesktopAssetRoots() {
+  const roots = {
+    appRoot: getAppRoot(),
+    assetRoot: getAppAssetRoot(),
+    backendEntry: getBackendEntry(),
+    preload: getPreloadPath(),
+  };
+
+  console.log('[desktop] asset roots', roots);
+}
+
 function appendBackendLog(source, chunk) {
   const message = chunk.toString().trim();
   if (!message) {
@@ -303,6 +314,7 @@ async function createWindow() {
 async function bootDesktopApp() {
   try {
     loadDesktopEnvFile();
+    logDesktopAssetRoots();
     await startBackend();
     await createWindow();
   } catch (error) {
