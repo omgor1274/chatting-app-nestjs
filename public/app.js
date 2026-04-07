@@ -7,6 +7,8 @@ const isHostedOrigin =
   !isFileOrigin &&
   !/^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
 const PUBLIC_CONFIG_FETCH_TIMEOUT_MS = 5000;
+const LOCKED_MOBILE_VIEWPORT_CONTENT =
+  'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content, user-scalable=no';
 let appConfig = {
   apiUrl: localBackendOrigin,
   avatarBaseUrl: '/icons/default-avatar.svg',
@@ -7185,14 +7187,36 @@ function updateChatActionsMenuPosition() {
 }
 
 function applyViewportHeight() {
-  const viewportHeight =
+  const visualViewport =
     window.innerWidth < 1024 && window.visualViewport
-      ? window.visualViewport.height
-      : window.innerHeight;
+      ? window.visualViewport
+      : null;
+  const viewportHeight = visualViewport
+    ? visualViewport.height
+    : window.innerHeight;
+  const viewportWidth = visualViewport ? visualViewport.width : window.innerWidth;
+  const viewportOffsetTop = visualViewport
+    ? Math.max(0, visualViewport.offsetTop)
+    : 0;
+  const viewportOffsetLeft = visualViewport
+    ? Math.max(0, visualViewport.offsetLeft)
+    : 0;
 
   document.documentElement.style.setProperty(
     '--app-shell-height',
     `${Math.round(viewportHeight)}px`,
+  );
+  document.documentElement.style.setProperty(
+    '--app-shell-width',
+    `${Math.round(viewportWidth)}px`,
+  );
+  document.documentElement.style.setProperty(
+    '--app-shell-offset-top',
+    `${Math.round(viewportOffsetTop)}px`,
+  );
+  document.documentElement.style.setProperty(
+    '--app-shell-offset-left',
+    `${Math.round(viewportOffsetLeft)}px`,
   );
 }
 
@@ -7217,11 +7241,35 @@ function lockMobileViewportPosition() {
   document.body.scrollTop = 0;
 }
 
+function enforceLockedMobileViewport() {
+  if (!document.documentElement.classList.contains('chat-page-root')) {
+    return;
+  }
+
+  const viewportMeta = document.querySelector('meta[name="viewport"]');
+  if (!viewportMeta) {
+    return;
+  }
+
+  if (viewportMeta.getAttribute('content') !== LOCKED_MOBILE_VIEWPORT_CONTENT) {
+    viewportMeta.setAttribute('content', LOCKED_MOBILE_VIEWPORT_CONTENT);
+  }
+}
+
+function preventViewportZoomGesture(event) {
+  if (window.innerWidth >= 1024) {
+    return;
+  }
+
+  event.preventDefault();
+}
+
 function stabilizeMobileKeyboardViewport() {
   if (window.innerWidth >= 1024) {
     return;
   }
 
+  enforceLockedMobileViewport();
   scheduleViewportHeight();
   lockMobileViewportPosition();
   window.requestAnimationFrame(() => {
@@ -13501,6 +13549,16 @@ document.addEventListener(
   true,
 );
 
+document.addEventListener('gesturestart', preventViewportZoomGesture, {
+  passive: false,
+});
+document.addEventListener('gesturechange', preventViewportZoomGesture, {
+  passive: false,
+});
+document.addEventListener('gestureend', preventViewportZoomGesture, {
+  passive: false,
+});
+
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) {
     retryConversationDecryption();
@@ -13530,8 +13588,10 @@ window.addEventListener('online', () => {
 });
 
 window.addEventListener('resize', syncLayout);
+window.addEventListener('resize', enforceLockedMobileViewport);
 window.addEventListener('resize', scheduleViewportHeight);
 window.addEventListener('resize', updateChatActionsMenuPosition);
+window.addEventListener('pageshow', enforceLockedMobileViewport);
 window.addEventListener(
   'scroll',
   () => {
@@ -13670,6 +13730,7 @@ getById('settings-admin-users')?.addEventListener('click', async (event) => {
   }
 });
 
+enforceLockedMobileViewport();
 applyViewportHeight();
 updateInstallAppUI();
 updateVoiceComposerUI();

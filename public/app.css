@@ -4,6 +4,9 @@
   --motion-slow: 440ms;
   --motion-silk: cubic-bezier(0.16, 1, 0.3, 1);
   --motion-bounce: cubic-bezier(0.22, 1, 0.36, 1);
+  --app-shell-width: 100vw;
+  --app-shell-offset-top: 0px;
+  --app-shell-offset-left: 0px;
 }
 
 html,
@@ -17,6 +20,7 @@ html.chat-page-root body {
   height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
+  touch-action: pan-x pan-y;
 }
 
 body {
@@ -1198,6 +1202,12 @@ body.chat-page #message-container {
     gap: 0.35rem;
   }
 
+  .mobile-chat-composer input,
+  .mobile-chat-composer textarea,
+  .mobile-chat-composer select {
+    font-size: 16px !important;
+  }
+
   .mobile-chat-composer #msg-input {
     min-height: 40px;
     max-height: 7.5rem;
@@ -1334,12 +1344,18 @@ body.chat-page #message-container {
 
   body.chat-page #app-shell {
     position: fixed;
-    inset: 0;
-    width: 100%;
+    top: var(--app-shell-offset-top, 0px);
+    left: var(--app-shell-offset-left, 0px);
+    right: auto;
+    bottom: auto;
+    width: var(--app-shell-width, 100vw);
+    height: var(--app-shell-height, 100dvh);
+    overflow: hidden;
   }
 
   #app-shell {
     height: var(--app-shell-height, 100dvh) !important;
+    width: var(--app-shell-width, 100vw) !important;
     max-width: none !important;
     border-radius: 0 !important;
     border-left: 0 !important;
