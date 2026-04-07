@@ -3357,9 +3357,34 @@ body.chat-page .message-row .message-bubble-status .message-text-copy {
 
 body.chat-page .message-row .message-bubble-text.message-bubble-floating-meta,
 body.chat-page .message-row .message-bubble-status.message-bubble-floating-meta {
-  position: relative;
-  padding-right: 4.25rem !important;
-  padding-bottom: 0.38rem !important;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  column-gap: 0.34rem;
+  row-gap: 0.08rem;
+}
+
+body.chat-page
+  .message-row
+  .message-bubble-text.message-bubble-floating-meta
+  .message-reply-snippet,
+body.chat-page
+  .message-row
+  .message-bubble-status.message-bubble-floating-meta
+  .message-reply-snippet {
+  grid-column: 1 / -1;
+}
+
+body.chat-page
+  .message-row
+  .message-bubble-text.message-bubble-floating-meta
+  .message-text-copy,
+body.chat-page
+  .message-row
+  .message-bubble-status.message-bubble-floating-meta
+  .message-text-copy {
+  grid-column: 1;
+  align-self: end;
 }
 
 body.chat-page
@@ -3370,11 +3395,12 @@ body.chat-page
   .message-row
   .message-bubble-status.message-bubble-floating-meta
   .message-bubble-footer {
-  position: absolute;
-  right: 0.58rem;
-  bottom: 0.34rem;
+  grid-column: 2;
+  justify-self: end;
+  align-self: end;
   margin-top: 0 !important;
   font-size: 0.68rem !important;
+  white-space: nowrap;
 }
 
 body.chat-page
