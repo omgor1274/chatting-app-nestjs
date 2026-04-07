@@ -754,6 +754,47 @@ async function importPrivateEncryptionKey(privateKey) {
   );
 }
 
+function areUint8ArraysEqual(left, right) {
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+async function doesEncryptionKeyPairMatch(privateKey, publicKey) {
+  if (!privateKey || !publicKey || !canUseE2EE()) {
+    return false;
+  }
+
+  try {
+    const importedPrivateKey = await importPrivateEncryptionKey(privateKey);
+    const importedPublicKey = await importPublicEncryptionKey(publicKey);
+    const probe = window.crypto.getRandomValues(new Uint8Array(32));
+    const encryptedProbe = await window.crypto.subtle.encrypt(
+      { name: 'RSA-OAEP' },
+      importedPublicKey,
+      probe,
+    );
+    const decryptedProbe = await window.crypto.subtle.decrypt(
+      { name: 'RSA-OAEP' },
+      importedPrivateKey,
+      encryptedProbe,
+    );
+
+    return areUint8ArraysEqual(probe, new Uint8Array(decryptedProbe));
+  } catch (error) {
+    console.warn('Failed to validate encryption key pair', error);
+    return false;
+  }
+}
+
 async function generateAndPersistEncryptionKeyPair(userId) {
   const keyPair = await window.crypto.subtle.generateKey(
     {
@@ -786,16 +827,52 @@ async function ensureEncryptionKeys(forceSync = false) {
     return;
   }
 
+  currentPrivateKey = null;
+
   let savedPrivateKey = readStoredValue(
     privateKeyStorageKey(currentUser.id),
     '',
   );
   let savedPublicKey = readStoredValue(publicKeyStorageKey(currentUser.id), '');
   let generatedNewKeyPair = false;
+  const serverPublicKey = String(currentUser.publicKey || '').trim();
   const hasServerKeyBackup = Boolean(
     currentUser.privateKeyBackupCiphertext && currentUser.privateKeyBackupIv,
   );
   let restoredFromServerKeyBackup = false;
+
+  if (savedPrivateKey && savedPublicKey) {
+    const keyReference = serverPublicKey || savedPublicKey;
+    const localPublicKeyMismatch = Boolean(
+      serverPublicKey && savedPublicKey !== serverPublicKey,
+    );
+    const localKeyPairMatches = await doesEncryptionKeyPairMatch(
+      savedPrivateKey,
+      keyReference,
+    );
+
+    if (localPublicKeyMismatch || !localKeyPairMatches) {
+      console.warn(
+        'Stored encryption keys are out of sync with the current account key state',
+        {
+          userId: currentUser.id,
+          localPublicKeyMismatch,
+          hasServerKeyBackup,
+        },
+      );
+
+      if (hasServerKeyBackup) {
+        savedPrivateKey = '';
+        savedPublicKey = '';
+        writeStoredValue(privateKeyStorageKey(currentUser.id), '');
+        writeStoredValue(publicKeyStorageKey(currentUser.id), '');
+      } else if (serverPublicKey) {
+        throw new Error(
+          'Please log in again on this device so O-chat can refresh your encrypted messages.',
+        );
+      }
+    }
+  }
 
   if (
     (!savedPrivateKey || !savedPublicKey) &&
@@ -809,6 +886,16 @@ async function ensureEncryptionKeys(forceSync = false) {
         currentUser.privateKeyBackupIv,
       );
       if (restoredPrivateKey && currentUser.publicKey) {
+        const restoredKeyMatches = await doesEncryptionKeyPairMatch(
+          restoredPrivateKey,
+          currentUser.publicKey,
+        );
+        if (!restoredKeyMatches) {
+          throw new Error(
+            'Please log in again on this device so O-chat can unlock your encrypted messages.',
+          );
+        }
+
         savedPrivateKey = restoredPrivateKey;
         savedPublicKey = currentUser.publicKey;
         restoredFromServerKeyBackup = true;
@@ -854,12 +941,9 @@ async function ensureEncryptionKeys(forceSync = false) {
       generatedNewKeyPair ||
       currentUser.publicKey !== savedPublicKey),
   );
+  const shouldSyncPublicKey = Boolean(!serverPublicKey && savedPublicKey);
 
-  if (
-    forceSync ||
-    currentUser.publicKey !== savedPublicKey ||
-    shouldSyncBackup
-  ) {
+  if (forceSync || shouldSyncPublicKey || shouldSyncBackup) {
     const res = await api('/users/keys/public', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -13360,6 +13444,7 @@ function forceSessionLogout(message = '') {
   clearKeyBackupUnlockMaterial(currentUser?.id);
   token = null;
   currentUser = null;
+  currentPrivateKey = null;
 
   disconnectSocketForPageExit();
   clearStructuredMessageRefreshTimer();

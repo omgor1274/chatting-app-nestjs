@@ -12,7 +12,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
+import { diskStorage, memoryStorage } from 'multer';
 import { extname } from 'path';
 import { AdminGuard } from '../auth/jwt/admin.guard';
 import { JwtGuard } from '../auth/jwt/jwt.guard';
@@ -32,18 +32,6 @@ import { UpdateSettingsDto } from './dto/update-settings.dto';
 import { UserIdDto } from './dto/user-id.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { UserService } from './user.service';
-
-function avatarFileName(
-  req: { user?: { userId?: string } },
-  file: { originalname: string },
-  callback: (error: Error | null, filename: string) => void,
-) {
-  const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-  callback(
-    null,
-    `${req['user']?.userId ?? 'user'}-${uniqueSuffix}${extname(file.originalname)}`,
-  );
-}
 
 function contactThemeFileName(
   req: { user?: { userId?: string } },
@@ -343,10 +331,7 @@ export class UserController {
   @Post('profile/avatar')
   @UseInterceptors(
     FileInterceptor('avatar', {
-      storage: diskStorage({
-        destination: createUploadDestination('uploads', 'avatars'),
-        filename: avatarFileName,
-      }),
+      storage: memoryStorage(),
       limits: {
         fileSize: 5 * 1024 * 1024,
       },
@@ -366,17 +351,16 @@ export class UserController {
     @Req() req,
     @UploadedFile()
     file?: {
-      filename: string;
+      buffer: Buffer;
+      mimetype: string;
+      originalname: string;
     },
   ) {
     if (!file) {
       throw new BadRequestException('Avatar file is required');
     }
 
-    return this.userService.updateAvatar(
-      req.user.userId,
-      `/uploads/avatars/${file.filename}`,
-    );
+    return this.userService.uploadAvatar(req.user.userId, file);
   }
 
   @UseGuards(JwtGuard)

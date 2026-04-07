@@ -21,6 +21,12 @@ type DirectAttachmentInput = {
   userId: string;
 };
 
+type DirectManagedFileInput = DirectAttachmentInput & {
+  localRelativePrefix: string;
+  localStorageSegments: string[];
+  remoteDirectory: string;
+};
+
 type MultipartUploadInput = {
   fileName: string;
   fileMimeType: string;
@@ -79,11 +85,21 @@ export class ChatAttachmentStorageService {
   }
 
   async storeDirectAttachment(input: DirectAttachmentInput) {
-    if (this.isR2Enabled()) {
-      return this.storeDirectAttachmentInR2(input);
-    }
+    return this.storeDirectFile({
+      ...input,
+      localRelativePrefix: '/uploads/chat/',
+      localStorageSegments: ['uploads', 'chat'],
+      remoteDirectory: 'chat',
+    });
+  }
 
-    return this.storeDirectAttachmentLocally(input);
+  async storeUserAvatar(input: DirectAttachmentInput) {
+    return this.storeDirectFile({
+      ...input,
+      localRelativePrefix: '/uploads/avatars/',
+      localStorageSegments: ['uploads', 'avatars'],
+      remoteDirectory: 'avatars',
+    });
   }
 
   async createMultipartUpload(input: MultipartUploadInput) {
@@ -271,12 +287,16 @@ export class ChatAttachmentStorageService {
     return `${userId}-${baseWithoutExtension || 'attachment'}-${uniqueSuffix}${extension}`;
   }
 
-  private buildRemoteObjectKey(fileName: string, userId: string) {
+  private buildRemoteObjectKey(
+    fileName: string,
+    userId: string,
+    remoteDirectory = 'chat',
+  ) {
     const datePrefix = new Date()
       .toISOString()
       .slice(0, 10)
       .replaceAll('-', '/');
-    return `chat/${userId}/${datePrefix}/${this.buildSafeFileName(fileName, userId)}`;
+    return `${remoteDirectory}/${userId}/${datePrefix}/${this.buildSafeFileName(fileName, userId)}`;
   }
 
   private buildPublicFileUrl(key: string) {
@@ -298,12 +318,24 @@ export class ChatAttachmentStorageService {
       .replace(/^"+|"+$/g, '');
   }
 
-  private async storeDirectAttachmentInR2(input: DirectAttachmentInput) {
+  private async storeDirectFile(input: DirectManagedFileInput) {
+    if (this.isR2Enabled()) {
+      return this.storeDirectFileInR2(input);
+    }
+
+    return this.storeDirectFileLocally(input);
+  }
+
+  private async storeDirectFileInR2(input: DirectManagedFileInput) {
     if (!this.r2Client || !this.r2Config) {
       throw new Error('Cloudflare R2 is not configured');
     }
 
-    const key = this.buildRemoteObjectKey(input.fileName, input.userId);
+    const key = this.buildRemoteObjectKey(
+      input.fileName,
+      input.userId,
+      input.remoteDirectory,
+    );
     await this.r2Client.send(
       new PutObjectCommand({
         Bucket: this.r2Config.bucketName,
@@ -319,16 +351,19 @@ export class ChatAttachmentStorageService {
     } satisfies StoredAttachment;
   }
 
-  private async storeDirectAttachmentLocally(input: DirectAttachmentInput) {
+  private async storeDirectFileLocally(input: DirectManagedFileInput) {
     const fileName = this.buildSafeFileName(input.fileName, input.userId);
-    const targetPath = resolveWritableDataPath('uploads', 'chat', fileName);
-    await mkdir(resolveWritableDataPath('uploads', 'chat'), {
+    const targetPath = resolveWritableDataPath(
+      ...input.localStorageSegments,
+      fileName,
+    );
+    await mkdir(resolveWritableDataPath(...input.localStorageSegments), {
       recursive: true,
     });
     await writeFile(targetPath, input.buffer);
 
     return {
-      fileUrl: `/uploads/chat/${fileName}`,
+      fileUrl: `${input.localRelativePrefix}${fileName}`,
       storageProvider: 'local',
     } satisfies StoredAttachment;
   }

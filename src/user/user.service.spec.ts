@@ -23,12 +23,14 @@ describe('UserService', () => {
     contactPreference: {
       findMany: jest.Mock;
       findUnique: jest.Mock;
+      count: jest.Mock;
       delete: jest.Mock;
       deleteMany: jest.Mock;
       upsert: jest.Mock;
     };
     chatRequest: {
       findFirst: jest.Mock;
+      count: jest.Mock;
       deleteMany: jest.Mock;
     };
     pushSubscription: {
@@ -36,10 +38,13 @@ describe('UserService', () => {
     };
     message: {
       findMany: jest.Mock;
+      count: jest.Mock;
+      aggregate: jest.Mock;
       deleteMany: jest.Mock;
     };
     group: {
       findMany: jest.Mock;
+      count: jest.Mock;
     };
     authToken: {
       deleteMany: jest.Mock;
@@ -50,6 +55,7 @@ describe('UserService', () => {
     $transaction: jest.Mock;
   };
   let attachmentStorage: {
+    storeUserAvatar: jest.Mock;
     deleteAttachment: jest.Mock;
   };
   const originalBootstrapAdminName = process.env.BOOTSTRAP_ADMIN_NAME;
@@ -76,12 +82,14 @@ describe('UserService', () => {
       contactPreference: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
+        count: jest.fn(),
         delete: jest.fn(),
         deleteMany: jest.fn(),
         upsert: jest.fn(),
       },
       chatRequest: {
         findFirst: jest.fn(),
+        count: jest.fn(),
         deleteMany: jest.fn(),
       },
       pushSubscription: {
@@ -89,10 +97,13 @@ describe('UserService', () => {
       },
       message: {
         findMany: jest.fn(),
+        count: jest.fn(),
+        aggregate: jest.fn(),
         deleteMany: jest.fn(),
       },
       group: {
         findMany: jest.fn(),
+        count: jest.fn(),
       },
       authToken: {
         deleteMany: jest.fn(),
@@ -103,8 +114,18 @@ describe('UserService', () => {
       $transaction: jest.fn(async (operations) => Promise.all(operations)),
     };
     attachmentStorage = {
+      storeUserAvatar: jest.fn(),
       deleteAttachment: jest.fn().mockResolvedValue(undefined),
     };
+    prisma.chatRequest.count.mockResolvedValue(0);
+    prisma.group.count.mockResolvedValue(0);
+    prisma.message.count.mockResolvedValue(0);
+    prisma.message.aggregate.mockResolvedValue({
+      _sum: {
+        fileSize: 0n,
+      },
+    });
+    prisma.contactPreference.count.mockResolvedValue(0);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -354,13 +375,15 @@ describe('UserService', () => {
 
     const result = await service.getAdminUserOverview();
 
-    expect(result.summary).toEqual({
-      totalUsers: 3,
-      adminUsers: 1,
-      pendingUsers: 1,
-      activeUsers: 1,
-      bannedUsers: 1,
-    });
+    expect(result.summary).toEqual(
+      expect.objectContaining({
+        totalUsers: 3,
+        adminUsers: 1,
+        pendingUsers: 1,
+        activeUsers: 1,
+        bannedUsers: 1,
+      }),
+    );
     expect(result.users[0].role).toBe('ADMIN');
     expect(result.users[1].status).toBe('pending');
     expect(result.users[2].status).toBe('banned');
@@ -504,6 +527,91 @@ describe('UserService', () => {
         success: true,
         deletedUserId: 'user-2',
       }),
+    );
+  });
+
+  it('stores uploaded avatars in shared storage before saving the profile avatar url', async () => {
+    attachmentStorage.storeUserAvatar.mockResolvedValue({
+      fileUrl: 'https://cdn.example.com/avatars/user-1/avatar.png',
+      storageProvider: 'cloudflare-r2',
+    });
+    prisma.user.findUnique.mockResolvedValue({
+      avatar: null,
+    });
+    prisma.user.update.mockResolvedValue({
+      id: 'user-1',
+      email: 'user1@example.com',
+      pendingEmail: null,
+      name: 'User One',
+      avatar: 'https://cdn.example.com/avatars/user-1/avatar.png',
+      emailVerified: true,
+      backupEnabled: true,
+      backupImages: true,
+      backupVideos: true,
+      backupFiles: true,
+      darkMode: false,
+      publicKey: null,
+      privateKeyBackupCiphertext: null,
+      privateKeyBackupIv: null,
+      publicKeyUpdatedAt: null,
+    });
+
+    const result = await service.uploadAvatar('user-1', {
+      buffer: Buffer.from('avatar'),
+      mimetype: 'image/png',
+      originalname: 'avatar.png',
+    });
+
+    expect(attachmentStorage.storeUserAvatar).toHaveBeenCalledWith({
+      buffer: expect.any(Buffer),
+      fileName: 'avatar.png',
+      fileMimeType: 'image/png',
+      userId: 'user-1',
+    });
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'user-1' },
+        data: expect.objectContaining({
+          avatar: 'https://cdn.example.com/avatars/user-1/avatar.png',
+        }),
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        avatar: 'https://cdn.example.com/avatars/user-1/avatar.png',
+      }),
+    );
+  });
+
+  it('deletes the previous shared avatar when a new avatar replaces it', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      avatar: 'https://cdn.example.com/avatars/user-1/old-avatar.png',
+    });
+    prisma.user.update.mockResolvedValue({
+      id: 'user-1',
+      email: 'user1@example.com',
+      pendingEmail: null,
+      name: 'User One',
+      avatar: 'https://cdn.example.com/avatars/user-1/new-avatar.png',
+      emailVerified: true,
+      backupEnabled: true,
+      backupImages: true,
+      backupVideos: true,
+      backupFiles: true,
+      darkMode: false,
+      publicKey: null,
+      privateKeyBackupCiphertext: null,
+      privateKeyBackupIv: null,
+      publicKeyUpdatedAt: null,
+    });
+
+    await service.updateAvatar(
+      'user-1',
+      'https://cdn.example.com/avatars/user-1/new-avatar.png',
+    );
+
+    expect(attachmentStorage.deleteAttachment).toHaveBeenCalledWith(
+      'https://cdn.example.com/avatars/user-1/old-avatar.png',
     );
   });
 });

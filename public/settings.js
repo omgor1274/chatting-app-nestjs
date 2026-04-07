@@ -93,6 +93,18 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
+function assetUrl(path, fallbackLabel = 'User') {
+  if (!path) {
+    return getAvatarUrl(fallbackLabel);
+  }
+
+  if (String(path).startsWith('http://') || String(path).startsWith('https://')) {
+    return path;
+  }
+
+  return `${getApiUrl()}${path}`;
+}
+
 function filterAdminUsers(users, query) {
   const normalizedQuery = String(query || '').trim().toLowerCase();
   if (!normalizedQuery) {
@@ -360,9 +372,7 @@ function renderBlockedUsers(blockedUsers) {
         <div class="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div class="flex min-w-0 items-center gap-3">
             <img src="${
-              user.avatar
-                ? `${getApiUrl()}${user.avatar}`
-                : getAvatarUrl(user.name || user.email || 'Blocked user')
+              assetUrl(user.avatar, user.name || user.email || 'Blocked user')
             }" class="h-11 w-11 rounded-2xl object-cover">
             <div class="min-w-0">
               <p class="truncate text-sm font-semibold text-slate-900">${user.name || user.email || 'Blocked user'}</p>
@@ -657,9 +667,10 @@ async function loadProfile() {
 
   getById('settings-current-name').textContent = data.name || 'Your profile';
   getById('settings-current-email').textContent = data.email || '';
-  getById('settings-avatar').src = data.avatar
-    ? `${getApiUrl()}${data.avatar}`
-    : getAvatarUrl(data.name || data.email || 'User');
+  getById('settings-avatar').src = assetUrl(
+    data.avatar,
+    data.name || data.email || 'User',
+  );
 
   getById('profile-name-input').value = data.name || '';
   getById('profile-email-input').value = data.email || '';

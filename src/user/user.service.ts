@@ -522,7 +522,23 @@ export class UserService {
     relativePrefix: string,
     storageSegments: string[],
   ) {
-    if (!filePath || !String(filePath).startsWith(relativePrefix)) {
+    if (!filePath) {
+      return false;
+    }
+
+    if (/^https?:\/\//i.test(String(filePath))) {
+      try {
+        await this.chatAttachmentStorage.deleteAttachment(filePath);
+        return true;
+      } catch (error) {
+        this.logger.warn(
+          `Failed to delete managed upload "${filePath}". ${error instanceof Error ? error.message : 'Unknown storage error'}`,
+        );
+        return false;
+      }
+    }
+
+    if (!String(filePath).startsWith(relativePrefix)) {
       return false;
     }
 
@@ -548,6 +564,28 @@ export class UserService {
       );
       return false;
     }
+  }
+
+  async uploadAvatar(
+    userId: string,
+    file: {
+      buffer: Buffer;
+      mimetype: string;
+      originalname: string;
+    },
+  ) {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('Avatar file is required');
+    }
+
+    const storedAvatar = await this.chatAttachmentStorage.storeUserAvatar({
+      buffer: file.buffer,
+      fileName: file.originalname,
+      fileMimeType: file.mimetype,
+      userId,
+    });
+
+    return this.updateAvatar(userId, storedAvatar.fileUrl);
   }
 
   private async ensureContactUser(contactUserId: string, userId: string) {
@@ -2084,6 +2122,13 @@ export class UserService {
       throw new BadRequestException('Avatar path is required');
     }
 
+    const existingUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        avatar: true,
+      },
+    });
+
     const user = await this.prisma.user.update({
       where: { id: userId },
       data: { avatar: avatarPath },
@@ -2111,10 +2156,25 @@ export class UserService {
       },
     });
 
+    if (existingUser?.avatar && existingUser.avatar !== avatarPath) {
+      await this.deleteManagedUpload(
+        existingUser.avatar,
+        '/uploads/avatars/',
+        ['uploads', 'avatars'],
+      );
+    }
+
     return this.serializeProfile(user);
   }
 
   async removeAvatar(userId: string) {
+    const existingUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        avatar: true,
+      },
+    });
+
     const user = await this.prisma.user.update({
       where: { id: userId },
       data: { avatar: null },
@@ -2141,6 +2201,14 @@ export class UserService {
         publicKeyUpdatedAt: true,
       },
     });
+
+    if (existingUser?.avatar) {
+      await this.deleteManagedUpload(
+        existingUser.avatar,
+        '/uploads/avatars/',
+        ['uploads', 'avatars'],
+      );
+    }
 
     return this.serializeProfile(user);
   }
