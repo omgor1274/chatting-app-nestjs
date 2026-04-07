@@ -166,6 +166,7 @@ function createEmptyActiveCallState() {
 }
 
 let activeCall = createEmptyActiveCallState();
+let pendingRemoteIceCandidatesByUser = new Map();
 let rtcConfig = {
   iceServers: appConfig.stunServers.map((urls) => ({ urls })),
 };
@@ -11577,6 +11578,49 @@ function openActiveCallPanel(userId, callType, status) {
   panel.classList.remove('hidden');
 }
 
+function queueRemoteIceCandidate(userId, candidate) {
+  if (!userId || !candidate) {
+    return;
+  }
+
+  const queue = pendingRemoteIceCandidatesByUser.get(userId) || [];
+  queue.push(candidate);
+  pendingRemoteIceCandidatesByUser.set(userId, queue);
+}
+
+function clearRemoteIceCandidates(userId) {
+  if (!userId) {
+    return;
+  }
+
+  pendingRemoteIceCandidatesByUser.delete(userId);
+}
+
+async function flushQueuedRemoteIceCandidates(userId = activeCall.targetUserId) {
+  if (
+    !userId ||
+    !activeCall.peer ||
+    activeCall.targetUserId !== userId ||
+    !activeCall.peer.remoteDescription?.type
+  ) {
+    return;
+  }
+
+  const queue = pendingRemoteIceCandidatesByUser.get(userId) || [];
+  if (!queue.length) {
+    return;
+  }
+
+  pendingRemoteIceCandidatesByUser.delete(userId);
+  for (const candidate of queue) {
+    try {
+      await activeCall.peer.addIceCandidate(candidate);
+    } catch (error) {
+      console.error('Failed to apply queued ICE candidate', error);
+    }
+  }
+}
+
 function cleanupActiveCall(notifyPeer = false) {
   if (notifyPeer && socket && activeCall.targetUserId) {
     socket.emit('call:end', { toUserId: activeCall.targetUserId });
@@ -11599,6 +11643,8 @@ function cleanupActiveCall(notifyPeer = false) {
     activeCall.remoteStream.getTracks().forEach((track) => track.stop());
   }
 
+  clearRemoteIceCandidates(activeCall.targetUserId);
+
   activeCall = createEmptyActiveCallState();
 
   document.getElementById('active-call-panel').classList.add('hidden');
@@ -11614,21 +11660,34 @@ function cleanupActiveCall(notifyPeer = false) {
 async function createPeerConnection(targetUserId, callType) {
   const peer = new RTCPeerConnection(rtcConfig);
   const remoteStream = new MediaStream();
+  const remoteAudio = document.getElementById('remote-audio');
+  const remoteVideo = document.getElementById('remote-video');
   activeCall.peer = peer;
   activeCall.remoteStream = remoteStream;
   activeCall.targetUserId = targetUserId;
   activeCall.callType = callType;
 
-  document.getElementById('remote-audio').srcObject = remoteStream;
-  document.getElementById('remote-video').srcObject = remoteStream;
+  remoteAudio.srcObject = remoteStream;
+  remoteVideo.srcObject = remoteStream;
+
+  const ensureRemotePlayback = () => {
+    remoteAudio?.play?.().catch(() => undefined);
+    if (callType === 'video') {
+      remoteVideo?.play?.().catch(() => undefined);
+    }
+  };
 
   peer.ontrack = (event) => {
-    event.streams[0].getTracks().forEach((track) => {
-      remoteStream.addTrack(track);
-    });
-    if (callType === 'video') {
-      document.getElementById('remote-video').classList.remove('hidden');
+    if (
+      event.track &&
+      !remoteStream.getTracks().some((track) => track.id === event.track.id)
+    ) {
+      remoteStream.addTrack(event.track);
     }
+    if (callType === 'video') {
+      remoteVideo.classList.remove('hidden');
+    }
+    ensureRemotePlayback();
   };
 
   peer.onicecandidate = (event) => {
@@ -11651,6 +11710,7 @@ async function createPeerConnection(targetUserId, callType) {
         clearTimeout(activeCall.reconnectTimer);
         activeCall.reconnectTimer = null;
       }
+      ensureRemotePlayback();
     }
 
     if (peer.connectionState === 'disconnected') {
@@ -11835,10 +11895,12 @@ function handleIncomingCallOffer(payload) {
   }
 
   if (activeCall.peer || pendingIncomingCall) {
+    clearRemoteIceCandidates(payload.fromUserId);
     socket.emit('call:decline', { toUserId: payload.fromUserId });
     return;
   }
 
+  clearRemoteIceCandidates(payload.fromUserId);
   pendingIncomingCall = payload;
   playIncomingCallRingtone();
   const user = users.find((item) => item.id === payload.fromUserId);
@@ -11872,10 +11934,11 @@ async function acceptIncomingCall() {
     const stream = await prepareCallStream(callType);
     stream.getTracks().forEach((track) => peer.addTrack(track, stream));
     await peer.setRemoteDescription(offer);
+    await flushQueuedRemoteIceCandidates(fromUserId);
     const answer = await peer.createAnswer();
     await peer.setLocalDescription(answer);
 
-    socket.emit('call:answer', {
+    await emitSocketEvent('call:answer', {
       toUserId: fromUserId,
       answer: peer.localDescription,
       callType,
@@ -11888,6 +11951,7 @@ async function acceptIncomingCall() {
 
 function declineIncomingCall() {
   if (pendingIncomingCall?.fromUserId && socket) {
+    clearRemoteIceCandidates(pendingIncomingCall.fromUserId);
     socket.emit('call:decline', {
       toUserId: pendingIncomingCall.fromUserId,
     });
@@ -11909,6 +11973,7 @@ async function handleCallAnswer(payload) {
   }
 
   await activeCall.peer.setRemoteDescription(payload.answer);
+  await flushQueuedRemoteIceCandidates(payload.fromUserId);
   document.getElementById('active-call-status').innerText = 'Connected';
   recordCallHistoryEntry(payload.fromUserId, {
     direction: 'outgoing',
@@ -11918,14 +11983,33 @@ async function handleCallAnswer(payload) {
 }
 
 async function handleCallIce(payload) {
-  if (!activeCall.peer || payload?.fromUserId !== activeCall.targetUserId) {
+  if (!payload?.fromUserId || !payload?.candidate) {
+    return;
+  }
+
+  const isActivePeerCandidate = payload.fromUserId === activeCall.targetUserId;
+  const isPendingIncomingCandidate =
+    payload.fromUserId === pendingIncomingCall?.fromUserId;
+
+  if (!isActivePeerCandidate && !isPendingIncomingCandidate) {
+    return;
+  }
+
+  if (!activeCall.peer || !isActivePeerCandidate) {
+    queueRemoteIceCandidate(payload.fromUserId, payload.candidate);
+    return;
+  }
+
+  if (!activeCall.peer.remoteDescription?.type) {
+    queueRemoteIceCandidate(payload.fromUserId, payload.candidate);
     return;
   }
 
   try {
     await activeCall.peer.addIceCandidate(payload.candidate);
   } catch (error) {
-    console.error(error);
+    console.error('Failed to apply ICE candidate immediately', error);
+    queueRemoteIceCandidate(payload.fromUserId, payload.candidate);
   }
 }
 
@@ -11934,6 +12018,7 @@ function handleCallDecline(payload) {
     return;
   }
 
+  clearRemoteIceCandidates(payload.fromUserId);
   recordCallHistoryEntry(payload.fromUserId, {
     direction: 'outgoing',
     callType: activeCall.callType,
@@ -11948,6 +12033,7 @@ function handleCallEnd(payload) {
     return;
   }
 
+  clearRemoteIceCandidates(payload.fromUserId);
   recordCallHistoryEntry(payload.fromUserId, {
     direction: 'incoming',
     callType: activeCall.callType,
@@ -12034,7 +12120,7 @@ function renderMessageReplySnippetHtml(message, metaTone) {
   }
 
   return `
-    <div class="message-reply-snippet mb-3 rounded-2xl bg-black/5 px-3 py-2 text-left">
+    <div class="message-reply-snippet mb-2 rounded-xl bg-black/5 px-2.5 py-1.5 text-left">
       <p class="text-[11px] font-semibold uppercase tracking-[0.2em] ${metaTone}">
         ${escapeHtml(message.replyMeta.senderName || 'Message')}
       </p>
@@ -12247,7 +12333,7 @@ function createMessageElement(message, options = {}) {
 
   if (message.deletedForEveryoneAt) {
     div.innerHTML = `
-            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,40rem)] px-3 py-2 text-[13px] italic opacity-80">
+            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,34rem)] px-2.5 py-1.5 text-[12px] italic opacity-80">
               ${escapeHtml(message.senderId === currentUser.id ? 'You unsent this message.' : 'This message was deleted.')}
               ${footer}
               ${reactionChip}
@@ -12255,7 +12341,7 @@ function createMessageElement(message, options = {}) {
           `;
   } else if (message.messageType === 'IMAGE' && message.fileUrl) {
     div.innerHTML = `
-            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,40rem)] overflow-hidden p-2">
+            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,34rem)] overflow-hidden p-1.5">
               ${replySnippet}
               <a href="${messageFileUrl}" target="_blank" rel="noopener noreferrer">
                 <img src="${messageFileUrl}" loading="lazy" decoding="async" class="mb-2 max-h-80 w-auto rounded-2xl border border-black/5">
@@ -12270,7 +12356,7 @@ function createMessageElement(message, options = {}) {
           `;
   } else if (message.messageType === 'AUDIO' && message.fileUrl) {
     div.innerHTML = `
-            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,40rem)] px-3 py-2.5">
+            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,34rem)] px-2.5 py-2">
               <div class="space-y-3">
                 ${replySnippet}
                 <p class="text-sm font-semibold">${escapeHtml(message.fileName || 'Voice message')}</p>
@@ -12285,7 +12371,7 @@ function createMessageElement(message, options = {}) {
     String(message.fileMimeType || '').startsWith('video/')
   ) {
     div.innerHTML = `
-            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,40rem)] overflow-hidden p-2">
+            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,34rem)] overflow-hidden p-1.5">
               <div class="space-y-3">
                 ${replySnippet}
                 <video controls playsinline preload="metadata" class="max-h-80 w-full rounded-2xl border border-black/5 bg-black">
@@ -12303,7 +12389,7 @@ function createMessageElement(message, options = {}) {
           `;
   } else if (message.messageType === 'DOCUMENT' && message.fileUrl) {
     div.innerHTML = `
-            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,40rem)] px-3 py-2.5">
+            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,34rem)] px-2.5 py-2">
               <div class="space-y-2">
                 ${replySnippet}
                 <p class="text-sm font-semibold">${escapeHtml(message.fileName || 'Document')}</p>
@@ -12319,7 +12405,7 @@ function createMessageElement(message, options = {}) {
           `;
   } else {
     div.innerHTML = `
-            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,40rem)] px-3 py-2 text-[14px] leading-[1.55]">
+            <div class="message-bubble-shell ${bubbleTone} w-fit max-w-[min(100%,34rem)] px-2.5 py-1.5 text-[13px] leading-[1.5]">
               ${replySnippet}
               ${textContent}
               ${footer}

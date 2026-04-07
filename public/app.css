@@ -2407,6 +2407,213 @@ body:not(.dark-mode).admin-page h2 {
   letter-spacing: -0.02em;
 }
 
+body.chat-page #app-shell {
+  width: min(100%, 1360px);
+  margin-inline: auto;
+}
+
+body.chat-page .mobile-chat-sidebar {
+  width: min(17.75rem, 84vw);
+  max-width: 17.75rem;
+}
+
+body.chat-page .sidebar-header {
+  padding: 0.85rem 0.95rem 0.75rem !important;
+}
+
+body.chat-page .sidebar-toolbar {
+  padding: 0.7rem 0.95rem !important;
+}
+
+body.chat-page .sidebar-account-card {
+  gap: 0.7rem;
+  padding: 0.65rem 0.7rem !important;
+  border-radius: 1rem !important;
+}
+
+body.chat-page .sidebar-account-card img {
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 0.8rem !important;
+}
+
+body.chat-page .sidebar-icon-btn,
+body.chat-page .topbar-icon-btn,
+body.chat-page .chat-header-icon,
+body.chat-page #chat-actions-btn {
+  width: 2.35rem;
+  height: 2.35rem;
+  min-width: 2.35rem;
+  min-height: 2.35rem;
+  border-radius: 0.8rem;
+}
+
+body.chat-page .sidebar-search-input {
+  min-height: 2.35rem;
+  padding-top: 0.55rem !important;
+  padding-bottom: 0.55rem !important;
+  font-size: 0.85rem;
+}
+
+body.chat-page #users-list {
+  padding: 0.45rem !important;
+}
+
+body.chat-page #users-list > li {
+  border-radius: 0.9rem !important;
+  padding: 0.2rem !important;
+}
+
+body.chat-page #users-list > li > div {
+  gap: 0.65rem !important;
+  padding: 0.45rem !important;
+  border-radius: 0.8rem !important;
+}
+
+body.chat-page #users-list > li img {
+  width: 2.25rem !important;
+  height: 2.25rem !important;
+  border-radius: 0.75rem !important;
+}
+
+body.chat-page #chat-header {
+  padding: 0.55rem 0.75rem !important;
+}
+
+body.chat-page #chat-contact-trigger {
+  gap: 0.6rem;
+  padding: 0.2rem 0.3rem;
+  border-radius: 0.95rem;
+}
+
+body.chat-page #target-avatar {
+  width: 2.35rem !important;
+  height: 2.35rem !important;
+  min-width: 2.35rem !important;
+  border-radius: 0.8rem !important;
+}
+
+body.chat-page #target-name {
+  font-size: 0.95rem;
+}
+
+body.chat-page #target-status {
+  font-size: 0.72rem;
+}
+
+body.chat-page #chat-header-shortcuts {
+  gap: 0.35rem;
+}
+
+body.chat-page .mobile-chat-scroll {
+  padding-top: 0.35rem;
+}
+
+body.chat-page #message-container {
+  padding-left: 0.45rem !important;
+  padding-right: 0.45rem !important;
+}
+
+body.chat-page #messages-list {
+  gap: 0.35rem !important;
+}
+
+body.chat-page .message-bubble-shell {
+  max-width: min(100%, 34rem) !important;
+  border-radius: 1rem !important;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+}
+
+body.chat-page .message-bubble-footer {
+  margin-top: 0.4rem !important;
+  gap: 0.3rem !important;
+  font-size: 0.62rem !important;
+}
+
+body.chat-page .message-reply-snippet {
+  margin-bottom: 0.45rem !important;
+  padding: 0.42rem 0.6rem !important;
+  border-radius: 0.8rem;
+}
+
+body.chat-page .message-bubble-shell img,
+body.chat-page .message-bubble-shell video {
+  border-radius: 0.85rem !important;
+}
+
+body.chat-page .message-bubble-shell audio {
+  max-width: 18rem !important;
+}
+
+body.chat-page .mobile-chat-composer {
+  padding: 0.45rem 0.55rem calc(0.45rem + env(safe-area-inset-bottom));
+}
+
+body.chat-page .mobile-chat-composer > div {
+  gap: 0.45rem;
+}
+
+body.chat-page #input-area .rounded-\[24px\],
+body.chat-page #input-area .rounded-\[22px\] {
+  border-radius: 0.95rem !important;
+}
+
+body.chat-page #input-area .rounded-\[24px\].border.border-slate-200.bg-white.p-1\.5.shadow-sm {
+  padding: 0.45rem !important;
+}
+
+body.chat-page #msg-input {
+  min-height: 2.4rem;
+  max-height: 7rem;
+  font-size: 0.94rem;
+  line-height: 1.45;
+}
+
+body.chat-page #send-message-btn,
+body.chat-page #voice-send-btn,
+body.chat-page #voice-record-btn,
+body.chat-page #composer-actions-btn,
+body.chat-page #request-action-btn,
+body.chat-page #request-reject-btn {
+  min-height: 2.35rem;
+  border-radius: 0.85rem;
+}
+
+body.chat-page #send-message-btn,
+body.chat-page #voice-send-btn,
+body.chat-page #request-action-btn,
+body.chat-page #request-reject-btn {
+  padding-left: 0.85rem;
+  padding-right: 0.85rem;
+}
+
+body.chat-page #composer-actions-btn,
+body.chat-page #voice-record-btn {
+  width: 2.35rem;
+  height: 2.35rem;
+}
+
+body.chat-page #empty-state > div {
+  padding: 1.5rem !important;
+  border-radius: 1.2rem !important;
+}
+
+@media (min-width: 1024px) {
+  body.chat-page {
+    padding: 0.65rem;
+  }
+
+  body.chat-page #app-shell {
+    max-width: 1320px;
+    border-radius: 24px !important;
+  }
+
+  body.chat-page .mobile-chat-sidebar {
+    width: 17.25rem !important;
+    max-width: 17.25rem !important;
+  }
+}
+
 @media (min-width: 960px) {
   .landing-grid {
     grid-template-columns: minmax(0, 1fr) minmax(18rem, 20rem);

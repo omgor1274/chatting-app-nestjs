@@ -9,10 +9,13 @@ const DESKTOP_PORT = Number(process.env.DESKTOP_PORT || 3310);
 const DESKTOP_URL = `http://127.0.0.1:${DESKTOP_PORT}`;
 const START_TIMEOUT_MS = 60000;
 const BACKEND_SUBDIR = 'server-data';
+const DESKTOP_ORIGIN = new URL(DESKTOP_URL).origin;
 
 let mainWindow = null;
 let backendProcess = null;
 let backendLog = '';
+
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 function isDevelopment() {
   return !app.isPackaged;
@@ -67,6 +70,35 @@ function getWritableDataRoot() {
   }
 
   return path.join(app.getPath('userData'), BACKEND_SUBDIR);
+}
+
+function isTrustedDesktopOrigin(candidate) {
+  if (!candidate) {
+    return false;
+  }
+
+  try {
+    return new URL(candidate).origin === DESKTOP_ORIGIN;
+  } catch {
+    return false;
+  }
+}
+
+function configureDesktopSessionPermissions(targetWindow) {
+  const session = targetWindow.webContents.session;
+  const isTrustedRequest = (candidate) =>
+    isTrustedDesktopOrigin(candidate) ||
+    isTrustedDesktopOrigin(targetWindow.webContents.getURL());
+
+  session.setPermissionCheckHandler(
+    (_webContents, _permission, requestingOrigin) =>
+      isTrustedRequest(requestingOrigin),
+  );
+  session.setPermissionRequestHandler(
+    (_webContents, _permission, callback, details) => {
+      callback(isTrustedRequest(details?.requestingUrl));
+    },
+  );
 }
 
 function loadDesktopEnvFile() {
@@ -246,10 +278,13 @@ function createWindow() {
     mainWindow = null;
   });
 
+  configureDesktopSessionPermissions(mainWindow);
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
   });
+  mainWindow.webContents.setAudioMuted(false);
 
   mainWindow.loadURL(DESKTOP_URL);
 }
