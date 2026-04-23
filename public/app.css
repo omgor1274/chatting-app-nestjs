@@ -3483,3 +3483,871 @@ body.chat-page
     max-width: min(48%, 28rem) !important;
   }
 }
+
+/* 2026-04 minimal reset */
+:root {
+  --minimal-ink: #171411;
+  --minimal-muted: #6f675f;
+  --minimal-soft: #9a8f84;
+  --minimal-line: rgba(23, 20, 17, 0.09);
+  --minimal-line-strong: rgba(23, 20, 17, 0.16);
+  --minimal-paper: #fffdf8;
+  --minimal-paper-soft: rgba(255, 253, 248, 0.78);
+  --minimal-wash: #f3eee6;
+  --minimal-accent: #244236;
+  --minimal-accent-soft: #dfe9e1;
+  --minimal-accent-line: #bfd0c3;
+  --minimal-danger: #8f4a3c;
+  --minimal-warning: #7d6323;
+  --minimal-shadow: 0 22px 70px rgba(41, 31, 20, 0.08);
+}
+
+body.chat-page,
+body.chat-page.dark-mode {
+  padding: 0 !important;
+  font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif !important;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.7), transparent 38%),
+    linear-gradient(180deg, #f8f4ed 0%, var(--minimal-wash) 100%) !important;
+  color: var(--minimal-ink) !important;
+}
+
+body.chat-page .display-font,
+body.chat-page.dark-mode .display-font {
+  font-family: 'Space Grotesk', 'IBM Plex Sans', sans-serif !important;
+  letter-spacing: -0.04em;
+}
+
+body.chat-page #app-shell,
+body.chat-page.dark-mode #app-shell {
+  width: min(100%, 1680px);
+  margin: 0 auto !important;
+  background: rgba(250, 247, 241, 0.92) !important;
+  border: 1px solid var(--minimal-line) !important;
+  box-shadow: none !important;
+}
+
+body.chat-page #mobile-sidebar-overlay,
+body.chat-page.dark-mode #mobile-sidebar-overlay,
+body.chat-page .modal-backdrop,
+body.chat-page.dark-mode .modal-backdrop {
+  background: rgba(31, 24, 17, 0.18) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+body.chat-page #startup-loader,
+body.chat-page.dark-mode #startup-loader {
+  background: linear-gradient(180deg, #f8f4ed 0%, var(--minimal-wash) 100%) !important;
+  color: var(--minimal-ink) !important;
+}
+
+body.chat-page .startup-loader-detail,
+body.chat-page.dark-mode .startup-loader-detail {
+  color: var(--minimal-muted) !important;
+}
+
+body.chat-page .startup-loader-progress,
+body.chat-page.dark-mode .startup-loader-progress {
+  background: rgba(23, 20, 17, 0.08) !important;
+}
+
+body.chat-page .startup-loader-progress-bar,
+body.chat-page.dark-mode .startup-loader-progress-bar {
+  background: linear-gradient(90deg, #244236 0%, #476856 100%) !important;
+}
+
+body.chat-page .startup-loader-mark-ring,
+body.chat-page.dark-mode .startup-loader-mark-ring {
+  border-color: var(--minimal-line-strong) !important;
+}
+
+body.chat-page .startup-loader-mark-letter,
+body.chat-page.dark-mode .startup-loader-mark-letter {
+  color: var(--minimal-accent) !important;
+}
+
+body.chat-page #auth-screen,
+body.chat-page.dark-mode #auth-screen {
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.72), transparent 36%),
+    linear-gradient(180deg, #f8f4ed 0%, var(--minimal-wash) 100%) !important;
+}
+
+body.chat-page #auth-screen > div,
+body.chat-page.dark-mode #auth-screen > div {
+  border-radius: 32px !important;
+  border: 1px solid var(--minimal-line) !important;
+  background: rgba(255, 253, 248, 0.96) !important;
+  box-shadow: var(--minimal-shadow) !important;
+}
+
+body.chat-page #auth-screen input,
+body.chat-page.dark-mode #auth-screen input {
+  border-radius: 18px !important;
+  border-color: var(--minimal-line) !important;
+  background: transparent !important;
+  color: var(--minimal-ink) !important;
+  box-shadow: none !important;
+}
+
+body.chat-page #auth-screen input::placeholder,
+body.chat-page.dark-mode #auth-screen input::placeholder {
+  color: var(--minimal-soft) !important;
+}
+
+body.chat-page #auth-btn,
+body.chat-page.dark-mode #auth-btn,
+body.chat-page #verification-step button[class*='bg-blue-600'],
+body.chat-page.dark-mode #verification-step button[class*='bg-blue-600'],
+body.chat-page #forgot-password-step button[class*='bg-blue-600'],
+body.chat-page.dark-mode #forgot-password-step button[class*='bg-blue-600'],
+body.chat-page #reset-password-step button[class*='bg-blue-600'],
+body.chat-page.dark-mode #reset-password-step button[class*='bg-blue-600'] {
+  background: var(--minimal-accent) !important;
+  color: #f8f4ed !important;
+}
+
+body.chat-page #auth-switch,
+body.chat-page.dark-mode #auth-switch,
+body.chat-page #chat-send-status,
+body.chat-page.dark-mode #chat-send-status {
+  color: var(--minimal-accent) !important;
+}
+
+body.chat-page #auth-feedback,
+body.chat-page.dark-mode #auth-feedback,
+body.chat-page #verification-feedback,
+body.chat-page.dark-mode #verification-feedback,
+body.chat-page #forgot-password-feedback,
+body.chat-page.dark-mode #forgot-password-feedback,
+body.chat-page #reset-password-feedback,
+body.chat-page.dark-mode #reset-password-feedback {
+  border-color: var(--minimal-line) !important;
+  background: rgba(250, 247, 241, 0.9) !important;
+  color: var(--minimal-muted) !important;
+}
+
+body.chat-page #desktop-chat-rail,
+body.chat-page.dark-mode #desktop-chat-rail {
+  display: none !important;
+}
+
+body.chat-page #sidebar,
+body.chat-page.dark-mode #sidebar {
+  width: 21rem !important;
+  max-width: 21rem !important;
+  background: rgba(250, 247, 241, 0.86) !important;
+  border-right: 1px solid var(--minimal-line) !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+body.chat-page .sidebar-header,
+body.chat-page.dark-mode .sidebar-header,
+body.chat-page .sidebar-toolbar,
+body.chat-page.dark-mode .sidebar-toolbar,
+body.chat-page #mobile-chat-topbar,
+body.chat-page.dark-mode #mobile-chat-topbar,
+body.chat-page #chat-header,
+body.chat-page.dark-mode #chat-header,
+body.chat-page #input-area,
+body.chat-page.dark-mode #input-area {
+  background: rgba(250, 247, 241, 0.8) !important;
+  border-color: var(--minimal-line) !important;
+  color: var(--minimal-ink) !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+body.chat-page .sidebar-account-card,
+body.chat-page.dark-mode .sidebar-account-card {
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+body.chat-page #sidebar-current-user-name,
+body.chat-page.dark-mode #sidebar-current-user-name,
+body.chat-page #target-name,
+body.chat-page.dark-mode #target-name,
+body.chat-page #chat-contact-panel-name,
+body.chat-page.dark-mode #chat-contact-panel-name {
+  color: var(--minimal-ink) !important;
+}
+
+body.chat-page #sidebar-current-user-email,
+body.chat-page.dark-mode #sidebar-current-user-email,
+body.chat-page #target-status,
+body.chat-page.dark-mode #target-status,
+body.chat-page #chat-count,
+body.chat-page.dark-mode #chat-count,
+body.chat-page .chat-list-card-time,
+body.chat-page.dark-mode .chat-list-card-time,
+body.chat-page .desktop-empty-state-kicker,
+body.chat-page.dark-mode .desktop-empty-state-kicker,
+body.chat-page .desktop-empty-action-copy,
+body.chat-page.dark-mode .desktop-empty-action-copy {
+  color: var(--minimal-muted) !important;
+}
+
+body.chat-page #sidebar-current-user-avatar,
+body.chat-page.dark-mode #sidebar-current-user-avatar,
+body.chat-page #target-avatar,
+body.chat-page.dark-mode #target-avatar,
+body.chat-page #desktop-rail-avatar,
+body.chat-page.dark-mode #desktop-rail-avatar,
+body.chat-page #chat-contact-panel-avatar,
+body.chat-page.dark-mode #chat-contact-panel-avatar {
+  border: 1px solid var(--minimal-line) !important;
+  box-shadow: none !important;
+}
+
+body.chat-page .sidebar-search-input,
+body.chat-page.dark-mode .sidebar-search-input,
+body.chat-page #msg-input,
+body.chat-page.dark-mode #msg-input,
+body.chat-page #chat-search-input,
+body.chat-page.dark-mode #chat-search-input,
+body.chat-page #chat-search-filter,
+body.chat-page.dark-mode #chat-search-filter,
+body.chat-page #chat-search-date,
+body.chat-page.dark-mode #chat-search-date,
+body.chat-page #rename-input,
+body.chat-page.dark-mode #rename-input,
+body.chat-page #report-reason-input,
+body.chat-page.dark-mode #report-reason-input,
+body.chat-page #report-details-input,
+body.chat-page.dark-mode #report-details-input,
+body.chat-page #create-group-name,
+body.chat-page.dark-mode #create-group-name,
+body.chat-page #manage-group-name,
+body.chat-page.dark-mode #manage-group-name,
+body.chat-page #current-password-input,
+body.chat-page.dark-mode #current-password-input,
+body.chat-page #new-password-input,
+body.chat-page.dark-mode #new-password-input,
+body.chat-page #confirm-new-password-input,
+body.chat-page.dark-mode #confirm-new-password-input,
+body.chat-page #settings-pending-email-otp-input,
+body.chat-page.dark-mode #settings-pending-email-otp-input,
+body.chat-page #reset-password-input,
+body.chat-page.dark-mode #reset-password-input {
+  border-color: var(--minimal-line) !important;
+  background: rgba(255, 253, 248, 0.72) !important;
+  color: var(--minimal-ink) !important;
+  box-shadow: none !important;
+}
+
+body.chat-page .sidebar-search-input::placeholder,
+body.chat-page.dark-mode .sidebar-search-input::placeholder,
+body.chat-page #msg-input::placeholder,
+body.chat-page.dark-mode #msg-input::placeholder,
+body.chat-page #chat-search-input::placeholder,
+body.chat-page.dark-mode #chat-search-input::placeholder {
+  color: var(--minimal-soft) !important;
+}
+
+body.chat-page .sidebar-icon-btn,
+body.chat-page.dark-mode .sidebar-icon-btn,
+body.chat-page .topbar-icon-btn,
+body.chat-page.dark-mode .topbar-icon-btn,
+body.chat-page .chat-header-icon,
+body.chat-page.dark-mode .chat-header-icon,
+body.chat-page #chat-actions-btn,
+body.chat-page.dark-mode #chat-actions-btn,
+body.chat-page #request-reject-btn,
+body.chat-page.dark-mode #request-reject-btn {
+  background: rgba(255, 253, 248, 0.74) !important;
+  border-color: var(--minimal-line) !important;
+  color: var(--minimal-ink) !important;
+  box-shadow: none !important;
+}
+
+body.chat-page #request-action-btn,
+body.chat-page.dark-mode #request-action-btn,
+body.chat-page #send-message-btn,
+body.chat-page.dark-mode #send-message-btn,
+body.chat-page #voice-send-btn,
+body.chat-page.dark-mode #voice-send-btn,
+body.chat-page #shared-media-browser-photos-tab.bg-blue-50,
+body.chat-page.dark-mode #shared-media-browser-photos-tab.bg-blue-50 {
+  background: var(--minimal-accent) !important;
+  border-color: var(--minimal-accent) !important;
+  color: #f8f4ed !important;
+  box-shadow: none !important;
+}
+
+body.chat-page #shared-media-browser-videos-tab,
+body.chat-page.dark-mode #shared-media-browser-videos-tab,
+body.chat-page #shared-media-browser-photos-tab,
+body.chat-page.dark-mode #shared-media-browser-photos-tab {
+  border-color: var(--minimal-line) !important;
+  box-shadow: none !important;
+}
+
+body.chat-page .chat-filter-chip,
+body.chat-page.dark-mode .chat-filter-chip {
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--minimal-muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+body.chat-page .chat-filter-chip:hover,
+body.chat-page.dark-mode .chat-filter-chip:hover {
+  border-color: var(--minimal-line);
+  background: rgba(255, 253, 248, 0.66);
+  color: var(--minimal-ink);
+}
+
+body.chat-page .chat-filter-chip.is-active,
+body.chat-page.dark-mode .chat-filter-chip.is-active {
+  border-color: var(--minimal-accent) !important;
+  background: var(--minimal-accent) !important;
+  color: #f8f4ed !important;
+}
+
+body.chat-page #sidebar-pinned-section,
+body.chat-page.dark-mode #sidebar-pinned-section,
+body.chat-page #sidebar-starred-section,
+body.chat-page.dark-mode #sidebar-starred-section,
+body.chat-page #group-invites > div,
+body.chat-page.dark-mode #group-invites > div,
+body.chat-page .chat-list-empty,
+body.chat-page.dark-mode .chat-list-empty,
+body.chat-page .sidebar-quick-card,
+body.chat-page.dark-mode .sidebar-quick-card,
+body.chat-page .search-result-card,
+body.chat-page.dark-mode .search-result-card,
+body.chat-page .call-history-card,
+body.chat-page.dark-mode .call-history-card {
+  border-radius: 20px !important;
+  border-color: var(--minimal-line) !important;
+  background: rgba(255, 253, 248, 0.72) !important;
+  box-shadow: none !important;
+}
+
+body.chat-page #users-list,
+body.chat-page.dark-mode #users-list {
+  background: transparent !important;
+  padding: 0.5rem 0.75rem 1rem !important;
+}
+
+body.chat-page #users-list > li,
+body.chat-page.dark-mode #users-list > li {
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body.chat-page .chat-list-card-body,
+body.chat-page.dark-mode .chat-list-card-body {
+  padding: 0.95rem !important;
+  border: 1px solid transparent !important;
+  border-radius: 20px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body.chat-page #users-list > li:hover .chat-list-card-body,
+body.chat-page.dark-mode #users-list > li:hover .chat-list-card-body {
+  border-color: var(--minimal-line) !important;
+  background: rgba(255, 253, 248, 0.64) !important;
+}
+
+body.chat-page #users-list > li.border-blue-200 .chat-list-card-body,
+body.chat-page.dark-mode #users-list > li.border-blue-200 .chat-list-card-body {
+  border-color: var(--minimal-accent-line) !important;
+  background: rgba(255, 253, 248, 0.92) !important;
+  box-shadow: 0 12px 30px rgba(33, 25, 18, 0.05) !important;
+}
+
+body.chat-page #users-list > li .text-slate-900,
+body.chat-page.dark-mode #users-list > li .text-slate-900,
+body.chat-page #users-list > li .text-slate-700,
+body.chat-page.dark-mode #users-list > li .text-slate-700 {
+  color: var(--minimal-ink) !important;
+}
+
+body.chat-page #users-list > li .text-slate-500,
+body.chat-page.dark-mode #users-list > li .text-slate-500,
+body.chat-page #users-list > li .text-slate-400,
+body.chat-page.dark-mode #users-list > li .text-slate-400,
+body.chat-page #users-list > li .user-list-preview,
+body.chat-page.dark-mode #users-list > li .user-list-preview {
+  color: var(--minimal-muted) !important;
+}
+
+body.chat-page #users-list > li .bg-blue-600,
+body.chat-page.dark-mode #users-list > li .bg-blue-600 {
+  background: var(--minimal-accent) !important;
+}
+
+body.chat-page #users-list > li .bg-blue-50,
+body.chat-page.dark-mode #users-list > li .bg-blue-50 {
+  background: var(--minimal-accent-soft) !important;
+  color: var(--minimal-accent) !important;
+}
+
+body.chat-page #users-list.surface-refreshing::after,
+body.chat-page.dark-mode #users-list.surface-refreshing::after {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.72),
+    transparent
+  ) !important;
+}
+
+body.chat-page .mobile-chat-main,
+body.chat-page.dark-mode .mobile-chat-main {
+  background: linear-gradient(180deg, #faf7f1 0%, #f4efe7 100%) !important;
+}
+
+body.chat-page #message-container,
+body.chat-page.dark-mode #message-container,
+body.chat-page #empty-state,
+body.chat-page.dark-mode #empty-state {
+  background-color: #f7f2ea !important;
+  background-image:
+    linear-gradient(rgba(247, 242, 234, 0.92), rgba(247, 242, 234, 0.92)),
+    var(--chat-theme-background) !important;
+  background-size: cover, cover !important;
+  background-position: center, center !important;
+}
+
+body.chat-page .desktop-empty-state-shell,
+body.chat-page.dark-mode .desktop-empty-state-shell {
+  width: min(100%, 40rem);
+  align-items: flex-start;
+  text-align: left;
+  gap: 0;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body.chat-page .desktop-empty-state-mark,
+body.chat-page.dark-mode .desktop-empty-state-mark {
+  display: none !important;
+}
+
+body.chat-page .desktop-empty-state-shell h2,
+body.chat-page.dark-mode .desktop-empty-state-shell h2,
+body.chat-page .desktop-empty-action-label,
+body.chat-page.dark-mode .desktop-empty-action-label {
+  color: var(--minimal-ink) !important;
+}
+
+body.chat-page .desktop-empty-state-actions,
+body.chat-page.dark-mode .desktop-empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  width: 100%;
+}
+
+body.chat-page .desktop-empty-action,
+body.chat-page.dark-mode .desktop-empty-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 0.9rem 1.1rem;
+  border-radius: 999px;
+  border-color: var(--minimal-line) !important;
+  background: rgba(255, 253, 248, 0.78) !important;
+  box-shadow: none !important;
+}
+
+body.chat-page .desktop-empty-action:hover,
+body.chat-page.dark-mode .desktop-empty-action:hover {
+  border-color: var(--minimal-line-strong) !important;
+  background: rgba(255, 253, 248, 0.96) !important;
+}
+
+body.chat-page .desktop-empty-action-icon,
+body.chat-page.dark-mode .desktop-empty-action-icon,
+body.chat-page .desktop-empty-action-copy,
+body.chat-page.dark-mode .desktop-empty-action-copy {
+  display: none !important;
+}
+
+body.chat-page #message-loading-indicator,
+body.chat-page.dark-mode #message-loading-indicator {
+  border-color: var(--minimal-line) !important;
+  background: rgba(255, 253, 248, 0.88) !important;
+  color: var(--minimal-muted) !important;
+  box-shadow: none !important;
+}
+
+body.chat-page .message-loading-waves span,
+body.chat-page.dark-mode .message-loading-waves span {
+  background: var(--minimal-accent) !important;
+}
+
+body.chat-page .message-row .message-bubble-shell,
+body.chat-page.dark-mode .message-row .message-bubble-shell {
+  border-radius: 18px !important;
+  border: 1px solid var(--minimal-line) !important;
+  box-shadow: none !important;
+}
+
+body.chat-page .message-row-outgoing .message-bubble-shell,
+body.chat-page.dark-mode .message-row-outgoing .message-bubble-shell {
+  background: var(--minimal-accent-soft) !important;
+  border-color: var(--minimal-accent-line) !important;
+  color: var(--minimal-ink) !important;
+}
+
+body.chat-page .message-row-incoming .message-bubble-shell,
+body.chat-page.dark-mode .message-row-incoming .message-bubble-shell {
+  background: rgba(255, 253, 248, 0.94) !important;
+  color: var(--minimal-ink) !important;
+}
+
+body.chat-page .message-row-outgoing .message-bubble-shell .text-white,
+body.chat-page.dark-mode .message-row-outgoing .message-bubble-shell .text-white,
+body.chat-page .message-row-outgoing .message-bubble-shell .text-blue-100\/90,
+body.chat-page.dark-mode .message-row-outgoing .message-bubble-shell .text-blue-100\/90,
+body.chat-page .message-row-outgoing .message-bubble-shell .text-slate-900,
+body.chat-page.dark-mode .message-row-outgoing .message-bubble-shell .text-slate-900,
+body.chat-page .message-row-outgoing .message-bubble-shell .text-slate-800,
+body.chat-page.dark-mode .message-row-outgoing .message-bubble-shell .text-slate-800 {
+  color: var(--minimal-ink) !important;
+}
+
+body.chat-page .message-row .message-bubble-footer,
+body.chat-page.dark-mode .message-row .message-bubble-footer,
+body.chat-page .message-row .message-inline-meta,
+body.chat-page.dark-mode .message-row .message-inline-meta,
+body.chat-page .message-row .text-slate-500,
+body.chat-page.dark-mode .message-row .text-slate-500,
+body.chat-page .message-row .text-slate-400,
+body.chat-page.dark-mode .message-row .text-slate-400 {
+  color: var(--minimal-muted) !important;
+}
+
+body.chat-page .message-row .message-inline-check.is-read,
+body.chat-page.dark-mode .message-row .message-inline-check.is-read {
+  color: var(--minimal-accent) !important;
+}
+
+body.chat-page .message-row .message-reply-snippet,
+body.chat-page.dark-mode .message-row .message-reply-snippet {
+  border-left: 2px solid var(--minimal-accent) !important;
+  border-radius: 12px !important;
+  background: rgba(255, 255, 255, 0.48) !important;
+}
+
+body.chat-page .message-row .message-bubble-shell audio,
+body.chat-page.dark-mode .message-row .message-bubble-shell audio,
+body.chat-page .message-row .message-bubble-shell img,
+body.chat-page.dark-mode .message-row .message-bubble-shell img,
+body.chat-page .message-row .message-bubble-shell video,
+body.chat-page.dark-mode .message-row .message-bubble-shell video {
+  box-shadow: none !important;
+}
+
+body.chat-page .message-reaction-chip,
+body.chat-page.dark-mode .message-reaction-chip {
+  border-color: var(--minimal-line) !important;
+  background: rgba(255, 253, 248, 0.92) !important;
+  color: var(--minimal-ink) !important;
+  box-shadow: none !important;
+}
+
+body.chat-page .message-reaction-chip.is-own-reaction,
+body.chat-page.dark-mode .message-reaction-chip.is-own-reaction {
+  border-color: var(--minimal-accent-line) !important;
+  background: var(--minimal-accent-soft) !important;
+  color: var(--minimal-accent) !important;
+}
+
+body.chat-page #message-actions-menu,
+body.chat-page.dark-mode #message-actions-menu,
+body.chat-page #composer-actions-menu,
+body.chat-page.dark-mode #composer-actions-menu {
+  border-radius: 22px !important;
+  border-color: var(--minimal-line) !important;
+  background: rgba(255, 253, 248, 0.97) !important;
+  box-shadow: var(--minimal-shadow) !important;
+}
+
+body.chat-page .message-actions-reaction-row,
+body.chat-page.dark-mode .message-actions-reaction-row {
+  background: rgba(250, 247, 241, 0.88) !important;
+}
+
+body.chat-page .message-actions-reaction-row .message-reaction-option,
+body.chat-page.dark-mode .message-actions-reaction-row .message-reaction-option,
+body.chat-page .message-action-row,
+body.chat-page.dark-mode .message-action-row {
+  color: var(--minimal-ink) !important;
+}
+
+body.chat-page .message-action-row:hover,
+body.chat-page.dark-mode .message-action-row:hover,
+body.chat-page #composer-actions-menu > label:hover,
+body.chat-page.dark-mode #composer-actions-menu > label:hover,
+body.chat-page #composer-actions-menu > button:hover,
+body.chat-page.dark-mode #composer-actions-menu > button:hover {
+  background: rgba(244, 239, 231, 0.88) !important;
+}
+
+body.chat-page .message-action-row-copy,
+body.chat-page.dark-mode .message-action-row-copy,
+body.chat-page #composer-time-capsule-status,
+body.chat-page.dark-mode #composer-time-capsule-status,
+body.chat-page #composer-spoiler-status,
+body.chat-page.dark-mode #composer-spoiler-status {
+  color: var(--minimal-muted) !important;
+}
+
+body.chat-page .message-actions-divider,
+body.chat-page.dark-mode .message-actions-divider {
+  background: var(--minimal-line) !important;
+}
+
+body.chat-page #reply-preview,
+body.chat-page.dark-mode #reply-preview,
+body.chat-page #special-message-preview,
+body.chat-page.dark-mode #special-message-preview,
+body.chat-page #attachment-preview,
+body.chat-page.dark-mode #attachment-preview,
+body.chat-page #voice-preview,
+body.chat-page.dark-mode #voice-preview,
+body.chat-page #chat-dropzone-hint,
+body.chat-page.dark-mode #chat-dropzone-hint,
+body.chat-page #voice-status,
+body.chat-page.dark-mode #voice-status {
+  border-radius: 22px !important;
+  border-color: var(--minimal-line) !important;
+  background: rgba(255, 253, 248, 0.74) !important;
+  color: var(--minimal-ink) !important;
+  box-shadow: none !important;
+}
+
+body.chat-page #special-message-preview,
+body.chat-page.dark-mode #special-message-preview {
+  border-color: rgba(125, 99, 35, 0.22) !important;
+  background: rgba(252, 248, 235, 0.88) !important;
+}
+
+body.chat-page #voice-status,
+body.chat-page.dark-mode #voice-status {
+  color: var(--minimal-danger) !important;
+}
+
+body.chat-page #chat-dropzone-hint,
+body.chat-page.dark-mode #chat-dropzone-hint {
+  color: var(--minimal-accent) !important;
+}
+
+body.chat-page.chat-dropzone-active
+  .mobile-chat-composer
+  > div
+  > .rounded-\[24px\].border.border-slate-200.bg-white.p-1\.5.shadow-sm,
+body.chat-page.dark-mode.chat-dropzone-active
+  .mobile-chat-composer
+  > div
+  > .rounded-\[24px\].border.border-slate-200.bg-white.p-1\.5.shadow-sm {
+  border-color: var(--minimal-accent-line) !important;
+  box-shadow: none !important;
+}
+
+body.chat-page #input-area > div > .rounded-\[24px\].border.border-slate-200.bg-white.p-1\.5.shadow-sm,
+body.chat-page.dark-mode #input-area > div > .rounded-\[24px\].border.border-slate-200.bg-white.p-1\.5.shadow-sm {
+  border-radius: 24px !important;
+  border-color: var(--minimal-line) !important;
+  background: rgba(255, 253, 248, 0.82) !important;
+  box-shadow: none !important;
+}
+
+body.chat-page #composer-actions-btn,
+body.chat-page.dark-mode #composer-actions-btn {
+  background: transparent !important;
+  border-color: var(--minimal-line) !important;
+  color: var(--minimal-ink) !important;
+  box-shadow: none !important;
+}
+
+body.chat-page #msg-input,
+body.chat-page.dark-mode #msg-input {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body.chat-page #send-message-btn,
+body.chat-page.dark-mode #send-message-btn {
+  min-height: 3rem;
+  border-radius: 999px !important;
+}
+
+body.chat-page #chat-access-note,
+body.chat-page.dark-mode #chat-access-note,
+body.chat-page #chat-send-status,
+body.chat-page.dark-mode #chat-send-status {
+  color: var(--minimal-muted) !important;
+}
+
+body.chat-page #chat-contact-panel .chat-contact-panel-shell,
+body.chat-page.dark-mode #chat-contact-panel .chat-contact-panel-shell,
+body.chat-page #profile-modal > div,
+body.chat-page.dark-mode #profile-modal > div,
+body.chat-page #rename-modal > div,
+body.chat-page.dark-mode #rename-modal > div,
+body.chat-page #report-modal > div,
+body.chat-page.dark-mode #report-modal > div,
+body.chat-page #create-group-modal > div,
+body.chat-page.dark-mode #create-group-modal > div,
+body.chat-page #manage-group-modal > div,
+body.chat-page.dark-mode #manage-group-modal > div,
+body.chat-page #reset-password-modal > div,
+body.chat-page.dark-mode #reset-password-modal > div,
+body.chat-page #incoming-call-modal > div,
+body.chat-page.dark-mode #incoming-call-modal > div,
+body.chat-page #shared-media-browser-modal > div,
+body.chat-page.dark-mode #shared-media-browser-modal > div {
+  border-radius: 30px !important;
+  border-color: var(--minimal-line) !important;
+  background: rgba(255, 253, 248, 0.97) !important;
+  box-shadow: var(--minimal-shadow) !important;
+}
+
+body.chat-page #active-call-panel,
+body.chat-page.dark-mode #active-call-panel {
+  border-color: var(--minimal-line) !important;
+  background: rgba(36, 66, 54, 0.96) !important;
+  box-shadow: var(--minimal-shadow) !important;
+}
+
+body.chat-page #chat-contact-panel section,
+body.chat-page.dark-mode #chat-contact-panel section,
+body.chat-page #profile-modal section,
+body.chat-page.dark-mode #profile-modal section,
+body.chat-page #shared-media-browser-empty,
+body.chat-page.dark-mode #shared-media-browser-empty,
+body.chat-page #settings-blocked-users,
+body.chat-page.dark-mode #settings-blocked-users,
+body.chat-page #settings-verification-status,
+body.chat-page.dark-mode #settings-verification-status,
+body.chat-page #settings-pending-email-otp-wrap,
+body.chat-page.dark-mode #settings-pending-email-otp-wrap,
+body.chat-page #settings-account-deletion-panel,
+body.chat-page.dark-mode #settings-account-deletion-panel {
+  border-color: var(--minimal-line) !important;
+  background: rgba(250, 247, 241, 0.72) !important;
+  box-shadow: none !important;
+}
+
+body.chat-page .contact-panel-action,
+body.chat-page.dark-mode .contact-panel-action {
+  border-radius: 20px !important;
+  border-color: var(--minimal-line) !important;
+  background: rgba(255, 253, 248, 0.82) !important;
+  box-shadow: none !important;
+}
+
+body.chat-page #contact-block-btn,
+body.chat-page.dark-mode #contact-block-btn {
+  border-color: rgba(143, 74, 60, 0.18) !important;
+  background: rgba(249, 236, 232, 0.88) !important;
+}
+
+body.chat-page #contact-report-btn,
+body.chat-page.dark-mode #contact-report-btn,
+body.chat-page #contact-clear-chat-btn,
+body.chat-page.dark-mode #contact-clear-chat-btn {
+  border-color: rgba(125, 99, 35, 0.18) !important;
+  background: rgba(252, 248, 235, 0.88) !important;
+}
+
+body.chat-page #manage-group-members > div,
+body.chat-page.dark-mode #manage-group-members > div,
+body.chat-page #manage-group-candidates > div,
+body.chat-page.dark-mode #manage-group-candidates > div,
+body.chat-page #chat-contact-panel-media-groups > div,
+body.chat-page.dark-mode #chat-contact-panel-media-groups > div,
+body.chat-page #chat-contact-panel-starred-list > div,
+body.chat-page.dark-mode #chat-contact-panel-starred-list > div,
+body.chat-page #chat-contact-panel-calls-list > div,
+body.chat-page.dark-mode #chat-contact-panel-calls-list > div {
+  border-radius: 18px;
+  border: 1px solid var(--minimal-line);
+  background: rgba(255, 253, 248, 0.76);
+}
+
+body.chat-page #image-preview-modal,
+body.chat-page.dark-mode #image-preview-modal {
+  background: rgba(31, 24, 17, 0.72) !important;
+}
+
+@media (min-width: 1024px) {
+  body.chat-page #app-shell,
+  body.chat-page.dark-mode #app-shell {
+    margin: 16px auto !important;
+    height: calc(100vh - 32px) !important;
+    border-radius: 32px !important;
+  }
+
+  body.chat-page #sidebar,
+  body.chat-page.dark-mode #sidebar {
+    width: 22rem !important;
+    max-width: 22rem !important;
+  }
+
+  body.chat-page #message-container,
+  body.chat-page.dark-mode #message-container {
+    padding-inline: 1.25rem !important;
+    padding-block: 1rem !important;
+  }
+
+  body.chat-page .message-row .message-bubble-text,
+  body.chat-page.dark-mode .message-row .message-bubble-text,
+  body.chat-page .message-row .message-bubble-status,
+  body.chat-page.dark-mode .message-row .message-bubble-status {
+    max-width: min(100%, 34rem) !important;
+  }
+}
+
+@media (max-width: 1023px) {
+  body.chat-page #app-shell,
+  body.chat-page.dark-mode #app-shell {
+    border-radius: 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+  }
+
+  body.chat-page #sidebar,
+  body.chat-page.dark-mode #sidebar {
+    width: min(90vw, 22rem) !important;
+    max-width: min(90vw, 22rem) !important;
+  }
+
+  body.chat-page #empty-state,
+  body.chat-page.dark-mode #empty-state {
+    align-items: flex-start !important;
+    text-align: left !important;
+  }
+
+  body.chat-page .desktop-empty-state-actions,
+  body.chat-page.dark-mode .desktop-empty-state-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  body.chat-page .desktop-empty-action,
+  body.chat-page.dark-mode .desktop-empty-action {
+    width: 100%;
+    justify-content: center;
+  }
+}
