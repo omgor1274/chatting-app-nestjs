@@ -4008,10 +4008,14 @@ body.chat-page.dark-mode .message-row-outgoing .message-bubble-shell {
   color: var(--minimal-ink) !important;
 }
 
-body.chat-page .message-row-incoming .message-bubble-shell,
-body.chat-page.dark-mode .message-row-incoming .message-bubble-shell {
+body.chat-page .message-row-incoming .message-bubble-shell {
   background: rgba(255, 253, 248, 0.94) !important;
   color: var(--minimal-ink) !important;
+}
+
+body.chat-page.dark-mode .message-row-incoming .message-bubble-shell {
+  background: rgba(45, 41, 38, 0.85) !important;
+  color: #f5f3f0 !important;
 }
 
 body.chat-page .message-row-outgoing .message-bubble-shell .text-white,
@@ -4025,6 +4029,15 @@ body.chat-page.dark-mode .message-row-outgoing .message-bubble-shell .text-slate
   color: var(--minimal-ink) !important;
 }
 
+body.chat-page.dark-mode .message-row-incoming .message-bubble-shell .text-white,
+body.chat-page.dark-mode .message-row-incoming .message-bubble-shell .text-blue-100\/90,
+body.chat-page.dark-mode .message-row-incoming .message-bubble-shell .text-slate-900,
+body.chat-page.dark-mode .message-row-incoming .message-bubble-shell .text-slate-800,
+body.chat-page.dark-mode .message-row-incoming .message-bubble-shell .text-slate-700,
+body.chat-page.dark-mode .message-row-incoming .message-bubble-shell .text-slate-600 {
+  color: #f5f3f0 !important;
+}
+
 body.chat-page .message-row .message-bubble-footer,
 body.chat-page.dark-mode .message-row .message-bubble-footer,
 body.chat-page .message-row .message-inline-meta,
@@ -4034,6 +4047,13 @@ body.chat-page.dark-mode .message-row .text-slate-500,
 body.chat-page .message-row .text-slate-400,
 body.chat-page.dark-mode .message-row .text-slate-400 {
   color: var(--minimal-muted) !important;
+}
+
+body.chat-page.dark-mode .message-row-incoming .message-bubble-footer,
+body.chat-page.dark-mode .message-row-incoming .message-inline-meta,
+body.chat-page.dark-mode .message-row-incoming .text-slate-500,
+body.chat-page.dark-mode .message-row-incoming .text-slate-400 {
+  color: rgba(245, 243, 240, 0.65) !important;
 }
 
 body.chat-page .message-row .message-inline-check.is-read,
@@ -4054,6 +4074,10 @@ body.chat-page.dark-mode .message-row .message-reply-snippet {
   background: rgba(255, 255, 255, 0.48) !important;
 }
 
+body.chat-page.dark-mode .message-row-incoming .message-reply-snippet {
+  background: rgba(70, 65, 60, 0.6) !important;
+}
+
 body.chat-page .message-row .message-bubble-shell audio,
 body.chat-page.dark-mode .message-row .message-bubble-shell audio,
 body.chat-page .message-row .message-bubble-shell img,
@@ -4071,11 +4095,32 @@ body.chat-page.dark-mode .message-reaction-chip {
   box-shadow: none !important;
 }
 
+body.chat-page.dark-mode .message-reaction-chip {
+  background: rgba(50, 45, 40, 0.75) !important;
+  border-color: rgba(120, 110, 100, 0.5) !important;
+  color: #e5e2df !important;
+}
+
 body.chat-page .message-reaction-chip.is-own-reaction,
 body.chat-page.dark-mode .message-reaction-chip.is-own-reaction {
   border-color: var(--minimal-accent-line) !important;
   background: var(--minimal-accent-soft) !important;
   color: var(--minimal-accent) !important;
+}
+
+body.chat-page.dark-mode .message-reaction-chip.is-own-reaction {
+  background: rgba(45, 88, 70, 0.55) !important;
+  color: #a8d5ba !important;
+}
+
+body.chat-page.dark-mode .message-row-incoming a,
+body.chat-page.dark-mode .message-row-incoming .message-bubble-shell a {
+  color: #86d4f0 !important;
+}
+
+body.chat-page.dark-mode .message-row-outgoing a,
+body.chat-page.dark-mode .message-row-outgoing .message-bubble-shell a {
+  color: #5a9f7f !important;
 }
 
 body.chat-page #message-actions-menu,
