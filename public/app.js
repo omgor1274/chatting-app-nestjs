@@ -4086,7 +4086,7 @@ function renderAttachmentQueueActionButtons(task) {
 
 function syncChatSendStatus() {
   const sendStatus = document.getElementById('chat-send-status');
-  if (!sendStatus || composerSendInFlight) {
+  if (!sendStatus) {
     return;
   }
 
