@@ -3487,16 +3487,16 @@ body.chat-page
 /* 2026-04 minimal reset */
 :root {
   --minimal-ink: #171411;
-  --minimal-muted: #6f675f;
-  --minimal-soft: #9a8f84;
+  --minimal-muted: #665d54;
+  --minimal-soft: #8d8175;
   --minimal-line: rgba(23, 20, 17, 0.09);
   --minimal-line-strong: rgba(23, 20, 17, 0.16);
   --minimal-paper: #fffdf8;
   --minimal-paper-soft: rgba(255, 253, 248, 0.78);
-  --minimal-wash: #f3eee6;
-  --minimal-accent: #244236;
-  --minimal-accent-soft: #dfe9e1;
-  --minimal-accent-line: #bfd0c3;
+  --minimal-wash: #efe8de;
+  --minimal-accent: #2d5846;
+  --minimal-accent-soft: #d7e4dc;
+  --minimal-accent-line: #aec6b9;
   --minimal-danger: #8f4a3c;
   --minimal-warning: #7d6323;
   --minimal-shadow: 0 22px 70px rgba(41, 31, 20, 0.08);
@@ -4039,6 +4039,12 @@ body.chat-page.dark-mode .message-row .text-slate-400 {
 body.chat-page .message-row .message-inline-check.is-read,
 body.chat-page.dark-mode .message-row .message-inline-check.is-read {
   color: var(--minimal-accent) !important;
+}
+
+body.chat-page .message-row .message-inline-check.is-pending,
+body.chat-page.dark-mode .message-row .message-inline-check.is-pending {
+  color: var(--minimal-accent) !important;
+  opacity: 0.62;
 }
 
 body.chat-page .message-row .message-reply-snippet,

@@ -54,6 +54,9 @@ let loadUsersPromise = null;
 let reloadUsersAfterCurrentLoad = false;
 let renderedUserSignatures = new Map();
 let composerSendInFlight = false;
+let queuedOutgoingTextMessages = [];
+let activeOutgoingTextMessage = null;
+let outgoingTextQueueProcessing = false;
 let pendingOptimisticMessageIdsByRoom = new Map();
 let lastSubmittedDraftFingerprint = '';
 let lastSubmittedDraftAt = 0;
@@ -2553,7 +2556,9 @@ function showSelectedMessageInfo() {
     messageActionTarget.messageType || 'TEXT',
   ).toLowerCase();
   const deliveryLabel = messageActionTarget.isPending
-    ? 'Sending'
+    ? messageActionTarget.pendingState === 'queued-offline'
+      ? 'Queued offline'
+      : 'Queued to send'
     : messageWasRead(messageActionTarget)
       ? 'Read'
       : 'Sent';
@@ -3111,16 +3116,92 @@ function queueOptimisticMessage(message, user = selectedUser) {
   pendingOptimisticMessageIdsByRoom.set(roomId, queue);
 }
 
+function removePendingOptimisticMessageId(roomId, messageId) {
+  if (!roomId || !messageId) {
+    return;
+  }
+
+  const queue = pendingOptimisticMessageIdsByRoom.get(roomId);
+  if (!queue?.length) {
+    return;
+  }
+
+  const nextQueue = queue.filter((id) => id !== messageId);
+  if (nextQueue.length) {
+    pendingOptimisticMessageIdsByRoom.set(roomId, nextQueue);
+    return;
+  }
+
+  pendingOptimisticMessageIdsByRoom.delete(roomId);
+}
+
 function removeOptimisticMessage(messageId) {
   if (!messageId) {
     return;
   }
 
+  removeCachedMessageEverywhere(messageId);
   renderedMessageIds.delete(messageId);
   conversationMessages.delete(messageId);
   revealedSpoilerMessageIds.delete(messageId);
   document.getElementById(`message-${messageId}`)?.remove();
   scheduleStructuredMessageRefresh();
+}
+
+function getKnownMessageById(messageId) {
+  if (!messageId) {
+    return null;
+  }
+
+  if (conversationMessages.has(messageId)) {
+    return conversationMessages.get(messageId) || null;
+  }
+
+  for (const state of conversationHistoryCache.values()) {
+    const message = state.conversationMessages.get(messageId);
+    if (message) {
+      return message;
+    }
+  }
+
+  return null;
+}
+
+function updateOptimisticMessage(messageId, patch = {}) {
+  const currentMessage = getKnownMessageById(messageId);
+  if (!currentMessage) {
+    return null;
+  }
+
+  const nextMessage = createRenderableMessage({
+    ...currentMessage,
+    ...patch,
+  });
+
+  if (conversationMessages.has(messageId)) {
+    conversationMessages.set(messageId, nextMessage);
+  }
+
+  updateCachedMessageEverywhere(nextMessage);
+
+  if (belongsToSelectedConversation(nextMessage)) {
+    replaceRenderedMessage(nextMessage, {
+      animate: false,
+      stickToBottom: false,
+    });
+  }
+
+  return nextMessage;
+}
+
+function setOptimisticMessagePendingState(
+  messageId,
+  pendingState = 'sending',
+) {
+  return updateOptimisticMessage(messageId, {
+    isPending: true,
+    pendingState,
+  });
 }
 
 function resolveOptimisticMessage(message, isOwnMessage) {
@@ -3134,7 +3215,13 @@ function resolveOptimisticMessage(message, isOwnMessage) {
     return;
   }
 
-  const pendingId = queue.shift();
+  const exactIndex = queue.indexOf(message.id);
+  const pendingId =
+    exactIndex >= 0 ? queue.splice(exactIndex, 1)[0] : queue.shift();
+  if (!pendingId) {
+    return;
+  }
+
   if (!queue.length) {
     pendingOptimisticMessageIdsByRoom.delete(roomId);
   } else {
@@ -3242,6 +3329,7 @@ function createOptimisticTextMessage(
   text,
   user = selectedUser,
   structuredOptions = {},
+  pendingState = 'queued',
 ) {
   const now = new Date().toISOString();
   const structuredText = encodeMessageForSend(text, structuredOptions);
@@ -3255,6 +3343,7 @@ function createOptimisticTextMessage(
     content: structuredText,
     displayText: structuredText,
     isPending: true,
+    pendingState,
     isEncrypted: false,
     recipientCount: isGroupConversation(user)
       ? Math.max((user.members || []).length - 1, 1)
@@ -3307,6 +3396,7 @@ function shouldSkipDuplicateDraft(fingerprint) {
 
   return (
     fingerprint === lastSubmittedDraftFingerprint &&
+    composerDraftVersion === lastSubmittedDraftVersion &&
     Date.now() - lastSubmittedDraftAt < 1800
   );
 }
@@ -4001,11 +4091,22 @@ function syncChatSendStatus() {
   }
 
   const { active, pending, failed } = getAttachmentQueueCounts();
+  const queuedMessageCount =
+    queuedOutgoingTextMessages.length + (activeOutgoingTextMessage ? 1 : 0);
   if (offlineQueuedMessages.length > 0) {
     sendStatus.textContent =
       offlineQueuedMessages.length === 1
         ? '1 message is queued offline.'
         : `${offlineQueuedMessages.length} messages are queued offline.`;
+    sendStatus.classList.remove('hidden');
+    return;
+  }
+
+  if (queuedMessageCount > 0) {
+    sendStatus.textContent =
+      queuedMessageCount === 1
+        ? '1 message is moving through the send queue.'
+        : `${queuedMessageCount} messages are moving through the send queue.`;
     sendStatus.classList.remove('hidden');
     return;
   }
@@ -10665,17 +10766,37 @@ function bumpConversationForRequest(userId, preview, incrementUnread = false) {
 }
 
 function queueOfflineTextMessage(user, text, structuredOptions = {}) {
-  const trimmed = String(text || '').trim();
-  if (!user || !trimmed) {
+  const queueOptions =
+    structuredOptions && typeof structuredOptions === 'object'
+      ? structuredOptions.__queueOptions || null
+      : null;
+  const rawText = String(text || '');
+  const trimmed = rawText.trim();
+  const encodedMode = Boolean(queueOptions?.encoded);
+  if (!user || !(encodedMode ? rawText : trimmed)) {
     return false;
   }
 
+  if (
+    queueOptions?.realtimeId &&
+    offlineQueuedMessages.some(
+      (item) => item.realtimeId && item.realtimeId === queueOptions.realtimeId,
+    )
+  ) {
+    syncChatSendStatus();
+    return true;
+  }
+
+  const encodedText = encodedMode
+    ? rawText
+    : encodeMessageForSend(trimmed, structuredOptions);
   offlineQueuedMessages.push({
     id: `offline-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    realtimeId: queueOptions?.realtimeId || '',
     conversationId: user.id,
     chatType: isGroupConversation(user) ? 'group' : 'direct',
-    text: encodeMessageForSend(trimmed, structuredOptions),
-    createdAt: new Date().toISOString(),
+    text: encodedText,
+    createdAt: queueOptions?.createdAt || new Date().toISOString(),
   });
   persistOfflineQueuedMessages();
   const sendStatus = getById('chat-send-status');
@@ -10703,11 +10824,16 @@ async function flushOfflineQueuedMessages() {
         continue;
       }
 
+      if (item.realtimeId) {
+        setOptimisticMessagePendingState(item.realtimeId, 'sending');
+      }
+
       const encryptedPayload = await encryptTextForConversation(
         item.text,
         targetUser,
       );
       await emitSocketEvent('sendMessage', {
+        ...(item.realtimeId ? { realtimeId: item.realtimeId } : {}),
         ...encryptedPayload,
         ...(item.chatType === 'group'
           ? { groupId: item.conversationId }
@@ -10724,10 +10850,136 @@ async function flushOfflineQueuedMessages() {
   syncChatSendStatus();
 }
 
+function isRecoverableOutgoingMessageQueueError(error) {
+  if (!error) {
+    return false;
+  }
+
+  if (!navigator.onLine || !socket?.connected) {
+    return true;
+  }
+
+  const message = String(error?.message || '').toLowerCase();
+  return (
+    message.includes('realtime connection') ||
+    message.includes('timed out') ||
+    message.includes('network')
+  );
+}
+
+function enqueueOutgoingTextMessage(task) {
+  if (!task?.optimisticMessageId || !task?.structuredText) {
+    return;
+  }
+
+  queuedOutgoingTextMessages.push(task);
+  syncChatSendStatus();
+  void processOutgoingTextMessageQueue().catch((error) => {
+    console.error('Failed to process outgoing text message queue', error);
+  });
+}
+
+async function processOutgoingTextMessageQueue() {
+  if (outgoingTextQueueProcessing) {
+    return;
+  }
+
+  outgoingTextQueueProcessing = true;
+  try {
+    while (queuedOutgoingTextMessages.length) {
+      activeOutgoingTextMessage = queuedOutgoingTextMessages.shift() || null;
+      if (!activeOutgoingTextMessage) {
+        continue;
+      }
+
+      syncChatSendStatus();
+      setOptimisticMessagePendingState(
+        activeOutgoingTextMessage.optimisticMessageId,
+        'sending',
+      );
+
+      try {
+        const conversationTarget =
+          users.find((user) => user.id === activeOutgoingTextMessage.userId) ||
+          activeOutgoingTextMessage.conversationTarget;
+        const canChat = await ensureChatPermissionReady(conversationTarget);
+        if (!canChat) {
+          throw new Error('Accept a chat request before sending messages.');
+        }
+
+        if (!navigator.onLine || !socket?.connected) {
+          throw new Error('Realtime connection is not available.');
+        }
+
+        const encryptedPayload = await encryptTextForConversation(
+          activeOutgoingTextMessage.structuredText,
+          conversationTarget,
+        );
+
+        if (!navigator.onLine || !socket?.connected) {
+          throw new Error('Realtime connection is not available.');
+        }
+
+        await emitSocketEvent('sendMessage', {
+          realtimeId: activeOutgoingTextMessage.optimisticMessageId,
+          ...encryptedPayload,
+          ...(activeOutgoingTextMessage.chatType === 'group'
+            ? { groupId: activeOutgoingTextMessage.userId }
+            : { toUserId: activeOutgoingTextMessage.userId }),
+        });
+      } catch (error) {
+        if (isRecoverableOutgoingMessageQueueError(error)) {
+          queueOfflineTextMessage(
+            activeOutgoingTextMessage.conversationTarget,
+            activeOutgoingTextMessage.structuredText,
+            {
+              __queueOptions: {
+                encoded: true,
+                realtimeId: activeOutgoingTextMessage.optimisticMessageId,
+                createdAt: activeOutgoingTextMessage.createdAt,
+              },
+            },
+          );
+          setOptimisticMessagePendingState(
+            activeOutgoingTextMessage.optimisticMessageId,
+            'queued-offline',
+          );
+        } else {
+          clearDraftSubmissionGuard(activeOutgoingTextMessage.draftFingerprint);
+          lastSubmittedDraftVersion = -1;
+          removeOptimisticMessage(activeOutgoingTextMessage.optimisticMessageId);
+          removePendingOptimisticMessageId(
+            activeOutgoingTextMessage.roomId,
+            activeOutgoingTextMessage.optimisticMessageId,
+          );
+          if (
+            activeOutgoingTextMessage.rawText &&
+            selectedConversationRoomId() === activeOutgoingTextMessage.roomId &&
+            !getById('msg-input')?.value.trim()
+          ) {
+            getById('msg-input').value = activeOutgoingTextMessage.rawText;
+            saveConversationDraft(
+              activeOutgoingTextMessage.conversationTarget,
+              activeOutgoingTextMessage.rawText,
+            );
+          }
+          alert(error?.message || 'Failed to send message');
+        }
+      } finally {
+        activeOutgoingTextMessage = null;
+        syncChatSendStatus();
+      }
+    }
+  } finally {
+    outgoingTextQueueProcessing = false;
+    syncChatSendStatus();
+  }
+}
+
 async function sendMessage() {
   const input = document.getElementById('msg-input');
   const text = input.value.trim();
-  if (!selectedUser || !socket || composerSendInFlight) return;
+  if (!selectedUser || composerSendInFlight) return;
 
   const conversationTarget = selectedUser;
   const selectedConversationKey = getConversationCacheKey(conversationTarget)
@@ -10783,42 +11035,15 @@ async function sendMessage() {
         text,
         conversationTarget,
         structuredSendOptions,
+        !navigator.onLine || !socket?.connected ? 'queued-offline' : 'queued',
       )
     : null;
+  let textHandedOff = false;
 
   try {
-    setComposerSendingState(
-      true,
-      pendingAttachmentCount && !text && !voiceFile
-        ? 'Starting uploads'
-        : voiceFile
-          ? text
-            ? 'Sending'
-            : 'Uploading'
-          : 'Sending',
-    );
     if (shouldTrackDraftSubmission) {
       markDraftSubmitted(draftFingerprint);
       lastSubmittedDraftVersion = composerDraftVersion;
-    }
-    const canChat = await ensureChatPermissionReady(conversationTarget);
-    if (!canChat) {
-      alert('Accept a chat request before sending messages.');
-      return;
-    }
-
-    if (!navigator.onLine || !socket?.connected) {
-      if (
-        text &&
-        queueOfflineTextMessage(conversationTarget, text, structuredSendOptions)
-      ) {
-        input.value = '';
-        clearConversationDraft(conversationTarget);
-        clearReplyTarget();
-        resetSpecialMessageDraft();
-        return;
-      }
-      throw new Error('Realtime connection is not available.');
     }
 
     if (optimisticMessage) {
@@ -10834,17 +11059,29 @@ async function sendMessage() {
     }
 
     if (text) {
-      const encryptedPayload = await encryptTextForConversation(
-        structuredText,
-        conversationTarget,
-      );
-      await emitSocketEvent('sendMessage', {
-        realtimeId: optimisticMessage?.id,
-        ...encryptedPayload,
-        ...(isGroupConversation(conversationTarget)
-          ? { groupId: conversationTarget.id }
-          : { toUserId: conversationTarget.id }),
-      });
+      if (!navigator.onLine || !socket?.connected) {
+        queueOfflineTextMessage(conversationTarget, structuredText, {
+          __queueOptions: {
+            encoded: true,
+            realtimeId: optimisticMessage?.id,
+            createdAt: optimisticMessage?.createdAt,
+          },
+        });
+        textHandedOff = true;
+      } else {
+        enqueueOutgoingTextMessage({
+          optimisticMessageId: optimisticMessage?.id,
+          roomId: selectedConversationRoomId(conversationTarget),
+          userId: conversationTarget.id,
+          chatType: isGroupConversation(conversationTarget) ? 'group' : 'direct',
+          rawText: text,
+          structuredText,
+          createdAt: optimisticMessage?.createdAt || new Date().toISOString(),
+          draftFingerprint,
+          conversationTarget,
+        });
+        textHandedOff = true;
+      }
     }
 
     clearOutgoingTypingState();
@@ -10857,12 +11094,17 @@ async function sendMessage() {
     }
 
     if (voiceFile) {
-      const uploadedVoiceMessage = await uploadAttachment(
-        voiceFile,
-        conversationTarget,
-      );
-      await handleIncomingMessage(uploadedVoiceMessage, true);
-      clearRecordedAudio();
+      setComposerSendingState(true, 'Uploading');
+      try {
+        const uploadedVoiceMessage = await uploadAttachment(
+          voiceFile,
+          conversationTarget,
+        );
+        await handleIncomingMessage(uploadedVoiceMessage, true);
+        clearRecordedAudio();
+      } finally {
+        setComposerSendingState(false);
+      }
     }
     if (text) {
       clearReplyTarget();
@@ -10873,21 +11115,15 @@ async function sendMessage() {
       clearDraftSubmissionGuard(draftFingerprint);
       lastSubmittedDraftVersion = -1;
     }
-    if (optimisticMessage) {
+    if (optimisticMessage && !textHandedOff) {
       removeOptimisticMessage(optimisticMessage.id);
       const roomId = optimisticMessage.groupId || optimisticMessage.receiverId;
-      const queue = pendingOptimisticMessageIdsByRoom.get(roomId) || [];
-      pendingOptimisticMessageIdsByRoom.set(
-        roomId,
-        queue.filter((id) => id !== optimisticMessage.id),
-      );
+      removePendingOptimisticMessageId(roomId, optimisticMessage.id);
       if (!input.value.trim()) {
         input.value = text;
       }
     }
     alert(error.message || 'Failed to send message');
-  } finally {
-    setComposerSendingState(false);
   }
 }
 
@@ -12841,8 +13077,10 @@ function createMessageElement(message, options = {}) {
         message.isPending ? 'bg-blue-500/85' : 'bg-blue-600'
       }`
     : 'rounded-[14px] rounded-bl-[4px] border border-slate-200/90 bg-white/95 text-slate-800 shadow-sm';
-  const eye = isSent
-    ? `<span class="inline-flex items-center gap-1 ${messageWasRead(message) ? 'text-emerald-200' : 'opacity-70'}">${messageWasRead(message) ? '&#128065;' : ''}</span>`
+  const deliveryIndicator = isSent
+    ? message.isPending
+      ? `<span class="message-inline-check is-pending">${message.pendingState === 'queued-offline' ? '&#9716;' : '&#10003;'}</span>`
+      : `<span class="message-inline-check ${messageWasRead(message) ? 'is-read' : ''}">&#10003;&#10003;</span>`
     : '';
   const useInlineTextMeta =
     !hasReactionChip &&
@@ -12854,19 +13092,14 @@ function createMessageElement(message, options = {}) {
   const footer = `
           <div class="message-bubble-footer mt-2 flex items-center justify-end gap-1.5 text-[10px] ${metaTone}">
             ${starredBadge}
-            ${message.isPending ? '<span class="font-semibold uppercase tracking-wide">Sending</span>' : ''}
-            ${eye}
+            ${deliveryIndicator}
             <span>${escapeHtml(formatMessageTime(message.createdAt))}</span>
           </div>
         `;
   const inlineMeta = `
           <span class="message-inline-meta ${metaTone}">
             <span>${escapeHtml(formatMessageTime(message.createdAt))}</span>
-            ${
-              isSent
-                ? `<span class="message-inline-check ${messageWasRead(message) ? 'is-read' : ''}">&#10003;&#10003;</span>`
-                : ''
-            }
+            ${deliveryIndicator}
           </span>
         `;
   const replySnippet = renderMessageReplySnippetHtml(message, metaTone);
