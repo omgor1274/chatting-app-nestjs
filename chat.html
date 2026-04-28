@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content, user-scalable=no"
+      content="width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
     />
     <meta name="theme-color" content="#f3eee6" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -53,10 +53,13 @@
   >
     <div
       id="app-shell"
-      class="mobile-chat-shell glass relative mr-auto flex h-[100dvh] max-w-[1680px] overflow-hidden border border-black/5 bg-[#faf7f1] shadow-none lg:h-[calc(100vh-2rem)] lg:rounded-[32px]"
+      class="mobile-chat-shell glass relative mx-auto flex h-[100dvh] max-w-[1680px] overflow-hidden border border-black/5 bg-[#faf7f1] shadow-none lg:h-[calc(100vh-2rem)] lg:rounded-[32px]"
     >
       <div
         id="auth-screen"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auth-title"
         class="absolute inset-0 z-50 flex items-center justify-center bg-[#f3eee6] p-4 sm:p-6"
       >
         <div
@@ -113,9 +116,12 @@
                   />
                   <div
                     id="auth-feedback"
+                    role="status"
+                    aria-live="polite"
                     class="hidden rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700"
                   ></div>
                   <button
+                    type="button"
                     onclick="handleAuth()"
                     id="auth-btn"
                     class="w-full rounded-2xl bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700"
@@ -130,13 +136,14 @@
                   >
                     Reset password
                   </button>
-                  <p
+                  <button
+                    type="button"
                     onclick="toggleAuthMode()"
                     id="auth-switch"
-                    class="cursor-pointer text-center text-sm font-medium text-blue-600 transition hover:text-blue-700"
+                    class="w-full cursor-pointer rounded-full border border-transparent bg-transparent px-2 py-3 text-sm font-medium text-blue-600 transition hover:border-slate-200 hover:bg-slate-50 hover:text-blue-700"
                   >
                     Need an account? Create one
-                  </p>
+                  </button>
                 </div>
                 <div id="verification-step" class="hidden space-y-4">
                   <div
@@ -164,6 +171,8 @@
                   />
                   <div
                     id="verification-feedback"
+                    role="status"
+                    aria-live="polite"
                     class="hidden rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700"
                   ></div>
                   <button
