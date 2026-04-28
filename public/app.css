@@ -321,7 +321,7 @@ img {
   width: 0.18rem;
   height: 0.34rem;
   border-radius: 999px;
-  background: linear-gradient(180deg, #60a5fa, #3b82f6);
+  background: linear-gradient(180deg, #38bdf8, #0ea5e9);
   animation: message-wave 0.88s ease-in-out infinite;
 }
 
@@ -331,6 +331,54 @@ img {
 
 .message-loading-waves span:nth-child(3) {
   animation-delay: 0.28s;
+}
+
+.message-loading-pill {
+  animation: loader-pill-pop 1.4s ease-in-out infinite;
+}
+
+.message-row {
+  will-change: transform, opacity;
+}
+
+.message-text-copy,
+.message-bubble-shell {
+  color: #111827;
+}
+
+#message-container {
+  scroll-behavior: smooth;
+}
+
+.startup-loader-panel {
+  animation: startup-loader-glow 1.8s ease-in-out infinite alternate;
+}
+
+@keyframes loader-pill-pop {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  50% {
+    transform: translateY(-1px);
+    opacity: 0.92;
+  }
+
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes startup-loader-glow {
+  from {
+    box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.18);
+  }
+
+  to {
+    box-shadow: 0 0 0 18px rgba(56, 189, 248, 0);
+  }
 }
 
 @keyframes loader-orbit-spin {

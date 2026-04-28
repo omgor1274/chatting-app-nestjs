@@ -3497,6 +3497,7 @@ function handleComposerKeydown(event) {
   }
 
   event.preventDefault();
+  event.stopPropagation();
   if (composerSendInFlight) {
     return;
   }
@@ -9783,6 +9784,7 @@ async function handleIncomingMessage(message, isOwnMessage) {
       stickToBottom: true,
       markRead: !isOwnMessage,
     });
+    scheduleMessageContainerBottom(260);
   }
 
   cacheMessageForConversation(hydratedMessage);
@@ -11041,6 +11043,9 @@ async function sendMessage() {
       );
       input.value = '';
       clearConversationDraft(conversationTarget);
+      window.requestAnimationFrame(() => {
+        input.focus();
+      });
     }
 
     if (text) {
@@ -13045,7 +13050,7 @@ function createMessageElement(message, options = {}) {
   div.id = `message-${message.id}`;
   div.className = `message-row ${isSent ? 'message-row-outgoing self-end' : 'message-row-incoming self-start'} flex w-full max-w-full`;
   if (options.animate !== false) {
-    div.classList.add('chat-message-enter');
+    div.classList.add('chat-message-enter', 'animate__animated', 'animate__fadeInUp', 'animate__faster');
     div.style.setProperty('--message-enter-x', isSent ? '14px' : '-14px');
   }
 
