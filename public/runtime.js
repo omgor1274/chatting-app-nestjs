@@ -10,7 +10,7 @@ const PUBLIC_CONFIG_FETCH_TIMEOUT_MS = 5000;
 
 let appConfig = {
   apiUrl: localBackendOrigin,
-  avatarBaseUrl: 'https://ui-avatars.com/api/',
+  avatarBaseUrl: '/icons/default-avatar.svg',
   stunServers: ['stun:stun.l.google.com:19302'],
 };
 let API_URL = appConfig.apiUrl;
@@ -334,6 +334,21 @@ export async function loadPublicConfig() {
     return configLoadPromise;
   }
 
+  const bootstrappedConfig = window.__OCHAT_PUBLIC_CONFIG__;
+  if (bootstrappedConfig && typeof bootstrappedConfig === 'object') {
+    appConfig = {
+      ...appConfig,
+      ...bootstrappedConfig,
+      apiUrl: resolveHostedApiUrl(
+        window.location.origin,
+        bootstrappedConfig,
+      ),
+    };
+    API_URL = appConfig.apiUrl || window.location.origin || localBackendOrigin;
+    configLoadPromise = Promise.resolve(appConfig);
+    return configLoadPromise;
+  }
+
   configLoadPromise = (async () => {
     const candidates = isHostedOrigin
       ? [window.location.origin]
@@ -357,6 +372,7 @@ export async function loadPublicConfig() {
           apiUrl: resolveHostedApiUrl(candidate, data),
         };
         API_URL = appConfig.apiUrl || candidate;
+        window.__OCHAT_PUBLIC_CONFIG__ = appConfig;
         return appConfig;
       } catch (error) {
         console.error(`Failed to load public config from ${candidate}`, error);

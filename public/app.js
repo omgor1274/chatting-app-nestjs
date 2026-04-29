@@ -8,7 +8,7 @@ const isHostedOrigin =
   !/^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
 const PUBLIC_CONFIG_FETCH_TIMEOUT_MS = 5000;
 const LOCKED_MOBILE_VIEWPORT_CONTENT =
-  'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content, user-scalable=no';
+  'width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content';
 let appConfig = {
   apiUrl: localBackendOrigin,
   avatarBaseUrl: '/icons/default-avatar.svg',
@@ -190,6 +190,7 @@ const CONVERSATION_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 const MAX_PERSISTED_CONVERSATIONS = 4;
 const MAX_PERSISTED_MESSAGES_PER_CONVERSATION = 24;
 const CACHE_PERSIST_DEBOUNCE_MS = 180;
+const DEFAULT_MEDIA_PLACEHOLDER_SIZE = 320;
 let activeIncomingRingtone = null;
 let shellCachePersistTimer = 0;
 let conversationCachePersistTimer = 0;
@@ -202,6 +203,10 @@ let reportModalTarget = null;
 let reportSubmitInFlight = false;
 let startupLoaderVisibleSince = 0;
 let startupLoaderHideTimer = 0;
+const imageDimensionCache = new Map();
+const imageDimensionLoadPromises = new Map();
+const verifiedThemeUrls = new Map();
+let activeThemeValidationToken = 0;
 
 function getConfigCandidates() {
   const candidates = [
@@ -263,6 +268,150 @@ async function fetchPublicConfigCandidate(candidate) {
     if (timeoutId !== null) {
       window.clearTimeout(timeoutId);
     }
+  }
+}
+
+function toPositiveImageDimension(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue <= 0) {
+    return 0;
+  }
+
+  return Math.round(numericValue);
+}
+
+function cacheImageDimensions(url, width, height) {
+  const normalizedWidth = toPositiveImageDimension(width);
+  const normalizedHeight = toPositiveImageDimension(height);
+  if (!url || !normalizedWidth || !normalizedHeight) {
+    return null;
+  }
+
+  const nextDimensions = {
+    width: normalizedWidth,
+    height: normalizedHeight,
+  };
+  imageDimensionCache.set(url, nextDimensions);
+  return nextDimensions;
+}
+
+function getCachedImageDimensions(url) {
+  return url ? imageDimensionCache.get(url) || null : null;
+}
+
+function ensureImageDimensions(url) {
+  if (!url) {
+    return Promise.resolve(null);
+  }
+
+  const cachedDimensions = getCachedImageDimensions(url);
+  if (cachedDimensions) {
+    return Promise.resolve(cachedDimensions);
+  }
+
+  const inflightPromise = imageDimensionLoadPromises.get(url);
+  if (inflightPromise) {
+    return inflightPromise;
+  }
+
+  const nextPromise = new Promise((resolve) => {
+    const image = new Image();
+    image.decoding = 'async';
+    image.loading = 'eager';
+    image.onload = () => {
+      const dimensions = cacheImageDimensions(
+        url,
+        image.naturalWidth,
+        image.naturalHeight,
+      );
+      imageDimensionLoadPromises.delete(url);
+      resolve(dimensions);
+    };
+    image.onerror = () => {
+      imageDimensionLoadPromises.delete(url);
+      resolve(null);
+    };
+    image.src = url;
+  });
+
+  imageDimensionLoadPromises.set(url, nextPromise);
+  return nextPromise;
+}
+
+async function warmMessageImageDimensions(messages) {
+  const imageUrls = Array.from(
+    new Set(
+      (messages || [])
+        .filter(
+          (message) => message?.messageType === 'IMAGE' && message?.fileUrl,
+        )
+        .map((message) => getFileUrl(message.fileUrl))
+        .filter(Boolean),
+    ),
+  );
+  if (!imageUrls.length) {
+    return;
+  }
+
+  await Promise.allSettled(imageUrls.map((url) => ensureImageDimensions(url)));
+}
+
+function getImageMarkupAttributes(url) {
+  const dimensions = getCachedImageDimensions(url);
+  if (!dimensions) {
+    return `width="${DEFAULT_MEDIA_PLACEHOLDER_SIZE}" height="${DEFAULT_MEDIA_PLACEHOLDER_SIZE}"`;
+  }
+
+  return `width="${dimensions.width}" height="${dimensions.height}"`;
+}
+
+function describeMessageAttachment(message, fallbackLabel) {
+  const fileName = String(message?.fileName || '').trim();
+  if (fileName) {
+    return fileName;
+  }
+
+  return fallbackLabel;
+}
+
+function attachImageFallback(image, fallbackSrc = DEFAULT_AVATAR_URL) {
+  if (!image) {
+    return;
+  }
+
+  image.addEventListener(
+    'error',
+    () => {
+      if (!fallbackSrc || image.src === fallbackSrc) {
+        return;
+      }
+
+      image.src = fallbackSrc;
+    },
+    { once: true },
+  );
+}
+
+async function validateThemeUrl(themeUrl) {
+  if (!themeUrl) {
+    return false;
+  }
+
+  if (verifiedThemeUrls.has(themeUrl)) {
+    return verifiedThemeUrls.get(themeUrl);
+  }
+
+  try {
+    const response = await fetch(themeUrl, {
+      method: 'HEAD',
+      cache: 'force-cache',
+    });
+    const isValid = response.ok;
+    verifiedThemeUrls.set(themeUrl, isValid);
+    return isValid;
+  } catch {
+    verifiedThemeUrls.set(themeUrl, false);
+    return false;
   }
 }
 
@@ -2769,7 +2918,7 @@ function toggleSelectedMessageReaction(emoji) {
   if (!messageActionTarget.isPending && socket?.connected && selectedUser) {
     socket.emit('reaction:update', {
       messageId,
-      reaction: currentReaction === emoji ? '' : emoji,
+      reaction: currentReaction === emoji ? null : emoji,
       groupId: isGroupConversation(selectedUser)
         ? selectedUser.id
         : undefined,
@@ -2821,7 +2970,7 @@ function renderPinnedConversationsSidebar() {
           onclick="selectUser('${escapeHtml(user.id)}')"
           class="sidebar-quick-card flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-slate-50"
         >
-          <img src="${userAvatar(user)}" alt="" class="h-10 w-10 rounded-2xl object-cover" />
+          <img src="${userAvatar(user)}" alt="${escapeHtml(displayName(user))} profile photo" width="40" height="40" class="h-10 w-10 rounded-2xl object-cover" />
           <div class="min-w-0 flex-1">
             <p class="truncate text-sm font-semibold text-slate-900">${escapeHtml(displayName(user))}</p>
             <p class="mt-1 truncate text-xs text-slate-500">${escapeHtml(recentActivity.get(user.id)?.preview || 'Pinned chat')}</p>
@@ -3628,6 +3777,26 @@ async function loadPublicConfig() {
     return configLoadPromise;
   }
 
+  const bootstrappedConfig = window.__OCHAT_PUBLIC_CONFIG__;
+  if (bootstrappedConfig && typeof bootstrappedConfig === 'object') {
+    appConfig = {
+      ...appConfig,
+      ...bootstrappedConfig,
+      apiUrl: resolveHostedApiUrl(
+        window.location.origin,
+        bootstrappedConfig,
+      ),
+    };
+    API_URL = appConfig.apiUrl || window.location.origin || localBackendOrigin;
+    rtcConfig = {
+      iceServers: (appConfig.stunServers || [])
+        .filter(Boolean)
+        .map((urls) => ({ urls })),
+    };
+    configLoadPromise = Promise.resolve(appConfig);
+    return configLoadPromise;
+  }
+
   configLoadPromise = (async () => {
     const candidates = isHostedOrigin
       ? [window.location.origin]
@@ -3656,6 +3825,7 @@ async function loadPublicConfig() {
             .filter(Boolean)
             .map((urls) => ({ urls })),
         };
+        window.__OCHAT_PUBLIC_CONFIG__ = appConfig;
         return appConfig;
       } catch (error) {
         console.error(`Failed to load public config from ${candidate}`, error);
@@ -5993,7 +6163,7 @@ function renderBlockedUsers() {
       (user) => `
             <div class="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 ${user !== blockedUsers[blockedUsers.length - 1] ? 'mb-3' : ''}">
               <div class="flex min-w-0 items-center gap-3">
-                <img src="${userAvatar(user)}" class="h-11 w-11 rounded-2xl object-cover">
+                <img src="${userAvatar(user)}" alt="${escapeHtml(displayName(user))} profile photo" width="44" height="44" class="h-11 w-11 rounded-2xl object-cover">
                 <div class="min-w-0">
                   <p class="truncate text-sm font-semibold text-slate-900">${escapeHtml(user.name || user.email || 'Blocked user')}</p>
                   <p class="truncate text-xs text-slate-500">${escapeHtml(user.email || '')}</p>
@@ -6492,8 +6662,39 @@ function assetUrl(path) {
   return `${API_URL}${path}`;
 }
 
+function applyDefaultChatTheme(container, isDarkMode) {
+  if (!container) {
+    return;
+  }
+
+  container.style.setProperty('--chat-theme-background', 'none');
+  container.style.setProperty(
+    '--chat-theme-base-color',
+    isDarkMode ? '#020617' : '#f8fafc',
+  );
+}
+
+function applyResolvedChatTheme(container, themeUrl, isDarkMode) {
+  if (!container || !themeUrl) {
+    return;
+  }
+
+  const overlay = isDarkMode
+    ? `linear-gradient(rgba(2,6,23,0.18), rgba(15,23,42,0.34)), url("${themeUrl}")`
+    : `linear-gradient(rgba(248,250,252,0.18), rgba(241,245,249,0.34)), url("${themeUrl}")`;
+
+  container.style.setProperty(
+    '--chat-theme-base-color',
+    isDarkMode ? '#0f172a' : '#e2e8f0',
+  );
+  container.style.setProperty('--chat-theme-background', overlay);
+}
+
 function applyChatTheme() {
   const container = document.getElementById('message-container');
+  if (!container) {
+    return;
+  }
   const clearButtons = [
     document.getElementById('chat-theme-clear-btn'),
     document.getElementById('contact-theme-clear-btn'),
@@ -6524,23 +6725,27 @@ function applyChatTheme() {
   }
 
   if (!themeUrl) {
-    container.style.setProperty('--chat-theme-background', 'none');
-    container.style.setProperty(
-      '--chat-theme-base-color',
-      isDarkMode ? '#020617' : '#f8fafc',
-    );
+    applyDefaultChatTheme(container, isDarkMode);
     return;
   }
 
-  const overlay = isDarkMode
-    ? `linear-gradient(rgba(2,6,23,0.18), rgba(15,23,42,0.34)), url("${themeUrl}")`
-    : `linear-gradient(rgba(248,250,252,0.18), rgba(241,245,249,0.34)), url("${themeUrl}")`;
+  const validationToken = ++activeThemeValidationToken;
+  void validateThemeUrl(themeUrl).then((isValid) => {
+    if (validationToken !== activeThemeValidationToken) {
+      return;
+    }
 
-  container.style.setProperty(
-    '--chat-theme-base-color',
-    isDarkMode ? '#0f172a' : '#e2e8f0',
-  );
-  container.style.setProperty('--chat-theme-background', overlay);
+    if (!isValid) {
+      applyDefaultChatTheme(container, isDarkMode);
+      if (themeState) {
+        themeState.innerText =
+          'The saved chat background could not be loaded, so the default background is active.';
+      }
+      return;
+    }
+
+    applyResolvedChatTheme(container, themeUrl, isDarkMode);
+  });
 }
 
 function updateSidebarCurrentUser() {
@@ -6556,23 +6761,27 @@ function updateSidebarCurrentUser() {
   if (!currentUser) {
     avatar.src = DEFAULT_AVATAR_URL;
     avatar.alt = 'Your profile photo';
+    attachImageFallback(avatar);
     name.innerText = 'Your profile';
     email.innerText = 'Open Settings to manage your account.';
     if (railAvatar) {
       railAvatar.src = DEFAULT_AVATAR_URL;
       railAvatar.alt = 'Your profile photo';
+      attachImageFallback(railAvatar);
     }
     return;
   }
 
   avatar.src = userAvatar(currentUser);
   avatar.alt = `${baseName(currentUser)} profile photo`;
+  attachImageFallback(avatar);
   name.innerText = currentUser.name || displayName(currentUser);
   email.innerText =
     currentUser.email || 'Open Settings to manage your account.';
   if (railAvatar) {
     railAvatar.src = userAvatar(currentUser);
     railAvatar.alt = `${baseName(currentUser)} profile photo`;
+    attachImageFallback(railAvatar);
   }
 }
 
@@ -6665,12 +6874,25 @@ function openMyAvatarPicker(inputId = 'desktop-avatar-input') {
 }
 
 function toggleComposerActionsMenu() {
-  document.getElementById('composer-actions-menu').classList.toggle('hidden');
+  const menu = document.getElementById('composer-actions-menu');
+  const button = document.getElementById('composer-actions-btn');
+  if (!menu) {
+    return;
+  }
+
+  menu.classList.toggle('hidden');
+  button?.setAttribute(
+    'aria-expanded',
+    String(!menu.classList.contains('hidden')),
+  );
   closeChatActionsMenu();
 }
 
 function closeComposerActionsMenu() {
   document.getElementById('composer-actions-menu').classList.add('hidden');
+  document
+    .getElementById('composer-actions-btn')
+    ?.setAttribute('aria-expanded', 'false');
 }
 
 function isChatActionsMenuOpen() {
@@ -7366,6 +7588,7 @@ function updateChatContactPanel() {
   panelTitle.innerText = isGroup ? 'Group info' : 'Contact info';
   avatar.src = userAvatar(selectedUser);
   avatar.alt = `${displayName(selectedUser)} profile photo`;
+  attachImageFallback(avatar);
   name.innerText = displayName(selectedUser);
   status.innerText = statusMeta.text;
   status.className = `mt-1 ${statusMeta.className}`;
@@ -7544,14 +7767,6 @@ function enforceLockedMobileViewport() {
   if (viewportMeta.getAttribute('content') !== LOCKED_MOBILE_VIEWPORT_CONTENT) {
     viewportMeta.setAttribute('content', LOCKED_MOBILE_VIEWPORT_CONTENT);
   }
-}
-
-function preventViewportZoomGesture(event) {
-  if (window.innerWidth >= 1024) {
-    return;
-  }
-
-  event.preventDefault();
 }
 
 function stabilizeMobileKeyboardViewport() {
@@ -9125,7 +9340,7 @@ function createUserListElement(user, index = 0) {
   item.innerHTML = `
         <div class="chat-list-card-body flex items-center gap-2.5 rounded-[16px] p-1.5">
           <div class="relative shrink-0">
-            <img src="${userAvatar(user)}" loading="lazy" decoding="async" class="h-10 w-10 rounded-[14px] object-cover shadow-sm">
+            <img src="${userAvatar(user)}" alt="${escapeHtml(displayName(user))} profile photo" width="40" height="40" loading="lazy" decoding="async" class="h-10 w-10 rounded-[14px] object-cover shadow-sm">
             ${isGroupConversation(user)
       ? `<span class="absolute -bottom-1 -right-1 rounded-full border-2 border-white bg-slate-900 px-1 py-[1px] text-[9px] font-bold uppercase tracking-wide text-white">G</span>`
       : `<span class="absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-white ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}"></span>`
@@ -9153,6 +9368,8 @@ function createUserListElement(user, index = 0) {
           </div>
         </div>
       `;
+
+  attachImageFallback(item.querySelector('img'));
 
   return item;
 }
@@ -9877,6 +10094,10 @@ function commitRealtimeMessage(tempId, message) {
       animate: false,
       stickToBottom: false,
     });
+
+    if (hydratedMessage.senderId === currentUser?.id) {
+      pulseMessageBubble(hydratedMessage.id);
+    }
   }
 
   const chatUserId =
@@ -10116,6 +10337,7 @@ async function loadMessageChunk(before = null, prepend = false, options = {}) {
     const messages = (data.messages || []).map((message) =>
       createRenderableMessage(message),
     );
+    await warmMessageImageDimensions(messages);
     if (
       !isConversationStillActive(
         requestedConversation,
@@ -10690,6 +10912,7 @@ function updateSelectedUserHeader() {
   getById('target-name').innerText = displayName(selectedUser);
   getById('target-avatar').src = userAvatar(selectedUser);
   getById('target-avatar').alt = `${displayName(selectedUser)} profile photo`;
+  attachImageFallback(getById('target-avatar'));
   applyChatTheme();
   const statusMeta = getSelectedUserStatusMeta(selectedUser);
   getById('target-status').innerText = statusMeta.text;
@@ -11425,7 +11648,7 @@ async function openCreateGroupModal() {
         (user) => `
                 <label class="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 transition hover:border-slate-300 hover:bg-slate-50">
                   <input type="checkbox" value="${user.id}" class="h-4 w-4 rounded border-slate-300">
-                  <img src="${userAvatar(user)}" class="h-10 w-10 rounded-xl object-cover">
+                  <img src="${userAvatar(user)}" alt="${escapeHtml(displayName(user))} profile photo" width="40" height="40" class="h-10 w-10 rounded-xl object-cover">
                   <div class="min-w-0 flex-1">
                     <p class="truncate text-sm font-semibold text-slate-900">${escapeHtml(displayName(user))}</p>
                     <p class="truncate text-xs text-slate-500">${escapeHtml(user.email || '')}</p>
@@ -11555,7 +11778,7 @@ async function openManageGroupModal() {
     .map(
       (member) => `
               <div class="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3">
-                <img src="${userAvatar(member)}" class="h-10 w-10 rounded-xl object-cover">
+                <img src="${userAvatar(member)}" alt="${escapeHtml(displayName(member))} profile photo" width="40" height="40" class="h-10 w-10 rounded-xl object-cover">
                 <div class="min-w-0 flex-1">
                   <p class="truncate text-sm font-semibold text-slate-900">${escapeHtml(member.name)}</p>
                   <p class="truncate text-xs text-slate-500">${escapeHtml(member.role)}${member.userId === currentUser.id ? ' · You' : ''}</p>
@@ -11586,7 +11809,7 @@ async function openManageGroupModal() {
         .map(
           (person) => `
                   <div class="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3">
-                    <img src="${userAvatar(person)}" class="h-10 w-10 rounded-xl object-cover">
+                    <img src="${userAvatar(person)}" alt="${escapeHtml(displayName(person))} profile photo" width="40" height="40" class="h-10 w-10 rounded-xl object-cover">
                     <div class="min-w-0 flex-1">
                       <p class="truncate text-sm font-semibold text-slate-900">${escapeHtml(displayName(person))}</p>
                       <p class="truncate text-xs text-slate-500">${escapeHtml(person.email || '')}</p>
@@ -13204,7 +13427,7 @@ function renderTextMessageContentHtml(message, isSent, metaTone) {
 function createMessageElement(message, options = {}) {
   const div = document.createElement('div');
   const isSent = message.senderId === currentUser.id;
-  const metaTone = isSent ? 'text-blue-100/90' : 'text-slate-500';
+  const metaTone = isSent ? 'text-white/90' : 'text-slate-600';
   const starredBadge = isMessageStarred(message.id)
     ? '<span class="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">Starred</span>'
     : '';
@@ -13212,7 +13435,7 @@ function createMessageElement(message, options = {}) {
   div.id = `message-${message.id}`;
   div.className = `message-row ${isSent ? 'message-row-outgoing self-end' : 'message-row-incoming self-start'} flex w-full max-w-full`;
   if (options.animate !== false) {
-    div.classList.add('chat-message-enter', 'animate__animated', 'animate__fadeInUp', 'animate__faster');
+    div.classList.add('chat-message-enter');
     div.style.setProperty('--message-enter-x', isSent ? '14px' : '-14px');
   }
 
@@ -13248,9 +13471,17 @@ function createMessageElement(message, options = {}) {
   const replySnippet = renderMessageReplySnippetHtml(message, metaTone);
   const reactionChip = renderMessageReactionHtml(message);
   const textContent = renderTextMessageContentHtml(message, isSent, metaTone);
-  const messageFileUrl = message.fileUrl
-    ? escapeHtml(getFileUrl(message.fileUrl))
-    : '';
+  const rawMessageFileUrl = message.fileUrl ? getFileUrl(message.fileUrl) : '';
+  const messageFileUrl = rawMessageFileUrl ? escapeHtml(rawMessageFileUrl) : '';
+  const imageAltText = escapeHtml(
+    describeMessageAttachment(message, 'Shared image'),
+  );
+  const imageLinkLabel = escapeHtml(
+    `Open image attachment: ${describeMessageAttachment(message, 'Shared image')}`,
+  );
+  const fileActionLabel = escapeHtml(
+    describeMessageAttachment(message, 'Shared file'),
+  );
 
   if (message.deletedForEveryoneAt) {
     div.innerHTML = `
@@ -13264,12 +13495,12 @@ function createMessageElement(message, options = {}) {
     div.innerHTML = `
             <div class="message-bubble-shell message-bubble-image ${bubbleTone} w-fit max-w-[min(100%,34rem)] overflow-hidden p-1.5">
               ${replySnippet}
-              <a href="${messageFileUrl}" target="_blank" rel="noopener noreferrer">
-                <img src="${messageFileUrl}" loading="lazy" decoding="async" class="mb-2 max-h-80 w-auto rounded-2xl border border-black/5">
+              <a href="${messageFileUrl}" target="_blank" rel="noopener noreferrer" class="message-attachment-preview" aria-label="${imageLinkLabel}">
+                <img src="${messageFileUrl}" alt="${imageAltText}" ${getImageMarkupAttributes(rawMessageFileUrl)} loading="lazy" decoding="async" class="message-attachment-image mb-2 max-h-80 w-auto rounded-2xl border border-black/5">
               </a>
-              <div class="flex flex-wrap items-center gap-3 text-xs ${metaTone}">
-                <a href="${messageFileUrl}" target="_blank" rel="noopener noreferrer" class="font-semibold underline">Open image</a>
-                <button class="font-semibold underline" onclick="downloadFile('${messageFileUrl}', '${escapeHtml(message.fileName || 'image')}')">Download</button>
+              <div class="message-attachment-actions flex flex-wrap items-center gap-2 text-xs ${metaTone}">
+                <a href="${messageFileUrl}" target="_blank" rel="noopener noreferrer" class="message-attachment-action font-semibold" aria-label="${imageLinkLabel}">Open image</a>
+                <button type="button" class="message-attachment-action font-semibold" aria-label="Download ${imageAltText}" onclick="downloadFile('${messageFileUrl}', '${escapeHtml(message.fileName || 'image')}')">Download</button>
               </div>
               ${footer}
               ${reactionChip}
@@ -13299,9 +13530,9 @@ function createMessageElement(message, options = {}) {
                   <source src="${messageFileUrl}" type="${escapeHtml(message.fileMimeType || 'video/mp4')}">
                   Your browser does not support the video tag.
                 </video>
-                <div class="flex flex-wrap items-center gap-3 text-xs ${metaTone}">
-                  <a href="${messageFileUrl}" target="_blank" rel="noopener noreferrer" class="font-semibold underline">Open video</a>
-                  <button class="font-semibold underline" onclick="downloadFile('${messageFileUrl}', '${escapeHtml(message.fileName || 'video')}')">Download</button>
+                <div class="message-attachment-actions flex flex-wrap items-center gap-2 text-xs ${metaTone}">
+                  <a href="${messageFileUrl}" target="_blank" rel="noopener noreferrer" class="message-attachment-action font-semibold" aria-label="Open video attachment: ${fileActionLabel}">Open video</a>
+                  <button type="button" class="message-attachment-action font-semibold" aria-label="Download ${fileActionLabel}" onclick="downloadFile('${messageFileUrl}', '${escapeHtml(message.fileName || 'video')}')">Download</button>
                 </div>
               </div>
               ${footer}
@@ -13315,9 +13546,9 @@ function createMessageElement(message, options = {}) {
                 ${replySnippet}
                 <p class="text-sm font-semibold">${escapeHtml(message.fileName || 'Document')}</p>
                 <p class="text-xs ${metaTone}">${formatBytes(message.fileSize)}</p>
-                <div class="flex flex-wrap items-center gap-3 text-xs ${metaTone}">
-                  <a href="${messageFileUrl}" target="_blank" rel="noopener noreferrer" class="font-semibold underline">Open file</a>
-                  <button class="font-semibold underline" onclick="downloadFile('${messageFileUrl}', '${escapeHtml(message.fileName || 'file')}')">Download</button>
+                <div class="message-attachment-actions flex flex-wrap items-center gap-2 text-xs ${metaTone}">
+                  <a href="${messageFileUrl}" target="_blank" rel="noopener noreferrer" class="message-attachment-action font-semibold" aria-label="Open file attachment: ${fileActionLabel}">Open file</a>
+                  <button type="button" class="message-attachment-action font-semibold" aria-label="Download ${fileActionLabel}" onclick="downloadFile('${messageFileUrl}', '${escapeHtml(message.fileName || 'file')}')">Download</button>
                 </div>
               </div>
               ${footer}
@@ -13348,9 +13579,17 @@ function createMessageElement(message, options = {}) {
   }
 
   div.querySelectorAll('img').forEach((image) => {
+    if (image.src !== rawMessageFileUrl) {
+      attachImageFallback(image);
+    }
     image.addEventListener(
       'load',
       () => {
+        cacheImageDimensions(
+          image.currentSrc || image.src,
+          image.naturalWidth,
+          image.naturalHeight,
+        );
         if (Date.now() <= stickToLatestUntil) {
           scheduleMessageContainerBottom(600);
         }
@@ -14008,16 +14247,6 @@ document.addEventListener(
   },
   true,
 );
-
-document.addEventListener('gesturestart', preventViewportZoomGesture, {
-  passive: false,
-});
-document.addEventListener('gesturechange', preventViewportZoomGesture, {
-  passive: false,
-});
-document.addEventListener('gestureend', preventViewportZoomGesture, {
-  passive: false,
-});
 
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) {

@@ -113,6 +113,7 @@ export class ChatAttachmentStorageService {
         Bucket: this.r2Config.bucketName,
         Key: key,
         ContentType: input.fileMimeType,
+        CacheControl: 'public, max-age=31536000, immutable',
       }),
     );
 
@@ -342,6 +343,7 @@ export class ChatAttachmentStorageService {
         Key: key,
         Body: input.buffer,
         ContentType: input.fileMimeType,
+        CacheControl: 'public, max-age=31536000, immutable',
       }),
     );
 

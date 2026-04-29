@@ -60,6 +60,13 @@ function setStaticAssetHeaders(res: express.Response, filePath: string) {
   }
 }
 
+function setUploadedAssetHeaders(res: express.Response) {
+  res.setHeader(
+    'Cache-Control',
+    'public, max-age=2592000, immutable, stale-while-revalidate=86400',
+  );
+}
+
 async function bootstrap() {
   const writableDirectories: string[][] = [
     ['uploads', 'avatars'],
@@ -135,6 +142,11 @@ async function bootstrap() {
   });
   app.use(
     helmet({
+      hsts: {
+        maxAge: 31536000,
+        includeSubDomains: true,
+        preload: true,
+      },
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
@@ -153,7 +165,6 @@ async function bootstrap() {
             "'self'",
             "'unsafe-inline'",
             'https://cdn.tailwindcss.com',
-            'https://cdn.socket.io',
           ],
           styleSrc: ["'self'", "'unsafe-inline'", 'https:'],
         },
@@ -161,7 +172,9 @@ async function bootstrap() {
       crossOriginResourcePolicy: {
         policy: 'cross-origin',
       },
-      crossOriginOpenerPolicy: false,
+      crossOriginOpenerPolicy: {
+        policy: 'same-origin',
+      },
     }),
   );
   app.use(
@@ -198,14 +211,14 @@ async function bootstrap() {
   app.use(
     '/public',
     express.static(resolveAppRootPath('public'), {
-      maxAge: '1d',
+      maxAge: '7d',
       index: false,
       setHeaders: setStaticAssetHeaders,
     }),
   );
   app.use(
     express.static(resolveAppRootPath('public'), {
-      maxAge: '1d',
+      maxAge: '7d',
       index: false,
       setHeaders: setStaticAssetHeaders,
     }),
@@ -213,8 +226,10 @@ async function bootstrap() {
   app.use(
     '/uploads',
     express.static(resolveWritableDataPath('uploads'), {
-      maxAge: '1d',
+      maxAge: '30d',
+      immutable: true,
       index: false,
+      setHeaders: setUploadedAssetHeaders,
     }),
   );
   app.useGlobalPipes(
