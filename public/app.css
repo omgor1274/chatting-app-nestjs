@@ -1514,7 +1514,7 @@ body.chat-page #message-container {
   body.chat-page {
     padding: 0 !important;
     background:
-      radial-gradient(circle at top, rgba(59, 130, 246, 0.08), transparent 28%),
+      radial-gradient(circle at top, rgb(255, 255, 255), transparent 28%),
       linear-gradient(180deg, #f7fafc 0%, #edf2f7 52%, #e2e8f0 100%);
   }
 
@@ -1995,11 +1995,11 @@ body.dark-mode .pointer-events-none {
 
 @media (min-width: 1024px) {
   body.dark-mode.chat-page {
-    background: #111b21 !important;
+    background: #ffffff !important;
   }
 
   body.dark-mode #users-list {
-    background: #111b21 !important;
+    background: #ffffff !important;
   }
 
   body.dark-mode .mobile-chat-main,
@@ -3317,7 +3317,7 @@ body.startup-loading {
 @media (min-width: 1024px) {
   body.chat-page {
     padding: 0 !important;
-    background: #0b141a !important;
+    background: #ffffff !important;
     --desktop-chat-doodle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'%3E%3Cg fill='none' stroke='%23212d33' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='42' cy='42' r='15'/%3E%3Crect x='100' y='28' width='28' height='24' rx='6'/%3E%3Cpath d='M166 30l12 18 12-7'/%3E%3Cpath d='M36 120h28l-14 20z'/%3E%3Cpath d='M102 96c8-12 26-5 22 8-2 8-12 13-22 22-10-9-20-14-22-22-4-13 14-20 22-8z'/%3E%3Cpath d='M180 102a14 14 0 1 1 0 28 14 14 0 0 1 0-28z'/%3E%3Cpath d='M30 182c0-11 10-18 22-18s22 7 22 18'/%3E%3Cpath d='M106 174l14 14 18-26'/%3E%3Cpath d='M176 176h32'/%3E%3Cpath d='M192 160v32'/%3E%3Cpath d='M76 212l8-20 18 9 10-18'/%3E%3C/g%3E%3C/svg%3E");
   }
 
@@ -3417,7 +3417,7 @@ body.startup-loading {
   body.chat-page .sidebar-toolbar,
   body.chat-page #chat-header,
   body.chat-page #input-area {
-    background: #202c33 !important;
+    background: #1e282d !important;
     border-color: rgba(255, 255, 255, 0.06) !important;
     color: #e9edef !important;
     backdrop-filter: none;
@@ -3605,7 +3605,7 @@ body.startup-loading {
   body.chat-page .mobile-chat-composer,
   body.chat-page #input-area .rounded-\[24px\],
   body.chat-page #input-area .rounded-\[22px\] {
-    background: #202c33 !important;
+    background: #0000FF !important;
     border-color: rgba(255, 255, 255, 0.08) !important;
   }
 
@@ -3627,7 +3627,7 @@ body.startup-loading {
   }
 
   body.chat-page .message-row-incoming .message-bubble-shell {
-    background: #202c33 !important;
+    background: #0000FF !important;
     border: 1px solid rgba(255, 255, 255, 0.06) !important;
     color: #e9edef !important;
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.14);
