@@ -2,15 +2,16 @@ name: Keep Render Awake
 
 on:
   schedule:
-    - cron: "*/14 * * * *"
-  workflow_dispatch: # allows manual run
+    - cron: "*/14 * * * *" # Every 14 mins is perfect for Render
+  workflow_dispatch: 
 
 jobs:
   ping:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Ping backend
+      - name: Ping backend with retry
         run: |
-          curl -s https://chatting-app-nestjs.onrender.com
-          echo "Ping sent at $(date)"
+          # --connect-timeout: waits 30s to connect
+          # --retry: tries 3 times if it fails
+          curl -s --connect-timeout 30 --retry 3 https://chatting-app-nestjs.onrender.com
+          echo "Ping successful at $(date)"
