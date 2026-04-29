@@ -7201,7 +7201,7 @@ function renderSharedMediaBrowser() {
       .map(
         () => `
           <div class="overflow-hidden rounded-[24px] border border-slate-200 bg-white p-3">
-            <div class="h-44 animate-pulse rounded-[20px] bg-slate-100"></div>
+            <div class="h-40 animate-pulse rounded-[20px] bg-slate-100"></div>
             <div class="mt-3 h-4 animate-pulse rounded bg-slate-100"></div>
             <div class="mt-2 h-3 w-24 animate-pulse rounded bg-slate-100"></div>
           </div>
@@ -7238,7 +7238,7 @@ function renderSharedMediaBrowser() {
         return `
           <div class="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
             <button type="button" onclick="openSharedMediaItem('${itemId}')" class="block w-full overflow-hidden bg-slate-950 text-left">
-              <div class="relative h-48 bg-slate-950">
+              <div class="relative h-40 bg-slate-950">
                 <video src="${fileUrl}" preload="metadata" muted playsinline class="h-full w-full object-cover"></video>
                 <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-950/10 to-transparent"></div>
                 <div class="pointer-events-none absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-900">
@@ -7268,7 +7268,7 @@ function renderSharedMediaBrowser() {
       return `
         <div class="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
           <button type="button" onclick="openSharedMediaItem('${itemId}')" class="block w-full overflow-hidden bg-slate-100 text-left">
-            <img src="${fileUrl}" alt="${label}" loading="lazy" decoding="async" class="h-48 w-full object-cover">
+            <img src="${fileUrl}" alt="${label}" loading="lazy" decoding="async" class="h-40 w-full object-cover">
           </button>
           <div class="space-y-3 px-4 py-3">
             <div class="flex items-center justify-between gap-3 text-xs text-slate-500">

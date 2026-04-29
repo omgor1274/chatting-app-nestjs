@@ -4809,6 +4809,47 @@ body.chat-page #send-message-btn:hover {
   background: linear-gradient(135deg, #1d4ed8, #0284c7) !important;
 }
 
+/* Fix profile and composer contrast in chat pages */
+body.chat-page #profile-modal>div,
+body.chat-page.dark-mode #profile-modal>div,
+body.chat-page #chat-contact-panel .chat-contact-panel-shell,
+body.chat-page.dark-mode #chat-contact-panel .chat-contact-panel-shell {
+  background: rgba(255, 255, 255, 0.96) !important;
+  color: #171411 !important;
+}
+
+body.chat-page.dark-mode #profile-modal>div,
+body.chat-page.dark-mode #chat-contact-panel .chat-contact-panel-shell {
+  background: rgba(15, 23, 43, 0.96) !important;
+  color: #e9e8f0 !important;
+}
+
+body.chat-page #input-area,
+body.chat-page.dark-mode #input-area {
+  background: rgba(255, 255, 255, 0.92) !important;
+}
+
+body.chat-page #msg-input {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: rgba(148, 163, 184, 0.24) !important;
+  color: #0f172a !important;
+}
+
+body.chat-page.dark-mode #msg-input {
+  background: rgba(15, 23, 43, 0.96) !important;
+  border-color: rgba(148, 163, 184, 0.16) !important;
+  color: #e9e8f0 !important;
+}
+
+.message-attachment-image {
+  max-width: 100%;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+
 body.chat-page #msg-input:focus {
   outline: 2px solid rgba(59, 130, 246, 0.28);
   outline-offset: 2px;
