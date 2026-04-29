@@ -37,11 +37,10 @@ import { ChatService } from './chat.service';
 })
 export class ChatGateway
   implements
-    OnGatewayConnection,
-    OnGatewayDisconnect,
-    OnModuleInit,
-    OnModuleDestroy
-{
+  OnGatewayConnection,
+  OnGatewayDisconnect,
+  OnModuleInit,
+  OnModuleDestroy {
   @WebSocketServer()
   server!: Server;
 
@@ -64,7 +63,7 @@ export class ChatGateway
     private chatService: ChatService,
     private prisma: PrismaService,
     private redisService: RedisService,
-  ) {}
+  ) { }
 
   private onlineUsers = new Map<string, Set<string>>();
 
@@ -197,11 +196,11 @@ export class ChatGateway
       JSON.stringify(
         payload?.userId
           ? {
-              instanceId: this.instanceId,
-              type: 'presence-update',
-              userId: payload.userId,
-              isOnline: Boolean(payload.isOnline),
-            }
+            instanceId: this.instanceId,
+            type: 'presence-update',
+            userId: payload.userId,
+            isOnline: Boolean(payload.isOnline),
+          }
           : { instanceId: this.instanceId, type: 'refresh' },
       ),
     );
@@ -622,6 +621,45 @@ export class ChatGateway
       recipientUserIds: [data.toUserId],
       isTyping: Boolean(data.isTyping),
     });
+  }
+
+  @SubscribeMessage('reaction:update')
+  async handleReactionUpdate(
+    @MessageBody()
+    data: {
+      toUserId?: string;
+      groupId?: string;
+      messageId: string;
+      reaction: string | null;
+    },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const sender = await this.getAuthorizedUser(client);
+    if (!sender?.userId || !data?.messageId) {
+      return { error: 'Invalid reaction update' };
+    }
+
+    const normalizedReaction = String(data.reaction || '').trim();
+    const payload = {
+      messageId: data.messageId,
+      reaction: normalizedReaction || null,
+      fromUserId: sender.userId,
+    };
+
+    if (data.groupId) {
+      await this.chatService.getGroupDetails(sender.userId, data.groupId);
+      const members = await this.getGroupMemberIds(data.groupId, [sender.userId]);
+      this.relayToUsers([sender.userId, ...members], 'reaction:update', payload);
+      return { success: true };
+    }
+
+    if (!data.toUserId) {
+      return { error: 'Invalid reaction update' };
+    }
+
+    await this.chatService.assertUsersCanChat(sender.userId, data.toUserId);
+    this.relayToUsers([data.toUserId, sender.userId], 'reaction:update', payload);
+    return { success: true };
   }
 
   @SubscribeMessage('call:offer')

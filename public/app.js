@@ -478,10 +478,17 @@ function loadLocalConversationPreferences() {
       readStoredJson(getScopedPreferenceKey('starred_messages'), {}),
     ),
   );
+  const storedMessageReactions = readStoredJson(
+    getScopedPreferenceKey('message_reactions'),
+    {},
+  );
   messageReactionsById = new Map(
-    Object.entries(
-      readStoredJson(getScopedPreferenceKey('message_reactions'), {}),
-    ),
+    Object.entries(storedMessageReactions)
+      .map(([messageId, reactionValue]) => {
+        const normalized = normalizeMessageReactionEntry(reactionValue);
+        return normalized?.emoji ? [messageId, normalized] : null;
+      })
+      .filter(Boolean),
   );
   conversationDrafts = new Map(
     Object.entries(readStoredJson(getScopedPreferenceKey('chat_drafts'), {})),
@@ -2450,8 +2457,92 @@ function revealSpoilerMessage(messageId) {
   }
 }
 
+function normalizeMessageReactionEntry(entry) {
+  if (!entry) {
+    return null;
+  }
+
+  if (typeof entry === 'string') {
+    return {
+      emoji: entry,
+      ownerId: currentUser?.id || null,
+      ownerName: 'You',
+    };
+  }
+
+  if (
+    typeof entry === 'object' &&
+    entry !== null &&
+    typeof entry.emoji === 'string'
+  ) {
+    return {
+      emoji: entry.emoji,
+      ownerId: entry.ownerId || null,
+      ownerName: entry.ownerName || 'Someone',
+    };
+  }
+
+  return null;
+}
+
+function getMessageReactionData(messageId) {
+  return normalizeMessageReactionEntry(messageReactionsById.get(messageId));
+}
+
 function getMessageReaction(messageId) {
-  return String(messageReactionsById.get(messageId) || '');
+  return getMessageReactionData(messageId)?.emoji || '';
+}
+
+function getMessageReactionOwnerName(messageId) {
+  const data = getMessageReactionData(messageId);
+  if (!data?.emoji) {
+    return '';
+  }
+
+  if (data.ownerId && data.ownerId === currentUser?.id) {
+    return 'You';
+  }
+
+  return data.ownerName || 'Someone';
+}
+
+function isOwnMessageReaction(messageId) {
+  const data = getMessageReactionData(messageId);
+  return Boolean(data?.ownerId && data.ownerId === currentUser?.id);
+}
+
+function applyIncomingReactionUpdate(payload) {
+  if (!payload?.messageId) {
+    return;
+  }
+
+  const reaction = String(payload.reaction || '').trim();
+  const ownerId = payload.fromUserId || null;
+  let ownerName = payload.ownerName || '';
+  if (!ownerName) {
+    ownerName = payload.fromUserId === currentUser?.id
+      ? 'You'
+      : displayName(
+        users.find((user) => user.id === payload.fromUserId) || selectedUser,
+      ) || 'Someone';
+  }
+
+  if (!reaction) {
+    messageReactionsById.delete(payload.messageId);
+  } else {
+    messageReactionsById.set(payload.messageId, {
+      emoji: reaction,
+      ownerId,
+      ownerName,
+    });
+  }
+
+  persistMessageReactions();
+
+  const message = conversationMessages.get(payload.messageId);
+  if (message) {
+    replaceRenderedMessage(message);
+  }
 }
 
 function buildReplyTarget(message) {
@@ -2656,21 +2747,41 @@ function toggleSelectedMessageReaction(emoji) {
   }
 
   const messageId = messageActionTarget.id;
+  const currentReaction = getMessageReaction(messageId);
   triggerMotionClass(
     getMessageBubbleElement(messageId),
     'message-bubble-processing',
     300,
   );
-  if (getMessageReaction(messageActionTarget.id) === emoji) {
-    messageReactionsById.delete(messageActionTarget.id);
+
+  if (currentReaction === emoji) {
+    messageReactionsById.delete(messageId);
   } else {
-    messageReactionsById.set(messageActionTarget.id, emoji);
+    messageReactionsById.set(messageId, {
+      emoji,
+      ownerId: currentUser?.id || null,
+      ownerName: displayName(currentUser) || 'You',
+    });
   }
 
   persistMessageReactions();
-  if (conversationMessages.has(messageActionTarget.id)) {
+
+  if (socket?.connected && selectedUser) {
+    socket.emit('reaction:update', {
+      messageId,
+      reaction: currentReaction === emoji ? '' : emoji,
+      groupId: isGroupConversation(selectedUser)
+        ? selectedUser.id
+        : undefined,
+      toUserId: !isGroupConversation(selectedUser)
+        ? selectedUser.id
+        : undefined,
+    });
+  }
+
+  if (conversationMessages.has(messageId)) {
     replaceRenderedMessage(
-      conversationMessages.get(messageActionTarget.id) || messageActionTarget,
+      conversationMessages.get(messageId) || messageActionTarget,
     );
   }
   renderStarredMessages();
@@ -9568,6 +9679,10 @@ function connectSocket() {
     handleMessageUpdated(message);
   });
 
+  socket.on('reaction:update', (payload) => {
+    applyIncomingReactionUpdate(payload);
+  });
+
   socket.on('message:commit', (payload) => {
     commitRealtimeMessage(payload?.tempId, payload?.message);
   });
@@ -12894,14 +13009,27 @@ function renderMessageReplySnippetHtml(message, metaTone) {
 }
 
 function renderMessageReactionHtml(message) {
-  const reaction = getMessageReaction(message?.id);
-  if (!reaction) {
+  const data = getMessageReactionData(message?.id);
+  if (!data?.emoji) {
     return '';
   }
 
+  const ownerLabel = isOwnMessageReaction(message.id)
+    ? 'You'
+    : escapeHtml(
+      data.ownerName ||
+      displayName(
+        users.find((user) => user.id === data.ownerId) || selectedUser,
+      ) ||
+      'Someone',
+    );
+
+  const chipClasses = `message-reaction-chip ${isOwnMessageReaction(message.id) ? 'is-own-reaction' : ''
+    }`;
+
   return `
     <div class="mt-2">
-      <span class="message-reaction-chip is-own-reaction">${escapeHtml(reaction)} <span>You</span></span>
+      <span class="${chipClasses}">${escapeHtml(data.emoji)} <span>${ownerLabel}</span></span>
     </div>
   `;
 }
