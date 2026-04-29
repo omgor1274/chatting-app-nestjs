@@ -2766,7 +2766,7 @@ function toggleSelectedMessageReaction(emoji) {
 
   persistMessageReactions();
 
-  if (socket?.connected && selectedUser) {
+  if (!messageActionTarget.isPending && socket?.connected && selectedUser) {
     socket.emit('reaction:update', {
       messageId,
       reaction: currentReaction === emoji ? '' : emoji,
@@ -9837,6 +9837,29 @@ function commitRealtimeMessage(tempId, message) {
   );
   const isActiveConversationMessage =
     belongsToSelectedConversation(hydratedMessage);
+
+  if (tempId && messageReactionsById.has(tempId)) {
+    const pendingReaction = messageReactionsById.get(tempId);
+    messageReactionsById.delete(tempId);
+
+    if (pendingReaction?.emoji) {
+      messageReactionsById.set(hydratedMessage.id, pendingReaction);
+      persistMessageReactions();
+
+      if (socket?.connected && selectedUser) {
+        socket.emit('reaction:update', {
+          messageId: hydratedMessage.id,
+          reaction: pendingReaction.emoji,
+          groupId: isGroupConversation(selectedUser)
+            ? selectedUser.id
+            : undefined,
+          toUserId: !isGroupConversation(selectedUser)
+            ? selectedUser.id
+            : undefined,
+        });
+      }
+    }
+  }
 
   if (tempId && conversationMessages.has(tempId)) {
     conversationMessages.delete(tempId);
