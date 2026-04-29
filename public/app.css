@@ -367,7 +367,6 @@ img {
 }
 
 .message-loading-pill {
-  display: flex;
   align-items: center;
   gap: 0.55rem;
   justify-content: center;
@@ -2810,7 +2809,7 @@ body:not(.dark-mode).chat-page #request-action-btn,
 body:not(.dark-mode).chat-page #voice-send-btn {
   background: linear-gradient(135deg, var(--ui-accent), #29463d) !important;
   border-color: transparent !important;
-  color: #f8f5ef !important;
+  color: #000000 !important;
   box-shadow: none !important;
 }
 
@@ -3652,17 +3651,17 @@ body.startup-loading {
   body.chat-page .message-row-incoming .text-slate-900,
   body.chat-page .message-row-incoming .text-slate-800,
   body.chat-page .message-row-incoming .text-slate-700 {
-    color: #e9edef !important;
+    color: #000000 !important;
   }
 
   body.chat-page .message-row-incoming .text-slate-500,
   body.chat-page .message-row-incoming .text-slate-400 {
-    color: #9fb0b9 !important;
+    color: #000000 !important;
   }
 
   body.chat-page .message-row-outgoing .text-blue-100\/90,
   body.chat-page .message-row-outgoing .text-white {
-    color: #f3fff8 !important;
+    color: #000000 !important;
   }
 
   body.chat-page .message-row-outgoing .bg-white\/10,
@@ -4242,7 +4241,7 @@ body.chat-page.dark-mode #users-list>li:hover .chat-list-card-body {
 body.chat-page #users-list>li.border-blue-200 .chat-list-card-body,
 body.chat-page.dark-mode #users-list>li.border-blue-200 .chat-list-card-body {
   border-color: var(--minimal-accent-line) !important;
-  background: rgba(255, 253, 248, 0.92) !important;
+  background: #2c63ff !important;
   box-shadow: 0 12px 30px rgba(33, 25, 18, 0.05) !important;
 }
 
