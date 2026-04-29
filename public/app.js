@@ -4238,35 +4238,51 @@ function buildAttachmentUploadFormData(file, conversation) {
 async function compressImageFileIfNeeded(file) {
   if (
     !file ||
-    !String(file.type || '').startsWith('image/') ||
-    file.size <= 2.5 * 1024 * 1024
+    !String(file.type || '').startsWith('image/')
+  ) {
+    return file;
+  }
+
+  const normalizedType = String(file.type || '').toLowerCase();
+  if (
+    normalizedType === 'image/gif' ||
+    normalizedType === 'image/svg+xml'
   ) {
     return file;
   }
 
   try {
     const imageBitmap = await createImageBitmap(file);
+    const maxDimension = 1600;
+    const largestDimension = Math.max(imageBitmap.width, imageBitmap.height);
+    const needsResize = largestDimension > maxDimension;
+    const needsCompression = file.size > 1.2 * 1024 * 1024 || needsResize;
+    if (!needsCompression) {
+      imageBitmap.close();
+      return file;
+    }
+
     const canvas = document.createElement('canvas');
-    const maxWidth = 1920;
-    const scale = Math.min(1, maxWidth / imageBitmap.width);
+    const scale = Math.min(1, maxDimension / largestDimension);
     canvas.width = Math.max(1, Math.round(imageBitmap.width * scale));
     canvas.height = Math.max(1, Math.round(imageBitmap.height * scale));
     const context = canvas.getContext('2d');
     if (!context) {
+      imageBitmap.close();
       return file;
     }
 
     context.drawImage(imageBitmap, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise((resolve) =>
-      canvas.toBlob(resolve, 'image/jpeg', 0.82),
-    );
+    const blob = await new Promise((resolve) => {
+      canvas.toBlob(resolve, 'image/webp', 0.8);
+    });
     imageBitmap.close();
     if (!blob || blob.size >= file.size) {
       return file;
     }
 
-    return new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), {
-      type: 'image/jpeg',
+    return new File([blob], file.name.replace(/\.[^.]+$/, '.webp'), {
+      type: 'image/webp',
       lastModified: file.lastModified || Date.now(),
     });
   } catch (error) {

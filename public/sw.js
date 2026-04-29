@@ -1,4 +1,4 @@
-const SHELL_VERSION = '20260407-scrollfix1';
+const SHELL_VERSION = '20260429-perf1';
 const CACHE_NAME = `ochat-shell-${SHELL_VERSION}`;
 const APP_SHELL = [
   '/',
@@ -6,6 +6,7 @@ const APP_SHELL = [
   '/chat',
   '/settings',
   '/admin',
+  `/public/tailwind.css?v=${SHELL_VERSION}`,
   `/public/app.css?v=${SHELL_VERSION}`,
   `/public/app.js?v=${SHELL_VERSION}`,
   `/public/admin.js?v=${SHELL_VERSION}`,

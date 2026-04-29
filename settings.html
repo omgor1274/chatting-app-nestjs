@@ -20,8 +20,9 @@
         document.documentElement.classList.add('prefers-dark-mode');
       }
     </script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="/public/app.css?v=20260406-minimal2" />
+    <link rel="preload" href="/public/tailwind.css?v=20260429-perf1" as="style" />
+    <link rel="stylesheet" href="/public/tailwind.css?v=20260429-perf1" />
+    <link rel="stylesheet" href="/public/app.css?v=20260429-perf1" />
   </head>
 
   <body class="settings-page mobile-page min-h-screen bg-slate-100 p-4 sm:p-6">
@@ -313,10 +314,10 @@
       </section>
     </main>
 
-    <script src="/runtime-config.js?v=20260406-minimal2"></script>
+    <script src="/runtime-config.js?v=20260429-perf1"></script>
     <script
       type="module"
-      src="/public/settings.js?v=20260406-minimal2"
+      src="/public/settings.js?v=20260429-perf1"
     ></script>
   </body>
 </html>

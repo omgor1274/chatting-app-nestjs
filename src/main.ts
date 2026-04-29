@@ -164,7 +164,6 @@ async function bootstrap() {
           scriptSrc: [
             "'self'",
             "'unsafe-inline'",
-            'https://cdn.tailwindcss.com',
           ],
           styleSrc: ["'self'", "'unsafe-inline'", 'https:'],
         },
@@ -211,14 +210,16 @@ async function bootstrap() {
   app.use(
     '/public',
     express.static(resolveAppRootPath('public'), {
-      maxAge: '7d',
+      maxAge: '30d',
+      immutable: true,
       index: false,
       setHeaders: setStaticAssetHeaders,
     }),
   );
   app.use(
     express.static(resolveAppRootPath('public'), {
-      maxAge: '7d',
+      maxAge: '30d',
+      immutable: true,
       index: false,
       setHeaders: setStaticAssetHeaders,
     }),

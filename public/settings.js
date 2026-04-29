@@ -12,7 +12,7 @@ import {
   loadPublicConfig,
   readKeyBackupUnlockMaterial,
   readJsonResponse,
-} from './runtime.js?v=20260406-minimal2';
+} from './runtime.js?v=20260429-perf1';
 
 const LAST_CHAT_ROUTE_KEY = 'chat_last_route';
 let currentProfileId = '';
@@ -342,9 +342,10 @@ function updateCloseLink() {
 function prefetchChatShell() {
   const hrefs = [
     getLastChatRoute(),
-    '/public/app.js?v=20260406-minimal2',
-    '/public/runtime.js?v=20260406-minimal2',
-    '/public/app.css?v=20260406-minimal2',
+    '/public/app.js?v=20260429-perf1',
+    '/public/runtime.js?v=20260429-perf1',
+    '/public/tailwind.css?v=20260429-perf1',
+    '/public/app.css?v=20260429-perf1',
   ];
 
   hrefs.forEach((href) => {

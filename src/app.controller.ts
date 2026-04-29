@@ -58,9 +58,7 @@ export class AppController {
     setPublicConfigHeaders(res);
     res.type('application/javascript');
     return res.send(
-      `window.__OCHAT_RUNTIME_CONFIG__ = ${JSON.stringify({
-        defaultApiOrigin: config.defaultApiOrigin,
-      })};`,
+      `window.__OCHAT_RUNTIME_CONFIG__ = ${JSON.stringify(config)}; window.__OCHAT_PUBLIC_CONFIG__ = window.__OCHAT_RUNTIME_CONFIG__;`,
     );
   }
 }
