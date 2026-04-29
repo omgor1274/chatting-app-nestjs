@@ -1,8 +1,7 @@
-import { Controller, Get, Req, Res  } from '@nestjs/common';
+import { Controller, Get, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { AppService } from './app.service';
 import { resolveAppRootPath } from './common/app-paths';
-import { Public } from 'generated/prisma/runtime/client';
 
 function setPublicConfigHeaders(res: Response) {
   res.setHeader('Cache-Control', 'no-store');
@@ -42,8 +41,6 @@ export class AppController {
     res.setHeader('Cache-Control', 'no-store');
     return res.sendFile(resolveAppRootPath('admin.html'));
   }
-
-  
   @Get('health')
   getHealth() {
     return this.appService.getHealth();
