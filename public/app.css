@@ -2817,7 +2817,6 @@ body:not(.dark-mode).chat-page #voice-record-btn,
 body:not(.dark-mode).chat-page #request-reject-btn,
 body:not(.dark-mode).chat-page #composer-actions-btn {
   border-color: var(--ui-border) !important;
-  background: rgba(255, 252, 247, 0.82) !important;
   color: var(--ui-ink) !important;
   box-shadow: none !important;
 }
@@ -3604,7 +3603,7 @@ body.startup-loading {
   body.chat-page .mobile-chat-composer,
   body.chat-page #input-area .rounded-\[24px\],
   body.chat-page #input-area .rounded-\[22px\] {
-    background: #0000FF !important;
+    background: #9aaee7 !important;
     border-color: rgba(255, 255, 255, 0.08) !important;
   }
 
