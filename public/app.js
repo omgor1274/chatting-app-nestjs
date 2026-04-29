@@ -6838,12 +6838,12 @@ function renderSharedMediaBrowser() {
   }
 
   photosTab.className = `${tabBaseClass} ${isPhotoView
-      ? 'border-blue-200 bg-blue-50 text-blue-700'
-      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+    ? 'border-blue-200 bg-blue-50 text-blue-700'
+    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
     }`;
   videosTab.className = `${tabBaseClass} ${!isPhotoView
-      ? 'border-blue-200 bg-blue-50 text-blue-700'
-      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+    ? 'border-blue-200 bg-blue-50 text-blue-700'
+    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
     }`;
 
   if (sharedMediaLoading) {
@@ -7195,10 +7195,10 @@ function getSelectedUserStatusMeta(user = selectedUser) {
           ? 'Online now'
           : lastActivityText,
     className: `text-sm font-medium ${activeTypingUsers.length
-        ? 'text-blue-500'
-        : isOnline
-          ? 'text-emerald-500'
-          : 'text-slate-500'
+      ? 'text-blue-500'
+      : isOnline
+        ? 'text-emerald-500'
+        : 'text-slate-500'
       }`,
   };
 }
@@ -8933,16 +8933,29 @@ function getUserListPreviewMeta(user) {
     unread: 0,
   };
   const draft = getConversationDraft(user);
+  const activeTypingUsers = Array.from(
+    typingUsers.get(conversationRoomId(user)) || [],
+  );
+  const typingPreview =
+    activeTypingUsers.length && !draft
+      ? isGroupConversation(user)
+        ? formatTypingStatus(activeTypingUsers)
+        : 'Typing...'
+      : '';
+
   return {
     state,
     previewText: draft
       ? `Draft: ${draft}`
-      : state.preview || 'No recent messages yet',
+      : typingPreview || state.preview || 'No recent messages yet',
     previewToneClass: draft
       ? 'font-semibold text-amber-600'
-      : state.unread
-        ? 'font-semibold text-slate-700'
-        : 'text-slate-400',
+      : typingPreview
+        ? 'font-semibold text-blue-600'
+        : state.unread
+          ? 'font-semibold text-slate-700'
+          : 'text-slate-400',
+    isTyping: Boolean(typingPreview),
   };
 }
 
@@ -8971,7 +8984,7 @@ function createUserListElement(user, index = 0) {
   const item = document.createElement('li');
   const isSelected = selectedUser?.id === user.id;
   const isOnline = !isGroupConversation(user) && onlineUserIds.has(user.id);
-  const { state, previewText, previewToneClass } = getUserListPreviewMeta(user);
+  const { state, previewText, previewToneClass, isTyping } = getUserListPreviewMeta(user);
   const lastAtLabel = state.lastAt ? formatMessageTime(state.lastAt) : '';
   const missedCalls = Number(
     missedCallCountsByConversation.get(getConversationCacheKey(user)) || 0,
@@ -8993,8 +9006,8 @@ function createUserListElement(user, index = 0) {
   item.dataset.userKey = userListKey(user);
   item.style.setProperty('--motion-index', String(index % 10));
   item.className = `cursor-pointer rounded-[20px] border px-1.5 py-1 transition-all ${isSelected
-      ? 'border-blue-200 bg-blue-50 shadow-sm'
-      : 'border-transparent bg-white/70 hover:border-slate-200 hover:bg-white'
+    ? 'border-blue-200 bg-blue-50 shadow-sm'
+    : 'border-transparent bg-white/70 hover:border-slate-200 hover:bg-white'
     }`;
   item.classList.add('chat-list-card');
   item.onclick = () => selectUser(user.id);
@@ -9012,7 +9025,7 @@ function createUserListElement(user, index = 0) {
               <p class="min-w-0 flex-1 truncate text-[0.82rem] font-bold text-slate-900">${escapeHtml(displayName(user))}</p>
               ${badges}
             </div>
-            <p class="user-list-preview mt-0.5 truncate text-[11px] leading-4 ${previewToneClass}">
+            <p class="user-list-preview mt-0.5 truncate text-[11px] leading-4 ${previewToneClass}${isTyping ? ' typing' : ''}">
               ${escapeHtml(previewText)}
             </p>
           </div>
