@@ -2,7 +2,7 @@ name: Keep Render Awake
 
 on:
   schedule:
-    - cron: "*/14 * * * *" # Every 14 mins is perfect for Render
+    - cron: "*/14 * * * *" # Runs every 14 mins
   workflow_dispatch: 
 
 jobs:
@@ -11,7 +11,6 @@ jobs:
     steps:
       - name: Ping backend with retry
         run: |
-          # --connect-timeout: waits 30s to connect
-          # --retry: tries 3 times if it fails
-          curl -s --connect-timeout 30 --retry 3 https://chatting-app-nestjs.onrender.com
+          # Use --retry to handle the "Cold Start" delay
+          curl -s --connect-timeout 60 --retry 5 --retry-delay 5 https://chatting-app-nestjs.onrender.com/health
           echo "Ping successful at $(date)"
