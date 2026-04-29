@@ -11043,35 +11043,33 @@ async function sendMessage() {
       );
       input.value = '';
       clearConversationDraft(conversationTarget);
+      const focusInput = () => {
+        try {
+          input.focus({ preventScroll: true });
+          input.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        } catch (error) {
+          input.focus();
+        }
+      };
       window.requestAnimationFrame(() => {
-        input.focus();
+        focusInput();
       });
+      window.setTimeout(focusInput, 80);
     }
 
     if (text) {
-      if (!navigator.onLine || !socket?.connected) {
-        queueOfflineTextMessage(conversationTarget, structuredText, {
-          __queueOptions: {
-            encoded: true,
-            realtimeId: optimisticMessage?.id,
-            createdAt: optimisticMessage?.createdAt,
-          },
-        });
-        textHandedOff = true;
-      } else {
-        enqueueOutgoingTextMessage({
-          optimisticMessageId: optimisticMessage?.id,
-          roomId: selectedConversationRoomId(conversationTarget),
-          userId: conversationTarget.id,
-          chatType: isGroupConversation(conversationTarget) ? 'group' : 'direct',
-          rawText: text,
-          structuredText,
-          createdAt: optimisticMessage?.createdAt || new Date().toISOString(),
-          draftFingerprint,
-          conversationTarget,
-        });
-        textHandedOff = true;
-      }
+      enqueueOutgoingTextMessage({
+        optimisticMessageId: optimisticMessage?.id,
+        roomId: selectedConversationRoomId(conversationTarget),
+        userId: conversationTarget.id,
+        chatType: isGroupConversation(conversationTarget) ? 'group' : 'direct',
+        rawText: text,
+        structuredText,
+        createdAt: optimisticMessage?.createdAt || new Date().toISOString(),
+        draftFingerprint,
+        conversationTarget,
+      });
+      textHandedOff = true;
     }
 
     clearOutgoingTypingState();
