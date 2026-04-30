@@ -3014,10 +3014,12 @@ body.chat-page #input-area .rounded-\[24px\].border.border-slate-200.bg-white.p-
 }
 
 body.chat-page #msg-input {
-  min-height: 2.4rem;
+  min-height: 3rem;
   max-height: 7rem;
-  font-size: 0.94rem;
-  line-height: 1.45;
+  font-size: 0.96rem;
+  line-height: 1.4;
+  border-radius: 1rem;
+  padding: 0.85rem 1rem;
 }
 
 body.chat-page #send-message-btn,
@@ -3026,22 +3028,22 @@ body.chat-page #voice-record-btn,
 body.chat-page #composer-actions-btn,
 body.chat-page #request-action-btn,
 body.chat-page #request-reject-btn {
-  min-height: 2.35rem;
-  border-radius: 0.85rem;
+  min-height: 3rem;
+  border-radius: 1rem;
 }
 
 body.chat-page #send-message-btn,
 body.chat-page #voice-send-btn,
 body.chat-page #request-action-btn,
 body.chat-page #request-reject-btn {
-  padding-left: 0.85rem;
-  padding-right: 0.85rem;
+  padding-left: 0.9rem;
+  padding-right: 0.9rem;
 }
 
 body.chat-page #composer-actions-btn,
 body.chat-page #voice-record-btn {
-  width: 2.35rem;
-  height: 2.35rem;
+  width: 3rem;
+  height: 3rem;
 }
 
 body.chat-page #empty-state>div {
@@ -3759,20 +3761,20 @@ body.chat-page .message-row .message-bubble-shell {
 
 body.chat-page .message-row .message-bubble-text,
 body.chat-page .message-row .message-bubble-status {
-  max-width: min(100%, 18.5rem) !important;
-  padding: 0.34rem 0.62rem !important;
+  max-width: min(100%, 24.5rem) !important;
+  padding: 0.5rem 0.88rem !important;
 }
 
 body.chat-page .message-row .message-bubble-document,
 body.chat-page .message-row .message-bubble-audio {
-  max-width: min(100%, 20.5rem) !important;
-  padding: 0.5rem 0.68rem !important;
+  max-width: min(100%, 26rem) !important;
+  padding: 0.65rem 0.88rem !important;
 }
 
 body.chat-page .message-row .message-bubble-image,
 body.chat-page .message-row .message-bubble-video {
-  max-width: min(100%, 22rem) !important;
-  padding: 0.26rem !important;
+  max-width: min(100%, 26rem) !important;
+  padding: 0.35rem !important;
 }
 
 body.chat-page .message-row .message-bubble-footer {
@@ -4766,7 +4768,7 @@ body.chat-page.dark-mode #image-preview-modal {
   body.chat-page.dark-mode .message-row .message-bubble-text,
   body.chat-page .message-row .message-bubble-status,
   body.chat-page.dark-mode .message-row .message-bubble-status {
-    max-width: min(100%, 34rem) !important;
+    max-width: min(100%, 26rem) !important;
   }
 }
 
