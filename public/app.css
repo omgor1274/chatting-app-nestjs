@@ -1336,9 +1336,9 @@ body.chat-page #message-container {
 
   .mobile-chat-composer .relative.flex.items-end.gap-2 {
     display: grid;
-    grid-template-columns: 44px minmax(0, 1fr) auto;
-    align-items: end;
-    gap: 0.35rem;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.4rem;
   }
 
   .mobile-chat-composer input,
@@ -1348,24 +1348,26 @@ body.chat-page #message-container {
   }
 
   .mobile-chat-composer #msg-input {
-    min-height: 40px;
+    min-height: 46px;
     max-height: 7.5rem;
     font-size: 16px;
+    padding-top: 0.9rem;
+    padding-bottom: 0.9rem;
   }
 
   .mobile-chat-composer #send-message-btn {
-    min-width: 64px;
-    min-height: 42px;
-    border-radius: 18px;
-    padding-left: 0.85rem;
-    padding-right: 0.85rem;
+    min-width: 68px;
+    min-height: 46px;
+    border-radius: 20px;
+    padding-left: 1rem;
+    padding-right: 1rem;
   }
 
   .mobile-chat-composer #composer-actions-btn {
     flex-shrink: 0;
-    width: 42px;
-    height: 42px;
-    border-radius: 18px;
+    width: 46px;
+    height: 46px;
+    border-radius: 20px;
   }
 
   #composer-actions-menu {
