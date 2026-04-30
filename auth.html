@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#20352f" />
+    <meta name="theme-color" content="#f7e8e2" />
     <meta
       name="description"
       content="Sign in to O-chat to access your private secure messaging workspace."
@@ -12,10 +12,19 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;700;800&family=Roboto+Flex:opsz,wght@8..144,400;8..144,500;8..144,600;8..144,700;8..144,800&display=swap"
       rel="stylesheet"
     />
-    <link rel="preload" href="/public/tailwind.css?v=20260429-perf1" as="style" />
+    <script>
+      if (localStorage.getItem('chat_dark_mode') === '1') {
+        document.documentElement.classList.add('prefers-dark-mode');
+      }
+    </script>
+    <link
+      rel="preload"
+      href="/public/tailwind.css?v=20260429-perf1"
+      as="style"
+    />
     <link rel="stylesheet" href="/public/tailwind.css?v=20260429-perf1" />
     <link rel="stylesheet" href="/public/app.css?v=20260429-perf1" />
   </head>
@@ -34,23 +43,22 @@
             <div>
               <p class="auth-kicker">O-chat</p>
               <h1 class="auth-story-title display-font">
-                Calm, private messaging with a slimmer presence.
+                Professional messaging shaped for heavy daily chat.
               </h1>
               <p class="auth-story-copy">
-                A quieter interface for people who want the product to feel
-                refined, measured, and never bulky.
+                Warm surfaces, fast scanning, and fewer distractions across the
+                entire workspace.
               </p>
             </div>
             <div class="auth-story-list">
               <div class="auth-story-note">
-                Minimal surfaces with just enough warmth to feel intentional.
+                Conversation-first layout with clearer reading rhythm.
               </div>
               <div class="auth-story-note">
-                Clean entry flow for login, verification, and reset without
-                clutter.
+                Refined auth, verification, and reset states without clutter.
               </div>
               <div class="auth-story-note">
-                Private conversations, simple controls, and less visual noise.
+                Private conversations, simple controls, and polished theming.
               </div>
             </div>
           </aside>
@@ -69,10 +77,10 @@
                   >Skip to chats</a
                 >
                 <h2 id="auth-title" class="text-3xl font-bold text-slate-900">
-                  Welcome Back
+                  Enter O-chat
                 </h2>
                 <p id="auth-subtitle" class="text-sm leading-6 text-slate-500">
-                  Login or create an account.
+                  Sign in or create an account to continue.
                 </p>
               </div>
 

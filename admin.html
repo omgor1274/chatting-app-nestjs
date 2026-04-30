@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#20352f" />
+    <meta name="theme-color" content="#f7e8e2" />
     <meta
       name="description"
       content="Review reports, accounts, and moderation activity from the O-chat admin dashboard."
@@ -12,10 +12,19 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;700;800&family=Roboto+Flex:opsz,wght@8..144,400;8..144,500;8..144,600;8..144,700;8..144,800&display=swap"
       rel="stylesheet"
     />
-    <link rel="preload" href="/public/tailwind.css?v=20260429-perf1" as="style" />
+    <script>
+      if (localStorage.getItem('chat_dark_mode') === '1') {
+        document.documentElement.classList.add('prefers-dark-mode');
+      }
+    </script>
+    <link
+      rel="preload"
+      href="/public/tailwind.css?v=20260429-perf1"
+      as="style"
+    />
     <link rel="stylesheet" href="/public/tailwind.css?v=20260429-perf1" />
     <link rel="stylesheet" href="/public/app.css?v=20260429-perf1" />
   </head>
@@ -213,9 +222,6 @@
     </div>
 
     <script src="/runtime-config.js?v=20260429-perf1"></script>
-    <script
-      type="module"
-      src="/public/admin.js?v=20260429-perf1"
-    ></script>
+    <script type="module" src="/public/admin.js?v=20260429-perf1"></script>
   </body>
 </html>
