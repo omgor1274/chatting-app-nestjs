@@ -1021,14 +1021,14 @@ async function ensureEncryptionKeys(forceSync = false) {
         },
       );
 
-      if (hasServerKeyBackup) {
-        savedPrivateKey = '';
-        savedPublicKey = '';
-        writeStoredValue(privateKeyStorageKey(currentUser.id), '');
-        writeStoredValue(publicKeyStorageKey(currentUser.id), '');
-      } else if (serverPublicKey) {
-        throw new Error(
-          'Please log in again on this device so O-chat can refresh your encrypted messages.',
+      savedPrivateKey = '';
+      savedPublicKey = '';
+      writeStoredValue(privateKeyStorageKey(currentUser.id), '');
+      writeStoredValue(publicKeyStorageKey(currentUser.id), '');
+      if (serverPublicKey) {
+        console.warn(
+          'Unable to reuse existing encryption keys; generating a fresh key pair for this device.',
+          { userId: currentUser.id },
         );
       }
     }
@@ -1075,8 +1075,9 @@ async function ensureEncryptionKeys(forceSync = false) {
 
   if (!savedPrivateKey || !savedPublicKey) {
     if (hasServerKeyBackup && !restoredFromServerKeyBackup) {
-      throw new Error(
-        'Please log in again on this device so O-chat can unlock your encrypted messages.',
+      console.warn(
+        'Encrypted key backup could not be restored; generating a new key pair to continue login.',
+        { userId: currentUser.id },
       );
     }
 
@@ -1172,7 +1173,7 @@ async function ensureSelectedConversationHasKeys(user = selectedUser) {
       (candidate) =>
         candidate.id === conversation.id &&
         Boolean(isGroupConversation(candidate)) ===
-          Boolean(isGroupConversation(conversation)),
+        Boolean(isGroupConversation(conversation)),
     );
     if (refreshedConversation) {
       conversation = refreshedConversation;
@@ -1201,16 +1202,16 @@ async function encryptTextForConversation(plainText, user = selectedUser) {
 
   const recipients = isGroupConversation(conversation)
     ? (conversation.members || []).map((member) => ({
-        userId: member.userId,
-        publicKey:
-          member.userId === currentUser.id
-            ? currentUser.publicKey
-            : member.publicKey,
-      }))
+      userId: member.userId,
+      publicKey:
+        member.userId === currentUser.id
+          ? currentUser.publicKey
+          : member.publicKey,
+    }))
     : [
-        { userId: currentUser.id, publicKey: currentUser.publicKey },
-        { userId: conversation.id, publicKey: conversation.publicKey },
-      ];
+      { userId: currentUser.id, publicKey: currentUser.publicKey },
+      { userId: conversation.id, publicKey: conversation.publicKey },
+    ];
 
   if (recipients.some((recipient) => !recipient.publicKey)) {
     throw new Error('One or more recipients are missing encryption keys.');
@@ -1446,18 +1447,17 @@ function buildStarredMessageEntry(message) {
     message.senderId === currentUser?.id
       ? { name: 'You' }
       : peopleDirectory.find((user) => user.id === message.senderId) ||
-        users.find((user) => user.id === message.senderId) ||
-        null;
+      users.find((user) => user.id === message.senderId) ||
+      null;
 
   return {
     id: message.id,
     conversationKey: message.groupId
       ? `group:${message.groupId}`
-      : `direct:${
-          message.senderId === currentUser?.id
-            ? message.receiverId
-            : message.senderId
-        }`,
+      : `direct:${message.senderId === currentUser?.id
+        ? message.receiverId
+        : message.senderId
+      }`,
     preview: getMessagePreview(message),
     createdAt: message.createdAt,
     senderName: sender ? displayName(sender) : 'Someone',
@@ -1772,10 +1772,10 @@ function getPersistedConversationStateEntries() {
           key === activeConversationCacheKey
             ? Number.MAX_SAFE_INTEGER
             : Number(
-                recentActivity.get(conversationId)?.lastAt ||
-                  state?.fetchedAt ||
-                  0,
-              ),
+              recentActivity.get(conversationId)?.lastAt ||
+              state?.fetchedAt ||
+              0,
+            ),
       };
     })
     .sort((left, right) => right.rank - left.rank)
@@ -2675,9 +2675,9 @@ function applyIncomingReactionUpdate(payload) {
       payload.fromUserId === currentUser?.id
         ? 'You'
         : displayName(
-            users.find((user) => user.id === payload.fromUserId) ||
-              selectedUser,
-          ) || 'Someone';
+          users.find((user) => user.id === payload.fromUserId) ||
+          selectedUser,
+        ) || 'Someone';
   }
 
   if (!reaction) {
@@ -2707,8 +2707,8 @@ function buildReplyTarget(message) {
     message.senderId === currentUser?.id
       ? { name: 'You' }
       : peopleDirectory.find((user) => user.id === message.senderId) ||
-        users.find((user) => user.id === message.senderId) ||
-        null;
+      users.find((user) => user.id === message.senderId) ||
+      null;
 
   return {
     id: message.id,
@@ -2848,9 +2848,9 @@ function showSelectedMessageInfo() {
     messageActionTarget.senderId === currentUser?.id
       ? 'You'
       : messageActionTarget.senderName ||
-        messageActionTarget.sender?.name ||
-        displayName(selectedUser) ||
-        'Someone';
+      messageActionTarget.sender?.name ||
+      displayName(selectedUser) ||
+      'Someone';
   const typeLabel = String(
     messageActionTarget.messageType || 'TEXT',
   ).toLowerCase();
@@ -3086,9 +3086,8 @@ function renderSidebarStarredHub() {
     return;
   }
 
-  count.textContent = `${starred.length} recent starred message${
-    starred.length === 1 ? '' : 's'
-  }`;
+  count.textContent = `${starred.length} recent starred message${starred.length === 1 ? '' : 's'
+    }`;
   list.innerHTML = starred
     .map(
       (entry) => `
@@ -4534,12 +4533,12 @@ function renderAttachmentUploadQueue() {
       const isFailed = task.status === 'failed';
       const percentage = task.file?.size
         ? Math.max(
-            0,
-            Math.min(
-              100,
-              Math.round((task.progressBytes / task.file.size) * 100),
-            ),
-          )
+          0,
+          Math.min(
+            100,
+            Math.round((task.progressBytes / task.file.size) * 100),
+          ),
+        )
         : 0;
       const progressText = isDone
         ? 'Ready in chat'
@@ -4558,19 +4557,18 @@ function renderAttachmentUploadQueue() {
                     : task.status === 'finalizing'
                       ? 'Finalizing file...'
                       : formatUploadProgress(
-                          task.progressBytes,
-                          task.file.size,
-                        );
+                        task.progressBytes,
+                        task.file.size,
+                      );
       const actionButton = renderAttachmentQueueActionButtons(task);
 
       return `
         <div class="rounded-[20px] border border-slate-200 bg-white px-3 py-3 shadow-sm">
           <div class="flex items-start gap-3">
-            ${
-              task.previewUrl
-                ? `<img src="${escapeHtml(task.previewUrl)}" alt="" class="h-14 w-14 rounded-2xl object-cover" />`
-                : `<div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-xs font-bold uppercase tracking-wide text-slate-500">${escapeHtml((task.file?.name || 'file').split('.').pop() || 'file')}</div>`
-            }
+            ${task.previewUrl
+          ? `<img src="${escapeHtml(task.previewUrl)}" alt="" class="h-14 w-14 rounded-2xl object-cover" />`
+          : `<div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-xs font-bold uppercase tracking-wide text-slate-500">${escapeHtml((task.file?.name || 'file').split('.').pop() || 'file')}</div>`
+        }
             <div class="min-w-0 flex-1">
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
@@ -7236,9 +7234,8 @@ function renderSharedMedia() {
   } else if (!sharedMediaItems.length) {
     count.textContent = 'No shared photos or videos yet.';
   } else {
-    count.textContent = `${sharedMediaItems.length} shared item${
-      sharedMediaItems.length === 1 ? '' : 's'
-    }`;
+    count.textContent = `${sharedMediaItems.length} shared item${sharedMediaItems.length === 1 ? '' : 's'
+      }`;
   }
 
   grid.innerHTML = [
@@ -7276,16 +7273,14 @@ function renderSharedMediaBrowser() {
     count.textContent = `${items.length} ${getSharedMediaKindLabel(sharedMediaBrowserKind, items.length)} in ${displayName(selectedUser)}`;
   }
 
-  photosTab.className = `${tabBaseClass} ${
-    isPhotoView
+  photosTab.className = `${tabBaseClass} ${isPhotoView
       ? 'border-blue-200 bg-blue-50 text-blue-700'
       : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-  }`;
-  videosTab.className = `${tabBaseClass} ${
-    !isPhotoView
+    }`;
+  videosTab.className = `${tabBaseClass} ${!isPhotoView
       ? 'border-blue-200 bg-blue-50 text-blue-700'
       : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-  }`;
+    }`;
 
   if (sharedMediaLoading) {
     empty.classList.add('hidden');
@@ -7322,8 +7317,8 @@ function renderSharedMediaBrowser() {
       );
       const dateLabel = escapeHtml(
         formatShortDate(item.createdAt) ||
-          formatRelativeTime(item.createdAt) ||
-          '',
+        formatRelativeTime(item.createdAt) ||
+        '',
       );
 
       if (item.kind === 'video') {
@@ -7635,13 +7630,12 @@ function getSelectedUserStatusMeta(user = selectedUser) {
         : isOnline
           ? 'Online now'
           : lastActivityText,
-    className: `text-sm font-medium ${
-      activeTypingUsers.length
+    className: `text-sm font-medium ${activeTypingUsers.length
         ? 'text-blue-500'
         : isOnline
           ? 'text-emerald-500'
           : 'text-slate-500'
-    }`,
+      }`,
   };
 }
 
@@ -8503,15 +8497,27 @@ async function startApp() {
       ? users.some((user) => user.id === requestedConversationId)
       : true;
 
-    const encryptionPromise = ensureEncryptionKeys(true).then(() => {
-      setStartupLoaderProgress(
-        restoredShell ? 64 : 74,
-        'Loading your chats',
-        restoredHistory
-          ? 'Encrypted cache unlocked.'
-          : 'Secure messages unlocked.',
-      );
-    });
+    const encryptionPromise = ensureEncryptionKeys(true)
+      .then(() => {
+        setStartupLoaderProgress(
+          restoredShell ? 64 : 74,
+          'Loading your chats',
+          restoredHistory
+            ? 'Encrypted cache unlocked.'
+            : 'Secure messages unlocked.',
+        );
+      })
+      .catch((error) => {
+        console.warn(
+          'Encryption key setup failed, continuing login without unlocked encrypted history.',
+          error,
+        );
+        setStartupLoaderProgress(
+          restoredShell ? 64 : 74,
+          'Loading your chats',
+          'Unable to unlock encrypted messages. You can still use O-chat.',
+        );
+      });
 
     if (!users.length || !hasRequestedConversation) {
       setStartupLoaderProgress(
@@ -8942,7 +8948,7 @@ async function changePassword() {
   document.getElementById('confirm-new-password-input').value = '';
   forceSessionLogout(
     data.message ||
-      'Password updated successfully. Please log in again on this device.',
+    'Password updated successfully. Please log in again on this device.',
   );
 }
 
@@ -8962,7 +8968,7 @@ async function loadUsers() {
     if (recentResult.status !== 'fulfilled') {
       throw new Error(
         recentResult.reason?.message ||
-          'Failed to load recent chats. Please try again.',
+        'Failed to load recent chats. Please try again.',
       );
     }
 
@@ -9198,18 +9204,18 @@ function getSearchUserPool() {
     query && userSearchResultsQuery === query ? userSearchResults : [];
   const directUsers = matchingSearchResults.length
     ? matchingSearchResults.map((user) => {
-        const existing = users.find(
-          (entry) => !isGroupConversation(entry) && entry.id === user.id,
-        );
-        return normalizeUser(
-          {
-            ...(existing || {}),
-            ...user,
-            chatType: 'direct',
-          },
-          existing || user,
-        );
-      })
+      const existing = users.find(
+        (entry) => !isGroupConversation(entry) && entry.id === user.id,
+      );
+      return normalizeUser(
+        {
+          ...(existing || {}),
+          ...user,
+          chatType: 'direct',
+        },
+        existing || user,
+      );
+    })
     : users.filter((user) => !isGroupConversation(user));
 
   const merged = new Map();
@@ -9452,22 +9458,20 @@ function createUserListElement(user, index = 0) {
 
   item.dataset.userKey = userListKey(user);
   item.style.setProperty('--motion-index', String(index % 10));
-  item.className = `cursor-pointer rounded-[20px] border px-1.5 py-1 transition-all ${
-    isSelected
+  item.className = `cursor-pointer rounded-[20px] border px-1.5 py-1 transition-all ${isSelected
       ? 'border-blue-200 bg-blue-50 shadow-sm'
       : 'border-transparent bg-white/70 hover:border-slate-200 hover:bg-white'
-  }`;
+    }`;
   item.classList.add('chat-list-card');
   item.onclick = () => selectUser(user.id);
   item.innerHTML = `
         <div class="chat-list-card-body flex items-center gap-2.5 rounded-[16px] p-1.5">
           <div class="relative shrink-0">
             <img src="${userAvatar(user)}" alt="${escapeHtml(displayName(user))} profile photo" width="40" height="40" loading="lazy" decoding="async" class="h-10 w-10 rounded-[14px] object-cover shadow-sm">
-            ${
-              isGroupConversation(user)
-                ? `<span class="absolute -bottom-1 -right-1 rounded-full border-2 border-white bg-slate-900 px-1 py-[1px] text-[9px] font-bold uppercase tracking-wide text-white">G</span>`
-                : `<span class="absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-white ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}"></span>`
-            }
+            ${isGroupConversation(user)
+      ? `<span class="absolute -bottom-1 -right-1 rounded-full border-2 border-white bg-slate-900 px-1 py-[1px] text-[9px] font-bold uppercase tracking-wide text-white">G</span>`
+      : `<span class="absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-white ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}"></span>`
+    }
           </div>
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-1.5">
@@ -9479,16 +9483,14 @@ function createUserListElement(user, index = 0) {
             </p>
           </div>
           <div class="flex flex-col items-end gap-1">
-            ${
-              lastAtLabel
-                ? `<span class="chat-list-card-time text-[10px] font-semibold text-slate-400">${escapeHtml(lastAtLabel)}</span>`
-                : ''
-            }
-            ${
-              missedCalls
-                ? `<span class="rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">${missedCalls} missed</span>`
-                : ''
-            }
+            ${lastAtLabel
+      ? `<span class="chat-list-card-time text-[10px] font-semibold text-slate-400">${escapeHtml(lastAtLabel)}</span>`
+      : ''
+    }
+            ${missedCalls
+      ? `<span class="rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">${missedCalls} missed</span>`
+      : ''
+    }
             ${state.unread ? `<span class="flex h-6 min-w-6 items-center justify-center rounded-full bg-blue-600 px-1.5 text-[11px] font-bold text-white">${state.unread}</span>` : ''}
           </div>
         </div>
@@ -9631,17 +9633,15 @@ function updateArchivedChatsToggle() {
       class="h-5 w-5"
       aria-hidden="true"
     >
-      ${
-        showArchivedChats
-          ? '<path d="M19 12H5"></path><path d="m12 19-7-7 7-7"></path>'
-          : '<path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"></path><path d="M23 3H1v5h22V3Z"></path><path d="M10 12h4"></path>'
-      }
+      ${showArchivedChats
+      ? '<path d="M19 12H5"></path><path d="m12 19-7-7 7-7"></path>'
+      : '<path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"></path><path d="M23 3H1v5h22V3Z"></path><path d="M10 12h4"></path>'
+    }
     </svg>
     <span class="sr-only">${escapeHtml(label)}</span>
-    ${
-      !showArchivedChats && archivedCount
-        ? `<span class="sidebar-icon-badge">${archivedCount}</span>`
-        : ''
+    ${!showArchivedChats && archivedCount
+      ? `<span class="sidebar-icon-badge">${archivedCount}</span>`
+      : ''
     }
   `;
 }
@@ -9687,9 +9687,8 @@ function renderStarredMessages() {
     return;
   }
 
-  count.textContent = `${starred.length} starred message${
-    starred.length === 1 ? '' : 's'
-  }`;
+  count.textContent = `${starred.length} starred message${starred.length === 1 ? '' : 's'
+    }`;
   list.innerHTML = starred
     .slice(0, 8)
     .map(
@@ -10056,7 +10055,7 @@ function connectSocket() {
           message.senderId === currentUser.id &&
           message.receiverId === selectedUser.id &&
           new Date(message.createdAt).getTime() <=
-            new Date(payload.readAt).getTime()
+          new Date(payload.readAt).getTime()
         ) {
           message.readAt = payload.readAt;
           message.readByCount = 1;
@@ -10834,7 +10833,7 @@ function updateChatAccessUI() {
     headerActions?.classList.toggle(
       'hidden',
       actionBtn.classList.contains('hidden') &&
-        rejectBtn.classList.contains('hidden'),
+      rejectBtn.classList.contains('hidden'),
     );
   };
 
@@ -11003,7 +11002,7 @@ async function toggleBlockedUser() {
   if (!res.ok) {
     alert(
       data.message ||
-        (isBlockedByMe ? 'Failed to unblock user' : 'Failed to block user'),
+      (isBlockedByMe ? 'Failed to unblock user' : 'Failed to block user'),
     );
     return;
   }
@@ -11141,9 +11140,9 @@ function handleMessageUpdated(message) {
   if (!belongsToSelectedConversation(message)) {
     updateRecentActivity(
       message.groupId ||
-        (message.senderId === currentUser.id
-          ? message.receiverId
-          : message.senderId),
+      (message.senderId === currentUser.id
+        ? message.receiverId
+        : message.senderId),
       message,
       false,
     );
@@ -11153,9 +11152,9 @@ function handleMessageUpdated(message) {
   replaceRenderedMessage(message);
   updateRecentActivity(
     message.groupId ||
-      (message.senderId === currentUser.id
-        ? message.receiverId
-        : message.senderId),
+    (message.senderId === currentUser.id
+      ? message.receiverId
+      : message.senderId),
     message,
     false,
   );
@@ -11292,9 +11291,8 @@ function queueOfflineTextMessage(user, text, structuredOptions = {}) {
   persistOfflineQueuedMessages();
   const sendStatus = getById('chat-send-status');
   if (sendStatus) {
-    sendStatus.textContent = `${offlineQueuedMessages.length} message${
-      offlineQueuedMessages.length === 1 ? '' : 's'
-    } queued offline. They will send when you reconnect.`;
+    sendStatus.textContent = `${offlineQueuedMessages.length} message${offlineQueuedMessages.length === 1 ? '' : 's'
+      } queued offline. They will send when you reconnect.`;
     sendStatus.classList.remove('hidden');
   }
   return true;
@@ -11498,11 +11496,11 @@ async function sendMessage() {
   const shouldTrackDraftSubmission = Boolean(text || voiceFile);
   const draftFingerprint = shouldTrackDraftSubmission
     ? buildDraftFingerprint({
-        roomId: selectedConversationRoomId(conversationTarget),
-        text: structuredText || text,
-        attachmentFile: null,
-        voiceFile,
-      })
+      roomId: selectedConversationRoomId(conversationTarget),
+      text: structuredText || text,
+      attachmentFile: null,
+      voiceFile,
+    })
     : '';
 
   if (!text && !voiceFile && !pendingAttachmentCount) {
@@ -11525,11 +11523,11 @@ async function sendMessage() {
 
   const optimisticMessage = text
     ? createOptimisticTextMessage(
-        text,
-        conversationTarget,
-        structuredSendOptions,
-        !navigator.onLine || !socket?.connected ? 'queued-offline' : 'queued',
-      )
+      text,
+      conversationTarget,
+      structuredSendOptions,
+      !navigator.onLine || !socket?.connected ? 'queued-offline' : 'queued',
+    )
     : null;
   let textHandedOff = false;
 
@@ -11749,9 +11747,9 @@ async function rejectIncomingRequest() {
     if (!res.ok) {
       alert(
         data.message ||
-          (isOutgoing
-            ? 'Failed to withdraw request'
-            : 'Failed to reject request'),
+        (isOutgoing
+          ? 'Failed to withdraw request'
+          : 'Failed to reject request'),
       );
       return;
     }
@@ -11776,8 +11774,8 @@ async function openCreateGroupModal() {
   );
   container.innerHTML = candidates.length
     ? candidates
-        .map(
-          (user) => `
+      .map(
+        (user) => `
                 <label class="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 transition hover:border-slate-300 hover:bg-slate-50">
                   <input type="checkbox" value="${user.id}" class="h-4 w-4 rounded border-slate-300">
                   <img src="${userAvatar(user)}" alt="${escapeHtml(displayName(user))} profile photo" width="40" height="40" class="h-10 w-10 rounded-xl object-cover">
@@ -11787,11 +11785,11 @@ async function openCreateGroupModal() {
                   </div>
                 </label>
               `,
-        )
-        .join('')
+      )
+      .join('')
     : renderEmptyGroupCandidateState(
-        'Only accepted one-to-one chats appear here. Accept a chat request first, then create the group.',
-      );
+      'Only accepted one-to-one chats appear here. Accept a chat request first, then create the group.',
+    );
   document.getElementById('create-group-modal').classList.remove('hidden');
   document.getElementById('create-group-modal').classList.add('flex');
 }
@@ -11916,18 +11914,16 @@ async function openManageGroupModal() {
                   <p class="truncate text-xs text-slate-500">${escapeHtml(member.role)}${member.userId === currentUser.id ? ' · You' : ''}</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
-                  ${
-                    merged.role === 'ADMIN' &&
-                    member.userId !== currentUser.id &&
-                    member.role !== 'ADMIN'
-                      ? `<button onclick="makeGroupAdmin('${member.userId}')" class="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100">Make Admin</button>`
-                      : ''
-                  }
-                  ${
-                    merged.role === 'ADMIN' && member.userId !== currentUser.id
-                      ? `<button onclick="removeMemberFromGroup('${member.userId}')" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">Remove</button>`
-                      : ''
-                  }
+                  ${merged.role === 'ADMIN' &&
+          member.userId !== currentUser.id &&
+          member.role !== 'ADMIN'
+          ? `<button onclick="makeGroupAdmin('${member.userId}')" class="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100">Make Admin</button>`
+          : ''
+        }
+                  ${merged.role === 'ADMIN' && member.userId !== currentUser.id
+          ? `<button onclick="removeMemberFromGroup('${member.userId}')" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">Remove</button>`
+          : ''
+        }
                 </div>
               </div>
             `,
@@ -11940,8 +11936,8 @@ async function openManageGroupModal() {
   document.getElementById('manage-group-candidates').innerHTML =
     inviteCandidates.length
       ? inviteCandidates
-          .map(
-            (person) => `
+        .map(
+          (person) => `
                   <div class="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3">
                     <img src="${userAvatar(person)}" alt="${escapeHtml(displayName(person))} profile photo" width="40" height="40" class="h-10 w-10 rounded-xl object-cover">
                     <div class="min-w-0 flex-1">
@@ -11957,11 +11953,11 @@ async function openManageGroupModal() {
                     </button>
                   </div>
                 `,
-          )
-          .join('')
+        )
+        .join('')
       : renderEmptyGroupCandidateState(
-          'Only accepted chat contacts can be invited here.',
-        );
+        'Only accepted chat contacts can be invited here.',
+      );
 
   document.getElementById('manage-group-modal').classList.remove('hidden');
   document.getElementById('manage-group-modal').classList.add('flex');
@@ -12182,8 +12178,8 @@ function openMessageActions(x, y, message) {
     .classList.toggle(
       'hidden',
       message.senderId !== currentUser.id ||
-        Date.now() - new Date(message.createdAt).getTime() > 5 * 60 * 1000 ||
-        Boolean(message.deletedForEveryoneAt),
+      Date.now() - new Date(message.createdAt).getTime() > 5 * 60 * 1000 ||
+      Boolean(message.deletedForEveryoneAt),
     );
   menu.classList.remove('hidden');
 
@@ -13007,8 +13003,8 @@ async function prepareCallStream(callType) {
     video:
       callType === 'video'
         ? getVideoCallConstraints({
-            facingMode: activeCall.preferredFacingMode,
-          })
+          facingMode: activeCall.preferredFacingMode,
+        })
         : false,
   });
 
@@ -13344,13 +13340,13 @@ async function saveRename() {
   users = users.map((user) =>
     user.id === selectedUser.id
       ? normalizeUser(
-          {
-            ...user,
-            nickname: data.nickname,
-            displayName: data.nickname || user.name,
-          },
-          user,
-        )
+        {
+          ...user,
+          nickname: data.nickname,
+          displayName: data.nickname || user.name,
+        },
+        user,
+      )
       : user,
   );
 
@@ -13408,16 +13404,15 @@ function renderMessageReactionHtml(message) {
   const ownerLabel = isOwnMessageReaction(message.id)
     ? 'You'
     : escapeHtml(
-        data.ownerName ||
-          displayName(
-            users.find((user) => user.id === data.ownerId) || selectedUser,
-          ) ||
-          'Someone',
-      );
+      data.ownerName ||
+      displayName(
+        users.find((user) => user.id === data.ownerId) || selectedUser,
+      ) ||
+      'Someone',
+    );
 
-  const chipClasses = `message-reaction-chip ${
-    isOwnMessageReaction(message.id) ? 'is-own-reaction' : ''
-  }`;
+  const chipClasses = `message-reaction-chip ${isOwnMessageReaction(message.id) ? 'is-own-reaction' : ''
+    }`;
 
   return `
     <div class="mt-2">
@@ -13461,11 +13456,10 @@ function renderTimeCapsuleMessageMetaHtml(message, isSent, metaTone) {
       <p class="mt-1 text-sm font-semibold ${titleTone}">
         ${escapeHtml(getTimeCapsuleUnlockLabel(message) || 'Scheduled message')}
       </p>
-      ${
-        note
-          ? `<p class="mt-1 text-xs leading-5 ${labelTone}">${escapeHtml(note)}</p>`
-          : ''
-      }
+      ${note
+      ? `<p class="mt-1 text-xs leading-5 ${labelTone}">${escapeHtml(note)}</p>`
+      : ''
+    }
     </div>
   `;
 }
@@ -13485,8 +13479,7 @@ function renderSpoilerMessageMetaHtml(message, isSent, metaTone) {
         : 'Spoiler message';
 
   return `
-    <div class="mb-3 rounded-2xl border ${
-      isSent ? 'border-white/15 bg-white/10' : 'border-slate-200/90 bg-black/5'
+    <div class="mb-3 rounded-2xl border ${isSent ? 'border-white/15 bg-white/10' : 'border-slate-200/90 bg-black/5'
     } px-3 py-2.5 text-left">
       <p class="text-[11px] font-semibold uppercase tracking-[0.2em] ${metaTone}">
         Spoiler
@@ -13495,13 +13488,12 @@ function renderSpoilerMessageMetaHtml(message, isSent, metaTone) {
         ${escapeHtml(title)}
       </p>
       <p class="mt-1 text-xs leading-5 ${metaTone}">
-        ${
-          message.senderId === currentUser?.id
-            ? 'Recipients will reveal this manually.'
-            : isSpoilerMessageRevealed(message)
-              ? 'Revealed for you.'
-              : 'Hidden until you reveal it.'
-        }
+        ${message.senderId === currentUser?.id
+      ? 'Recipients will reveal this manually.'
+      : isSpoilerMessageRevealed(message)
+        ? 'Revealed for you.'
+        : 'Hidden until you reveal it.'
+    }
       </p>
     </div>
   `;
@@ -13521,15 +13513,13 @@ function renderTextMessageContentHtml(message, isSent, metaTone) {
   if (isMessageTimeCapsuleLocked(message)) {
     return `
       ${capsuleMeta}
-      <div class="rounded-2xl border border-dashed ${
-        isSent ? 'border-white/25 bg-white/10' : 'border-amber-300 bg-white/85'
+      <div class="rounded-2xl border border-dashed ${isSent ? 'border-white/25 bg-white/10' : 'border-amber-300 bg-white/85'
       } px-3 py-3 text-left">
         <p class="text-sm font-semibold ${isSent ? 'text-white' : 'text-amber-900'}">
           Message sealed until it opens.
         </p>
-        <p class="mt-1 text-xs leading-5 ${
-          isSent ? 'text-blue-100/90' : 'text-amber-800/80'
-        }">
+        <p class="mt-1 text-xs leading-5 ${isSent ? 'text-blue-100/90' : 'text-amber-800/80'
+      }">
           The contents will appear automatically when the unlock time arrives.
         </p>
       </div>
@@ -13557,9 +13547,8 @@ function renderTextMessageContentHtml(message, isSent, metaTone) {
           </span>
         </span>
         <span
-          class="shrink-0 rounded-full ${
-            isSent ? 'bg-white/15 text-white' : 'bg-white text-slate-600'
-          } px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide"
+          class="shrink-0 rounded-full ${isSent ? 'bg-white/15 text-white' : 'bg-white text-slate-600'
+      } px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide"
         >
           Reveal
         </span>
@@ -13592,9 +13581,8 @@ function createMessageElement(message, options = {}) {
   }
 
   const bubbleTone = isSent
-    ? `rounded-[14px] rounded-br-[4px] text-white shadow-sm ${
-        message.isPending ? 'bg-blue-500/85' : 'bg-blue-600'
-      }`
+    ? `rounded-[14px] rounded-br-[4px] text-white shadow-sm ${message.isPending ? 'bg-blue-500/85' : 'bg-blue-600'
+    }`
     : 'rounded-[14px] rounded-bl-[4px] border border-slate-200/90 bg-white/95 text-slate-800 shadow-sm';
   const deliveryIndicator = isSent
     ? message.isPending
@@ -14083,11 +14071,10 @@ function maybeShowForegroundNotification(message) {
 
   const conversationKey = message.groupId
     ? `group:${message.groupId}`
-    : `direct:${
-        message.senderId === currentUser?.id
-          ? message.receiverId
-          : message.senderId
-      }`;
+    : `direct:${message.senderId === currentUser?.id
+      ? message.receiverId
+      : message.senderId
+    }`;
   if (mutedConversationKeys.has(conversationKey)) {
     return;
   }
@@ -14099,8 +14086,8 @@ function maybeShowForegroundNotification(message) {
   const sender = peopleDirectory.find((user) => user.id === message.senderId);
   const group = message.groupId
     ? users.find(
-        (user) => isGroupConversation(user) && user.id === message.groupId,
-      )
+      (user) => isGroupConversation(user) && user.id === message.groupId,
+    )
     : null;
   const notification = new Notification(
     group
@@ -14298,7 +14285,7 @@ async function restoreSession() {
 
     alert(
       error?.message ||
-        'We could not refresh chat right now. Please try again in a moment.',
+      'We could not refresh chat right now. Please try again in a moment.',
     );
   } finally {
     syncLayout();
