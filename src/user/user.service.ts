@@ -1,14 +1,18 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import {
   AppRole,
   AuthTokenType,
   MessageType,
+  User,
   UserReportReason,
   UserReportStatus,
 } from '@prisma/client';
@@ -45,10 +49,63 @@ export class UserService {
     private pushNotifications: PushNotificationService,
     private mailService: MailService,
     private chatAttachmentStorage: ChatAttachmentStorageService,
-  ) {}
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+  ) { }
 
   private normalizeEmail(email: string) {
     return email.trim().toLowerCase();
+  }
+
+  private getUserCacheKeyByEmail(email: string) {
+    return `user:email:${this.normalizeEmail(email)}`;
+  }
+
+  private getUserCacheKeyById(userId: string) {
+    return `user:id:${userId}`;
+  }
+
+  private async invalidateUserCache(userId: string, email?: string) {
+    const keys = [this.getUserCacheKeyById(userId)];
+    if (email) {
+      keys.push(this.getUserCacheKeyByEmail(email));
+    }
+    await Promise.all(keys.map((key) => this.cacheManager.del(key)));
+  }
+
+  async findByEmail(email: string): Promise<User | null> {
+    const cacheKey = this.getUserCacheKeyByEmail(email);
+    const cachedUser = await this.cacheManager.get(cacheKey) as User | undefined;
+    if (cachedUser) {
+      return cachedUser;
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { email: this.normalizeEmail(email) },
+    });
+
+    if (user) {
+      await this.cacheManager.set(cacheKey, user, 60);
+    }
+
+    return user;
+  }
+
+  async findById(userId: string): Promise<User | null> {
+    const cacheKey = this.getUserCacheKeyById(userId);
+    const cachedUser = await this.cacheManager.get(cacheKey) as User | undefined;
+    if (cachedUser) {
+      return cachedUser;
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (user) {
+      await this.cacheManager.set(cacheKey, user, 60);
+    }
+
+    return user;
   }
 
   private hashToken(token: string) {
@@ -174,10 +231,10 @@ export class UserService {
       status: isScheduledForDeletion
         ? 'scheduled-deletion'
         : user.isBanned
-        ? 'banned'
-        : user.isApproved
-          ? 'active'
-          : 'pending',
+          ? 'banned'
+          : user.isApproved
+            ? 'active'
+            : 'pending',
     };
   }
 
@@ -285,34 +342,34 @@ export class UserService {
       },
       targetUser: report.targetUser
         ? {
-            id: report.targetUser.id,
-            name: report.targetUser.name,
-            email: report.targetUser.email,
-            avatar: report.targetUser.avatar ?? null,
-            role: report.targetUser.role,
-            isBanned: report.targetUser.isBanned,
-          }
+          id: report.targetUser.id,
+          name: report.targetUser.name,
+          email: report.targetUser.email,
+          avatar: report.targetUser.avatar ?? null,
+          role: report.targetUser.role,
+          isBanned: report.targetUser.isBanned,
+        }
         : null,
       group: report.group
         ? {
-            id: report.group.id,
-            name: report.group.name,
-            avatar: report.group.avatar ?? null,
-          }
+          id: report.group.id,
+          name: report.group.name,
+          avatar: report.group.avatar ?? null,
+        }
         : null,
       message: report.message
         ? {
-            id: report.message.id,
-            preview: this.previewReportMessage(report.message),
-            createdAt: report.message.createdAt,
-          }
+          id: report.message.id,
+          preview: this.previewReportMessage(report.message),
+          createdAt: report.message.createdAt,
+        }
         : null,
       handledBy: report.handledBy
         ? {
-            id: report.handledBy.id,
-            name: report.handledBy.name,
-            email: report.handledBy.email,
-          }
+          id: report.handledBy.id,
+          name: report.handledBy.name,
+          email: report.handledBy.email,
+        }
         : null,
     };
   }
@@ -597,10 +654,7 @@ export class UserService {
       throw new BadRequestException('You cannot update yourself as a contact');
     }
 
-    const contact = await this.prisma.user.findUnique({
-      where: { id: contactUserId },
-      select: { id: true, name: true },
-    });
+    const contact = await this.findById(contactUserId);
 
     if (!contact) {
       throw new NotFoundException('Contact not found');
@@ -1936,20 +1990,20 @@ export class UserService {
           emailVerified: true,
           OR: normalizedQuery
             ? [
-                { id: normalizedQuery },
-                {
-                  email: {
-                    contains: normalizedQuery,
-                    mode: 'insensitive',
-                  },
+              { id: normalizedQuery },
+              {
+                email: {
+                  contains: normalizedQuery,
+                  mode: 'insensitive',
                 },
-                {
-                  name: {
-                    contains: normalizedQuery,
-                    mode: 'insensitive',
-                  },
+              },
+              {
+                name: {
+                  contains: normalizedQuery,
+                  mode: 'insensitive',
                 },
-              ]
+              },
+            ]
             : undefined,
         },
         select: {

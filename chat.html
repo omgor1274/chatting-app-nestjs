@@ -258,8 +258,7 @@
         </button>
         <button type="button" onclick="openProfileModal()" class="desktop-rail-profile" aria-label="Open profile"
           title="Profile">
-          <img id="desktop-rail-avatar" alt="Your profile photo"
-            src="/icons/default-avatar.svg" width="44" height="44"
+          <img id="desktop-rail-avatar" alt="Your profile photo" src="/icons/default-avatar.svg" width="44" height="44"
             class="h-11 w-11 rounded-2xl object-cover" />
         </button>
       </div>
@@ -271,8 +270,8 @@
         <div class="flex items-center justify-between gap-3">
           <div class="min-w-0 flex-1">
             <div class="sidebar-account-card flex items-center gap-3 rounded-2xl px-3 py-2">
-              <img id="sidebar-current-user-avatar" alt="Your profile photo"
-                src="/icons/default-avatar.svg" width="40" height="40" onclick="
+              <img id="sidebar-current-user-avatar" alt="Your profile photo" src="/icons/default-avatar.svg" width="40"
+                height="40" onclick="
                     currentUser && openImagePreview(userAvatar(currentUser))
                   " class="h-10 w-10 cursor-zoom-in rounded-xl object-cover" />
               <div class="min-w-0 flex-1">
@@ -516,6 +515,7 @@
           </span>
           <span id="message-loading-label">Loading messages...</span>
         </div>
+        <div id="new-messages-pill" class="new-messages-pill hidden">New Messages</div>
         <div id="messages-list" class="flex w-full flex-col gap-2"></div>
       </div>
 
@@ -623,6 +623,19 @@
             class="hidden rounded-[24px] border border-dashed border-blue-300 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-700">
             Drop files here to queue them for this chat.
           </div>
+          <div
+            class="composer-mini-toolbar flex items-center gap-2 rounded-[24px] bg-white/95 px-3 py-2 shadow-[0_20px_40px_rgba(15,23,42,0.08)]">
+            <button type="button" onclick="document.getElementById('file-input')?.click()" class="composer-action-icon"
+              aria-label="Attach files">📎</button>
+            <button type="button" onclick="toggleVoiceRecording()" class="composer-action-icon"
+              aria-label="Record voice">🎤</button>
+            <button type="button" onclick="toggleComposerTimeCapsule()" class="composer-action-icon"
+              aria-label="Time capsule">🕒</button>
+            <button type="button" onclick="toggleComposerSpoiler()" class="composer-action-icon"
+              aria-label="Spoiler">✨</button>
+            <button type="button" onclick="toggleComposerActionsMenu()" class="composer-action-icon ml-auto"
+              aria-label="More actions">⋯</button>
+          </div>
           <div class="rounded-[24px] border border-slate-200 bg-white p-1.5 shadow-sm">
             <div class="relative flex items-end gap-2">
               <div class="relative shrink-0">
@@ -712,8 +725,7 @@
                 " class="rounded-[28px] border border-slate-200 bg-white p-1 shadow-sm transition hover:shadow-md"
               aria-label="Open profile photo">
               <img id="chat-contact-panel-avatar" width="128" height="128"
-                class="h-28 w-28 rounded-[24px] object-cover sm:h-32 sm:w-32"
-                alt="Contact profile photo" />
+                class="h-28 w-28 rounded-[24px] object-cover sm:h-32 sm:w-32" alt="Contact profile photo" />
             </button>
             <h4 id="chat-contact-panel-name" class="display-font mt-4 text-2xl font-bold text-slate-900">
               Contact

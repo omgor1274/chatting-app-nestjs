@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CacheModule } from '@nestjs/cache-manager';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -11,6 +12,7 @@ import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
+    CacheModule.register({ ttl: 60, isGlobal: true }),
     ScheduleModule.forRoot(),
     AuthModule,
     UserModule,
@@ -22,4 +24,4 @@ import { RedisModule } from './redis/redis.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }

@@ -1,14 +1,18 @@
 //om
 import {
   BadRequestException,
+  Inject,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import { randomUUID } from 'crypto';
 import {
   GroupJoinRequestStatus,
   GroupMemberRole,
+  Message,
   MessageType,
 } from '@prisma/client';
 import { PushNotificationService } from '../notifications/push-notification.service';
@@ -71,7 +75,8 @@ export class ChatService {
     private prisma: PrismaService,
     private pushNotifications: PushNotificationService,
     private chatAttachmentStorage: ChatAttachmentStorageService,
-  ) {}
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+  ) { }
 
   private normalizeBefore(before?: string) {
     if (!before) return undefined;
@@ -80,6 +85,27 @@ export class ChatService {
       throw new BadRequestException('Invalid before cursor');
     }
     return beforeDate;
+  }
+
+  private getMessageCacheKey(messageId: string) {
+    return `message:id:${messageId}`;
+  }
+
+  private async getCachedMessage(messageId: string): Promise<Message | null> {
+    const cacheKey = this.getMessageCacheKey(messageId);
+    const cached = await this.cacheManager.get(cacheKey) as Message | undefined;
+    return cached ?? null;
+  }
+
+  private async setCachedMessage(message: Message) {
+    const cacheKey = this.getMessageCacheKey(message.id);
+    await this.cacheManager.set(cacheKey, message, 60);
+    return message;
+  }
+
+  private async deleteCachedMessage(messageId: string) {
+    const cacheKey = this.getMessageCacheKey(messageId);
+    await this.cacheManager.del(cacheKey);
   }
 
   private previewForMessage(message: {
@@ -291,11 +317,11 @@ export class ChatService {
       pendingInvites:
         membership.role === GroupMemberRole.ADMIN
           ? membership.group.joinRequests.map((invite) => ({
-              id: invite.id,
-              invitedUserId: invite.invitedUserId,
-              createdAt: invite.createdAt,
-              invitedUser: invite.invitedUser,
-            }))
+            id: invite.id,
+            invitedUserId: invite.invitedUserId,
+            createdAt: invite.createdAt,
+            invitedUser: invite.invitedUser,
+          }))
           : [],
     };
   }
@@ -523,12 +549,12 @@ export class ChatService {
 
     const incomingRequest =
       latestPendingRequest?.senderId === otherUserId &&
-      latestPendingRequest?.receiverId === currentUserId
+        latestPendingRequest?.receiverId === currentUserId
         ? latestPendingRequest
         : null;
     const outgoingRequest =
       latestPendingRequest?.senderId === currentUserId &&
-      latestPendingRequest?.receiverId === otherUserId
+        latestPendingRequest?.receiverId === otherUserId
         ? latestPendingRequest
         : null;
 
@@ -643,13 +669,13 @@ export class ChatService {
         }),
         groupIds.length
           ? this.prisma.message.findMany({
-              where: {
-                groupId: { in: groupIds },
-                hiddenForUsers: { none: { userId } },
-              },
-              orderBy: { createdAt: 'desc' },
-              take: 250,
-            })
+            where: {
+              groupId: { in: groupIds },
+              hiddenForUsers: { none: { userId } },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 250,
+          })
           : Promise.resolve([]),
       ]);
     const groupJoinedAtById = new Map(
@@ -699,12 +725,12 @@ export class ChatService {
     ).filter((peerId) => Boolean(peerId) && !hiddenDirectUserIds.has(peerId));
     const directUsers = visibleDirectPeerIds.length
       ? await this.prisma.user.findMany({
-          where: {
-            id: { in: visibleDirectPeerIds },
-            emailVerified: true,
-          },
-          select: { id: true, email: true, name: true, avatar: true },
-        })
+        where: {
+          id: { in: visibleDirectPeerIds },
+          emailVerified: true,
+        },
+        select: { id: true, email: true, name: true, avatar: true },
+      })
       : [];
     const preferenceByUserId = new Map(
       preferences.map((item) => [item.contactUserId, item]),
@@ -747,7 +773,7 @@ export class ChatService {
         message.groupId &&
         groupJoinedAtById.has(message.groupId) &&
         new Date(message.createdAt).getTime() >=
-          (groupJoinedAtById.get(message.groupId) ?? 0) &&
+        (groupJoinedAtById.get(message.groupId) ?? 0) &&
         !latestGroupById.has(message.groupId)
       ) {
         latestGroupById.set(message.groupId, message);
@@ -815,7 +841,7 @@ export class ChatService {
         createdAt: message.createdAt,
         kind:
           message.messageType === MessageType.IMAGE ||
-          message.fileMimeType?.startsWith('image/')
+            message.fileMimeType?.startsWith('image/')
             ? 'image'
             : 'video',
       }));
@@ -852,7 +878,7 @@ export class ChatService {
       createdAt: message.createdAt,
       kind:
         message.messageType === MessageType.IMAGE ||
-        message.fileMimeType?.startsWith('image/')
+          message.fileMimeType?.startsWith('image/')
           ? 'image'
           : 'video',
     }));
@@ -1248,11 +1274,11 @@ export class ChatService {
     await this.prisma.$transaction([
       ...(nextGroupOwner
         ? [
-            this.prisma.group.update({
-              where: { id: groupId },
-              data: { createdById: nextGroupOwner.userId },
-            }),
-          ]
+          this.prisma.group.update({
+            where: { id: groupId },
+            data: { createdById: nextGroupOwner.userId },
+          }),
+        ]
         : []),
       this.prisma.groupMember.delete({
         where: { groupId_userId: { groupId, userId: memberUserId } },
@@ -1483,7 +1509,7 @@ export class ChatService {
       createdAt: new Date(),
       fileSize:
         prepared.messageData.fileSize === null ||
-        prepared.messageData.fileSize === undefined
+          prepared.messageData.fileSize === undefined
           ? null
           : Number(prepared.messageData.fileSize),
       readByCount: 0,
@@ -1551,7 +1577,7 @@ export class ChatService {
       ...createdMessage,
       fileSize:
         createdMessage.fileSize === null ||
-        createdMessage.fileSize === undefined
+          createdMessage.fileSize === undefined
           ? null
           : Number(createdMessage.fileSize),
       readByCount: 0,
@@ -1613,9 +1639,16 @@ export class ChatService {
   }
 
   private async getMessageForAction(messageId: string, userId: string) {
-    const message = await this.prisma.message.findUnique({
-      where: { id: messageId },
-    });
+    let message = await this.getCachedMessage(messageId);
+    if (!message) {
+      message = await this.prisma.message.findUnique({
+        where: { id: messageId },
+      });
+      if (message) {
+        await this.setCachedMessage(message);
+      }
+    }
+
     if (!message) throw new NotFoundException('Message not found');
     if (message.groupId) {
       await this.ensureGroupMember(message.groupId, userId);
@@ -1667,6 +1700,9 @@ export class ChatService {
         deletedForEveryoneById: userId,
       },
     });
+
+    await this.deleteCachedMessage(message.id);
+    await this.setCachedMessage(updated);
 
     if (message.fileUrl) {
       await this.chatAttachmentStorage
