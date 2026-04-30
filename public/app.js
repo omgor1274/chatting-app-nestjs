@@ -2782,6 +2782,62 @@ async function copySelectedMessageText() {
   }
 }
 
+function getSelectedMessageAttachmentMeta() {
+  if (!messageActionTarget?.fileUrl) {
+    return null;
+  }
+
+  const fileUrl = getFileUrl(messageActionTarget.fileUrl);
+  if (!fileUrl) {
+    return null;
+  }
+
+  const fileName =
+    messageActionTarget.fileName ||
+    describeMessageAttachment(messageActionTarget, 'attachment');
+
+  return {
+    fileUrl,
+    fileName,
+    messageType: String(messageActionTarget.messageType || '').toUpperCase(),
+    fileMimeType: String(messageActionTarget.fileMimeType || ''),
+  };
+}
+
+function canOpenSelectedMessageAttachment() {
+  return Boolean(getSelectedMessageAttachmentMeta());
+}
+
+function openSelectedMessageAttachment() {
+  const attachment = getSelectedMessageAttachmentMeta();
+  if (!attachment) {
+    return;
+  }
+
+  closeMessageActions();
+
+  if (attachment.messageType === 'IMAGE') {
+    openImagePreview(attachment.fileUrl);
+    return;
+  }
+
+  window.open(attachment.fileUrl, '_blank', 'noopener,noreferrer');
+}
+
+async function downloadSelectedMessageAttachment() {
+  const attachment = getSelectedMessageAttachmentMeta();
+  if (!attachment) {
+    return;
+  }
+
+  try {
+    await downloadFile(attachment.fileUrl, attachment.fileName || 'attachment');
+    closeMessageActions();
+  } catch (error) {
+    alert(error?.message || 'Failed to download attachment.');
+  }
+}
+
 function showSelectedMessageInfo() {
   if (!messageActionTarget) {
     return;
@@ -12047,6 +12103,12 @@ function openMessageActions(x, y, message) {
   const menu = document.getElementById('message-actions-menu');
   const padding = 12;
   const starButton = document.getElementById('message-action-star');
+  const openAttachmentButton = document.getElementById(
+    'message-action-open-attachment',
+  );
+  const downloadAttachmentButton = document.getElementById(
+    'message-action-download-attachment',
+  );
   const reactionOptions = menu?.querySelectorAll('.message-reaction-option');
   try {
     window.getSelection?.()?.removeAllRanges?.();
@@ -12062,6 +12124,9 @@ function openMessageActions(x, y, message) {
       ? 'Remove star'
       : 'Star message';
   }
+  const hasAttachment = Boolean(getSelectedMessageAttachmentMeta());
+  openAttachmentButton?.classList.toggle('hidden', !hasAttachment);
+  downloadAttachmentButton?.classList.toggle('hidden', !hasAttachment);
   reactionOptions?.forEach((button) => {
     const active = button.textContent.trim() === getMessageReaction(message.id);
     button.classList.toggle('border-blue-300', active);
@@ -13539,12 +13604,8 @@ function createMessageElement(message, options = {}) {
             <div class="message-bubble-shell message-bubble-image ${bubbleTone} w-fit max-w-[min(100%,34rem)] overflow-hidden p-1.5">
               ${replySnippet}
               <a href="${messageFileUrl}" target="_blank" rel="noopener noreferrer" class="message-attachment-preview" aria-label="${imageLinkLabel}">
-                <img src="${messageFileUrl}" alt="${imageAltText}" ${getImageMarkupAttributes(rawMessageFileUrl)} loading="lazy" decoding="async" class="message-attachment-image mb-2 max-h-80 w-auto rounded-2xl border border-black/5">
+                <img src="${messageFileUrl}" alt="${imageAltText}" ${getImageMarkupAttributes(rawMessageFileUrl)} loading="lazy" decoding="async" class="message-attachment-image rounded-2xl border border-black/5">
               </a>
-              <div class="message-attachment-actions flex flex-wrap items-center gap-2 text-xs ${metaTone}">
-                <a href="${messageFileUrl}" target="_blank" rel="noopener noreferrer" class="message-attachment-action font-semibold" aria-label="${imageLinkLabel}">Open image</a>
-                <button type="button" class="message-attachment-action font-semibold" aria-label="Download ${imageAltText}" onclick="downloadFile('${messageFileUrl}', '${escapeHtml(message.fileName || 'image')}')">Download</button>
-              </div>
               ${footer}
               ${reactionChip}
             </div>
@@ -13573,10 +13634,6 @@ function createMessageElement(message, options = {}) {
                   <source src="${messageFileUrl}" type="${escapeHtml(message.fileMimeType || 'video/mp4')}">
                   Your browser does not support the video tag.
                 </video>
-                <div class="message-attachment-actions flex flex-wrap items-center gap-2 text-xs ${metaTone}">
-                  <a href="${messageFileUrl}" target="_blank" rel="noopener noreferrer" class="message-attachment-action font-semibold" aria-label="Open video attachment: ${fileActionLabel}">Open video</a>
-                  <button type="button" class="message-attachment-action font-semibold" aria-label="Download ${fileActionLabel}" onclick="downloadFile('${messageFileUrl}', '${escapeHtml(message.fileName || 'video')}')">Download</button>
-                </div>
               </div>
               ${footer}
               ${reactionChip}
@@ -13589,10 +13646,6 @@ function createMessageElement(message, options = {}) {
                 ${replySnippet}
                 <p class="text-sm font-semibold">${escapeHtml(message.fileName || 'Document')}</p>
                 <p class="text-xs ${metaTone}">${formatBytes(message.fileSize)}</p>
-                <div class="message-attachment-actions flex flex-wrap items-center gap-2 text-xs ${metaTone}">
-                  <a href="${messageFileUrl}" target="_blank" rel="noopener noreferrer" class="message-attachment-action font-semibold" aria-label="Open file attachment: ${fileActionLabel}">Open file</a>
-                  <button type="button" class="message-attachment-action font-semibold" aria-label="Download ${fileActionLabel}" onclick="downloadFile('${messageFileUrl}', '${escapeHtml(message.fileName || 'file')}')">Download</button>
-                </div>
               </div>
               ${footer}
               ${reactionChip}
@@ -13674,11 +13727,14 @@ function createMessageElement(message, options = {}) {
       event.pointerType === 'touch' ||
       event.pointerType === 'pen' ||
       !event.pointerType;
-    const isInteractiveTarget = event.target?.closest(
+    const interactiveTarget = event.target?.closest(
       'a, button, input, textarea, select, option, label, audio, video, [contenteditable="true"]',
     );
+    const mediaPreviewTarget = event.target?.closest(
+      '.message-attachment-preview, .message-attachment-image',
+    );
 
-    if (!isTouchLikePointer || isInteractiveTarget) {
+    if (!isTouchLikePointer || (interactiveTarget && !mediaPreviewTarget)) {
       return;
     }
 

@@ -2626,6 +2626,26 @@
         >
       </button>
       <button
+        id="message-action-open-attachment"
+        onclick="openSelectedMessageAttachment()"
+        class="message-action-row hidden"
+      >
+        <span>Open attachment</span>
+        <span class="message-action-row-copy"
+          >Open this image, video, audio, or file</span
+        >
+      </button>
+      <button
+        id="message-action-download-attachment"
+        onclick="downloadSelectedMessageAttachment()"
+        class="message-action-row hidden"
+      >
+        <span>Download attachment</span>
+        <span class="message-action-row-copy"
+          >Save the original attachment locally</span
+        >
+      </button>
+      <button
         id="message-action-star"
         onclick="toggleSelectedMessageStar()"
         class="message-action-row"
