@@ -1,12 +1,41 @@
 :root {
+  /* 🎯 Primary Brand (modern blue-violet) */
+  --primary: #6366f1;
+  --primary-light: #818cf8;
+  --primary-dark: #4f46e5;
+
+  /* 🌊 Accent (teal pop) */
+  --accent: #14b8a6;
+  --accent-light: #2dd4bf;
+
+  /* 🧠 Neutral System */
+  --bg-main: #0f172a;
+  --bg-surface: #111827;
+  --bg-elevated: #1e293b;
+
+  --text-main: #e5e7eb;
+  --text-muted: #94a3b8;
+  --text-soft: #64748b;
+
+  /* 🧱 Borders */
+  --border: rgba(148, 163, 184, 0.15);
+  --border-strong: rgba(148, 163, 184, 0.3);
+
+  /* ✨ Effects */
+  --glass: rgba(255, 255, 255, 0.05);
+  --blur: blur(16px);
+
+  /* 🌈 Gradients */
+  --gradient-main: linear-gradient(135deg, #6366f1, #14b8a6);
+  --gradient-soft: linear-gradient(180deg, #0f172a, #020617);
+
+  /* ⚡ Shadows */
+  --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.3);
+  --shadow-strong: 0 20px 60px rgba(0, 0, 0, 0.5);
+
+  /* ⏱ Motion */
   --motion-fast: 180ms;
   --motion-mid: 280ms;
-  --motion-slow: 440ms;
-  --motion-silk: cubic-bezier(0.16, 1, 0.3, 1);
-  --motion-bounce: cubic-bezier(0.22, 1, 0.36, 1);
-  --app-shell-width: 100vw;
-  --app-shell-offset-top: 0px;
-  --app-shell-offset-left: 0px;
 }
 
 html,
