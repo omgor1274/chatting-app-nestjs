@@ -98,7 +98,10 @@ function assetUrl(path, fallbackLabel = 'User') {
     return getAvatarUrl(fallbackLabel);
   }
 
-  if (String(path).startsWith('http://') || String(path).startsWith('https://')) {
+  if (
+    String(path).startsWith('http://') ||
+    String(path).startsWith('https://')
+  ) {
     return path;
   }
 
@@ -106,7 +109,9 @@ function assetUrl(path, fallbackLabel = 'User') {
 }
 
 function filterAdminUsers(users, query) {
-  const normalizedQuery = String(query || '').trim().toLowerCase();
+  const normalizedQuery = String(query || '')
+    .trim()
+    .toLowerCase();
   if (!normalizedQuery) {
     return users;
   }
@@ -141,7 +146,8 @@ function renderAdminUsers(payload = adminUsersPayload) {
 
   const stats = payload?.summary || {};
   const users = Array.isArray(payload?.users) ? payload.users : [];
-  const searchQuery = getById('settings-admin-search-input')?.value?.trim() || '';
+  const searchQuery =
+    getById('settings-admin-search-input')?.value?.trim() || '';
   const filteredUsers = filterAdminUsers(users, searchQuery);
 
   summary.innerHTML = `
@@ -161,10 +167,7 @@ function renderAdminUsers(payload = adminUsersPayload) {
   }
 
   if (!filteredUsers.length) {
-    setAdminUsersState(
-      `No users match "${escapeHtml(searchQuery)}".`,
-      'empty',
-    );
+    setAdminUsersState(`No users match "${escapeHtml(searchQuery)}".`, 'empty');
     return;
   }
 
@@ -321,8 +324,14 @@ function showFeedback(message, type = 'info') {
 }
 
 function applyDarkMode(enabled) {
-  document.body.classList.toggle('dark-mode', Boolean(enabled));
-  localStorage.setItem('chat_dark_mode', enabled ? '1' : '0');
+  const nextEnabled = Boolean(enabled);
+  document.body.classList.toggle('dark-mode', nextEnabled);
+  document.documentElement.classList.toggle('prefers-dark-mode', nextEnabled);
+  const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+  if (themeColorMeta) {
+    themeColorMeta.setAttribute('content', nextEnabled ? '#191312' : '#f7e8e2');
+  }
+  localStorage.setItem('chat_dark_mode', nextEnabled ? '1' : '0');
 }
 
 function getLastChatRoute() {
@@ -372,9 +381,10 @@ function renderBlockedUsers(blockedUsers) {
       (user) => `
         <div class="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div class="flex min-w-0 items-center gap-3">
-            <img src="${
-              assetUrl(user.avatar, user.name || user.email || 'Blocked user')
-            }" class="h-11 w-11 rounded-2xl object-cover">
+            <img src="${assetUrl(
+              user.avatar,
+              user.name || user.email || 'Blocked user',
+            )}" class="h-11 w-11 rounded-2xl object-cover">
             <div class="min-w-0">
               <p class="truncate text-sm font-semibold text-slate-900">${user.name || user.email || 'Blocked user'}</p>
               <p class="truncate text-xs text-slate-500">${user.email || ''}</p>
@@ -452,14 +462,13 @@ async function loadAdminUsers() {
 }
 
 async function approveAdminUser(userId) {
-  const res = await api(`/users/admin/users/${encodeURIComponent(userId)}/approve`, {
-    method: 'POST',
-  });
-  const data = await readJsonResponse(
-    res,
-    {},
-    'Failed to approve the user.',
+  const res = await api(
+    `/users/admin/users/${encodeURIComponent(userId)}/approve`,
+    {
+      method: 'POST',
+    },
   );
+  const data = await readJsonResponse(res, {}, 'Failed to approve the user.');
 
   if (!res.ok) {
     throw new Error(data.message || 'Failed to approve the user');
@@ -470,18 +479,21 @@ async function approveAdminUser(userId) {
 }
 
 async function banAdminUser(userId) {
-  if (!window.confirm('Ban this user from O-chat? They will lose access immediately.')) {
+  if (
+    !window.confirm(
+      'Ban this user from O-chat? They will lose access immediately.',
+    )
+  ) {
     return;
   }
 
-  const res = await api(`/users/admin/users/${encodeURIComponent(userId)}/ban`, {
-    method: 'POST',
-  });
-  const data = await readJsonResponse(
-    res,
-    {},
-    'Failed to ban the user.',
+  const res = await api(
+    `/users/admin/users/${encodeURIComponent(userId)}/ban`,
+    {
+      method: 'POST',
+    },
   );
+  const data = await readJsonResponse(res, {}, 'Failed to ban the user.');
 
   if (!res.ok) {
     throw new Error(data.message || 'Failed to ban the user');
@@ -496,14 +508,13 @@ async function unbanAdminUser(userId) {
     return;
   }
 
-  const res = await api(`/users/admin/users/${encodeURIComponent(userId)}/unban`, {
-    method: 'POST',
-  });
-  const data = await readJsonResponse(
-    res,
-    {},
-    'Failed to unban the user.',
+  const res = await api(
+    `/users/admin/users/${encodeURIComponent(userId)}/unban`,
+    {
+      method: 'POST',
+    },
   );
+  const data = await readJsonResponse(res, {}, 'Failed to unban the user.');
 
   if (!res.ok) {
     throw new Error(data.message || 'Failed to unban the user');
@@ -518,9 +529,12 @@ async function removeAdminRoleFromUser(userId) {
     return;
   }
 
-  const res = await api(`/users/admin/users/${encodeURIComponent(userId)}/remove-admin`, {
-    method: 'POST',
-  });
+  const res = await api(
+    `/users/admin/users/${encodeURIComponent(userId)}/remove-admin`,
+    {
+      method: 'POST',
+    },
+  );
   const data = await readJsonResponse(
     res,
     {},
@@ -544,9 +558,12 @@ async function deleteAdminUserPermanently(userId) {
     return;
   }
 
-  const res = await api(`/users/admin/users/${encodeURIComponent(userId)}/delete`, {
-    method: 'POST',
-  });
+  const res = await api(
+    `/users/admin/users/${encodeURIComponent(userId)}/delete`,
+    {
+      method: 'POST',
+    },
+  );
   const data = await readJsonResponse(
     res,
     {},
@@ -615,11 +632,7 @@ async function removeAvatar() {
     const res = await api('/users/profile/avatar/remove', {
       method: 'POST',
     });
-    const data = await readJsonResponse(
-      res,
-      {},
-      'Failed to remove avatar.',
-    );
+    const data = await readJsonResponse(res, {}, 'Failed to remove avatar.');
 
     if (!res.ok) {
       showFeedback(data.message || 'Failed to remove avatar.', 'error');
@@ -795,7 +808,7 @@ async function changePassword(event) {
   if (currentProfileId && newPassword) {
     const hasStoredPrivateKeyBackup = Boolean(
       currentProfile?.privateKeyBackupCiphertext &&
-        currentProfile?.privateKeyBackupIv,
+      currentProfile?.privateKeyBackupIv,
     );
     const privateKey = await resolveCurrentProfilePrivateKey();
     if (hasStoredPrivateKeyBackup && !privateKey) {
@@ -816,7 +829,10 @@ async function changePassword(event) {
           unlockMaterial,
         );
       } catch (error) {
-        console.warn('Failed to refresh message key backup for password change', error);
+        console.warn(
+          'Failed to refresh message key backup for password change',
+          error,
+        );
       }
     }
   }
@@ -963,7 +979,6 @@ async function boot() {
       'error',
     );
   }
-
 }
 
 boot().catch((error) => {
