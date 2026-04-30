@@ -127,6 +127,7 @@ let userSearchResultsQuery = '';
 let userSearchDebounceTimer = 0;
 let userSearchRequestToken = 0;
 const NOTIFICATION_PERMISSION_KEY = 'ochat_notification_permission_requested';
+const SECURITY_WELCOME_NOTICE_VERSION = '2026-04-30';
 const MESSAGE_ACTION_TOUCH_HOLD_MS = 420;
 const MESSAGE_ACTION_MOVE_TOLERANCE_PX = 10;
 const MESSAGE_ACTION_SCROLL_BLOCK_MS = 700;
@@ -5589,7 +5590,7 @@ function showStartupLoader() {
 function setStartupLoaderProgress(
   percent,
   title = 'Loading your chats',
-  detail = 'Restoring your secure desktop workspace.',
+  detail = 'Opening your secure chats.',
 ) {
   const loader = getById('startup-loader');
   if (!loader) {
@@ -5610,6 +5611,41 @@ function setStartupLoaderProgress(
   if (detailNode) {
     detailNode.textContent = detail;
   }
+}
+
+function getSecurityWelcomeNoticeSeenKey(userId = currentUser?.id) {
+  return userId
+    ? `ochat_security_notice_seen:${SECURITY_WELCOME_NOTICE_VERSION}:${userId}`
+    : '';
+}
+
+function dismissSecurityWelcomeNotice() {
+  const notice = getById('security-welcome-notice');
+  if (!notice) {
+    return;
+  }
+
+  notice.classList.remove('is-visible');
+  window.setTimeout(() => {
+    notice.classList.add('hidden');
+  }, 180);
+}
+
+function maybeShowSecurityWelcomeNotice() {
+  const notice = getById('security-welcome-notice');
+  const key = getSecurityWelcomeNoticeSeenKey();
+  if (!notice || !key || readStoredValue(key, '') === '1') {
+    return;
+  }
+
+  writeStoredValue(key, '1');
+  notice.classList.remove('hidden');
+  window.requestAnimationFrame(() => {
+    notice.classList.add('is-visible');
+  });
+  window.setTimeout(() => {
+    dismissSecurityWelcomeNotice();
+  }, 6500);
 }
 
 function hideStartupLoader(options = {}) {
@@ -5856,17 +5892,17 @@ function hideAuxiliaryAuthSteps() {
 
 function updateAuthModeCopy() {
   document.getElementById('auth-title').innerText = isLogin
-    ? 'Welcome Back'
-    : 'Create Account';
+    ? 'Welcome back'
+    : 'Create your account';
   document.getElementById('auth-subtitle').innerText = isLogin
-    ? 'Login to continue.'
-    : 'Create your account to start chatting.';
+    ? 'Sign in to open your secure chats.'
+    : 'Create your account to start secure chatting.';
   document.getElementById('auth-switch').innerText = isLogin
     ? 'New here? Create an account'
-    : 'Already have an account? Login';
+    : 'Already have an account? Sign in';
   document.getElementById('auth-btn').innerText = isLogin
-    ? 'Login'
-    : 'Register';
+    ? 'Sign in'
+    : 'Create account';
   document.getElementById('name-input').classList.toggle('hidden', isLogin);
   document.getElementById('forgot-password-btn').classList.add('hidden');
 }
@@ -8534,6 +8570,9 @@ async function startApp() {
         'Conversation ready.',
       );
       hideStartupLoader();
+      window.setTimeout(() => {
+        maybeShowSecurityWelcomeNotice();
+      }, 180);
       return;
     }
 
@@ -8557,11 +8596,17 @@ async function startApp() {
         'Conversation ready.',
       );
       hideStartupLoader();
+      window.setTimeout(() => {
+        maybeShowSecurityWelcomeNotice();
+      }, 180);
       return;
     }
 
     setStartupLoaderProgress(100, 'Loading your chats', 'Chats ready.');
     hideStartupLoader();
+    window.setTimeout(() => {
+      maybeShowSecurityWelcomeNotice();
+    }, 180);
   } catch (error) {
     hideStartupLoader({ immediate: true });
     throw error;

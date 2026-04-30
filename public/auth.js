@@ -81,15 +81,15 @@ function sanitizeOtpValue(input) {
 function setAuthMode(nextIsLogin) {
   isLogin = nextIsLogin;
   getById('auth-title').textContent = isLogin
-    ? 'Welcome Back'
+    ? 'Welcome back'
     : 'Create your account';
   getById('auth-subtitle').textContent = isLogin
-    ? 'Login or create an account.'
-    : 'A faster route into O-chat starts here.';
-  getById('auth-btn').textContent = isLogin ? 'Login' : 'Create Account';
+    ? 'Sign in to open your secure chats.'
+    : 'Create your account to start secure chatting.';
+  getById('auth-btn').textContent = isLogin ? 'Sign in' : 'Create account';
   getById('auth-switch').textContent = isLogin
     ? 'New here? Create an account'
-    : 'Already have an account? Login';
+    : 'Already have an account? Sign in';
   getById('name-input').classList.toggle('hidden', isLogin);
   getById('confirm-password-input').classList.toggle('hidden', isLogin);
   getById('forgot-password-btn').classList.toggle('hidden', !isLogin);
@@ -196,7 +196,10 @@ async function handleAuthSubmit(event) {
           );
           storeKeyBackupUnlockMaterial(data.user.id, unlockMaterial);
         } catch (error) {
-          console.warn('Failed to prepare message key backup unlock material', error);
+          console.warn(
+            'Failed to prepare message key backup unlock material',
+            error,
+          );
         }
       }
       setToken(authToken);

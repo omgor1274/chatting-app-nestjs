@@ -93,7 +93,7 @@
                       id="auth-subtitle"
                       class="mt-2 text-sm leading-6 text-slate-500"
                     >
-                      Private messaging without the visual noise.
+                      Sign in to open your secure chats.
                     </p>
                   </div>
                 </div>
@@ -134,7 +134,7 @@
                     id="auth-btn"
                     class="w-full rounded-2xl bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700"
                   >
-                    Continue
+                    Sign in
                   </button>
                   <button
                     type="button"
@@ -203,7 +203,7 @@
                       onclick="returnToLoginFromAuxStep()"
                       class="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
                     >
-                      Back To Login
+                      Back to sign in
                     </button>
                   </div>
                 </div>
@@ -237,7 +237,7 @@
                     onclick="returnToLoginFromAuxStep()"
                     class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
                   >
-                    Back To Login
+                    Back to sign in
                   </button>
                 </div>
                 <div id="reset-password-step" class="hidden space-y-4">
@@ -308,7 +308,7 @@
                     onclick="returnToLoginFromAuxStep()"
                     class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
                   >
-                    Back To Login
+                    Back to sign in
                   </button>
                 </div>
               </div>
@@ -353,7 +353,7 @@
               id="startup-loader-detail"
               class="startup-loader-detail text-sm leading-6 text-[#aebac1]"
             >
-              Restoring your secure desktop workspace.
+              Opening your secure chats.
             </p>
           </div>
           <div
@@ -370,10 +370,33 @@
             Log out
           </button>
           <p class="mt-5 max-w-sm text-sm leading-6 text-[#aebac1]">
-            Don't close this window. Your recent chats are being restored and
-            synced in the background.
+            Keep this window open. Your recent messages are loading safely in
+            the background.
           </p>
         </div>
+      </div>
+
+      <div
+        id="security-welcome-notice"
+        class="security-welcome-notice hidden"
+        role="status"
+        aria-live="polite"
+      >
+        <div class="security-welcome-notice-kicker">Private by default</div>
+        <div class="security-welcome-notice-title">
+          Your chats are protected
+        </div>
+        <p class="security-welcome-notice-copy">
+          Messages, photos, files, and calls are end-to-end encrypted so only
+          the people in this chat can read or hear them.
+        </p>
+        <button
+          type="button"
+          class="security-welcome-notice-btn"
+          onclick="dismissSecurityWelcomeNotice()"
+        >
+          Got it
+        </button>
       </div>
 
       <nav
@@ -915,18 +938,18 @@
           <div class="desktop-empty-state-shell">
             <div class="desktop-empty-state-copy">
               <p class="desktop-empty-state-kicker">
-                Built for long conversations
+                Private chats, clear reading
               </p>
               <h2
                 class="display-font mt-4 text-2xl font-bold text-slate-900 sm:text-3xl"
               >
-                Pick up busy chats without losing your place
+                Open any chat and pick up where you left off
               </h2>
               <p
                 class="mx-auto mt-3 max-w-xl text-sm leading-7 text-slate-500 sm:text-base"
               >
-                Your inbox stays dense, readable, and fast to scan so frequent
-                messaging still feels calm.
+                Busy conversations stay easy to read, while your messages stay
+                private from end to end.
               </p>
             </div>
             <div class="desktop-empty-state-actions">
@@ -956,7 +979,7 @@
               onclick="openSidebar()"
               class="mt-6 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-700 lg:hidden"
             >
-              Open Chats
+              Show chats
             </button>
           </div>
         </div>
@@ -2652,7 +2675,7 @@
       >
         <span>Star message</span>
         <span class="message-action-row-copy"
-          >Keep this in your starred hub</span
+          >Save this in your important messages</span
         >
       </button>
       <div class="message-actions-divider"></div>

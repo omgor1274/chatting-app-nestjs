@@ -671,6 +671,70 @@ body.chat-page #app-shell {
   color: #f8ece5 !important;
 }
 
+.security-welcome-notice {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 1rem);
+  right: 1rem;
+  z-index: 88;
+  width: min(22rem, calc(100vw - 1rem));
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--surface-strong) 96%, transparent);
+  padding: 0.9rem 0.95rem;
+  box-shadow: var(--shadow-float);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  opacity: 0;
+  transform: translateY(-8px) scale(0.98);
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.security-welcome-notice.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.security-welcome-notice-kicker {
+  color: var(--primary);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.security-welcome-notice-title {
+  margin-top: 0.34rem;
+  color: var(--text-1);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.security-welcome-notice-copy {
+  margin: 0.42rem 0 0;
+  color: var(--text-3);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.security-welcome-notice-btn {
+  margin-top: 0.75rem;
+  min-height: 2rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--primary) 14%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--primary-soft) 74%,
+    var(--surface-strong) 26%
+  );
+  padding: 0.45rem 0.8rem;
+  color: var(--primary-strong);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .startup-loader-progress {
   background: rgba(255, 255, 255, 0.12) !important;
 }
@@ -2145,6 +2209,29 @@ html.prefers-dark-mode body.chat-page #message-actions-menu {
     min-height: 2.05rem;
     border-radius: 14px !important;
     font-size: 0.96rem !important;
+  }
+
+  .security-welcome-notice {
+    top: calc(env(safe-area-inset-top) + 0.7rem);
+    left: 0.7rem;
+    right: 0.7rem;
+    width: auto;
+    border-radius: 20px;
+    padding: 0.78rem 0.82rem;
+  }
+
+  .security-welcome-notice-title {
+    font-size: 0.92rem;
+  }
+
+  .security-welcome-notice-copy {
+    font-size: 0.76rem;
+    line-height: 1.38;
+  }
+
+  .security-welcome-notice-btn {
+    min-height: 1.9rem;
+    font-size: 0.74rem;
   }
 }
 
