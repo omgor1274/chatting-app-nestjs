@@ -10492,7 +10492,6 @@ async function loadMessageChunk(before = null, prepend = false, options = {}) {
     const messages = (data.messages || []).map((message) =>
       createRenderableMessage(message),
     );
-    await warmMessageImageDimensions(messages);
     if (
       !isConversationStillActive(
         requestedConversation,
@@ -10501,6 +10500,9 @@ async function loadMessageChunk(before = null, prepend = false, options = {}) {
     ) {
       return;
     }
+    void warmMessageImageDimensions(messages).catch((error) => {
+      console.warn('Failed to warm message image dimensions', error);
+    });
 
     const state = requestedConversationKey
       ? conversationHistoryCache.get(requestedConversationKey)

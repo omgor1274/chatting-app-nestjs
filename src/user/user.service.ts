@@ -50,7 +50,7 @@ export class UserService {
     private mailService: MailService,
     private chatAttachmentStorage: ChatAttachmentStorageService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
-  ) {}
+  ) { }
 
   private normalizeEmail(email: string) {
     return email.trim().toLowerCase();
@@ -344,34 +344,34 @@ export class UserService {
       },
       targetUser: report.targetUser
         ? {
-            id: report.targetUser.id,
-            name: report.targetUser.name,
-            email: report.targetUser.email,
-            avatar: report.targetUser.avatar ?? null,
-            role: report.targetUser.role,
-            isBanned: report.targetUser.isBanned,
-          }
+          id: report.targetUser.id,
+          name: report.targetUser.name,
+          email: report.targetUser.email,
+          avatar: report.targetUser.avatar ?? null,
+          role: report.targetUser.role,
+          isBanned: report.targetUser.isBanned,
+        }
         : null,
       group: report.group
         ? {
-            id: report.group.id,
-            name: report.group.name,
-            avatar: report.group.avatar ?? null,
-          }
+          id: report.group.id,
+          name: report.group.name,
+          avatar: report.group.avatar ?? null,
+        }
         : null,
       message: report.message
         ? {
-            id: report.message.id,
-            preview: this.previewReportMessage(report.message),
-            createdAt: report.message.createdAt,
-          }
+          id: report.message.id,
+          preview: this.previewReportMessage(report.message),
+          createdAt: report.message.createdAt,
+        }
         : null,
       handledBy: report.handledBy
         ? {
-            id: report.handledBy.id,
-            name: report.handledBy.name,
-            email: report.handledBy.email,
-          }
+          id: report.handledBy.id,
+          name: report.handledBy.name,
+          email: report.handledBy.email,
+        }
         : null,
     };
   }
@@ -2002,20 +2002,20 @@ export class UserService {
           emailVerified: true,
           OR: normalizedQuery
             ? [
-                { id: normalizedQuery },
-                {
-                  email: {
-                    contains: normalizedQuery,
-                    mode: 'insensitive',
-                  },
+              { id: normalizedQuery },
+              {
+                email: {
+                  contains: normalizedQuery,
+                  mode: 'insensitive',
                 },
-                {
-                  name: {
-                    contains: normalizedQuery,
-                    mode: 'insensitive',
-                  },
+              },
+              {
+                name: {
+                  contains: normalizedQuery,
+                  mode: 'insensitive',
                 },
-              ]
+              },
+            ]
             : undefined,
         },
         select: {

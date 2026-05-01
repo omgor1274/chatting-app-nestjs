@@ -14,9 +14,15 @@
   <title>O-chat | Secure Messaging</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
+  <link rel="preload" as="style"
+    href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;700;800&family=Roboto+Flex:opsz,wght@8..144,400;8..144,500;8..144,600;8..144,700;8..144,800&display=swap" />
+  <link rel="stylesheet"
     href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;700;800&family=Roboto+Flex:opsz,wght@8..144,400;8..144,500;8..144,600;8..144,700;8..144,800&display=swap"
-    rel="stylesheet" />
+    media="print" onload="this.media='all'" />
+  <noscript>
+    <link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;700;800&family=Roboto+Flex:opsz,wght@8..144,400;8..144,500;8..144,600;8..144,700;8..144,800&display=swap" />
+  </noscript>
   <script>
     document.documentElement.classList.add('chat-page-root');
     const readBootStorage = (key) => {
@@ -71,13 +77,14 @@
                 </div>
               </div>
               <div id="auth-form" class="space-y-4">
-                <input type="text" id="name-input" placeholder="Your Name"
+                <input type="text" id="name-input" placeholder="Your Name" autocomplete="name"
                   class="hidden w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
-                <input type="email" id="email-input" placeholder="Email address"
+                <input type="email" id="email-input" placeholder="Email address" autocomplete="email"
                   class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
-                <input type="password" id="password-input" placeholder="Password"
+                <input type="password" id="password-input" placeholder="Password" autocomplete="current-password"
                   class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
                 <input type="password" id="confirm-password-input" placeholder="Confirm Password"
+                  autocomplete="new-password"
                   class="hidden w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
                 <div id="auth-feedback" role="status" aria-live="polite"
                   class="hidden rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
@@ -720,7 +727,7 @@
                   </button>
                 </div>
               </div>
-              <input type="text" id="msg-input" placeholder="Write a message"
+              <input type="text" id="msg-input" placeholder="Write a message" autocomplete="off" enterkeyhint="send"
                 class="min-h-[52px] flex-1 rounded-[22px] bg-slate-50 px-4 py-3 text-base text-slate-800 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
                 onkeydown="handleComposerKeydown(event)" />
               <button id="send-message-btn" type="button" onpointerdown="event.preventDefault()" onclick="sendMessage()"
