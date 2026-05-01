@@ -175,14 +175,16 @@ export class AuthService {
 
   async resendVerification(email: string) {
     return {
-      message: `Email verification is disabled for this app. ${email ? 'You can log in directly.' : ''}`.trim(),
+      message:
+        `Email verification is disabled for this app. ${email ? 'You can log in directly.' : ''}`.trim(),
     };
   }
 
   async verifyEmail(_email: string, _otp: string) {
     return {
       success: true,
-      message: 'Email verification is disabled for this app. You can log in directly.',
+      message:
+        'Email verification is disabled for this app. You can log in directly.',
     };
   }
 

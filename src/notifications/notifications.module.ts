@@ -7,4 +7,4 @@ import { PushNotificationService } from './push-notification.service';
   providers: [PushNotificationService],
   exports: [PushNotificationService],
 })
-export class NotificationsModule { }
+export class NotificationsModule {}

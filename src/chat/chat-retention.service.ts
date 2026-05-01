@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 import { readdir, stat, unlink } from 'fs/promises';
@@ -98,10 +103,8 @@ export class ChatRetentionService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    const {
-      clearedThemePreferenceCount,
-      deletedThemeFileCount,
-    } = await this.cleanupExpiredThemeUploads(cutoff);
+    const { clearedThemePreferenceCount, deletedThemeFileCount } =
+      await this.cleanupExpiredThemeUploads(cutoff);
 
     if (
       deletedMessageCount ||
@@ -153,19 +156,20 @@ export class ChatRetentionService implements OnModuleInit, OnModuleDestroy {
     const themePathsToDelete = new Set<string>();
 
     while (true) {
-      const expiredThemePreferences = await this.prisma.contactPreference.findMany({
-        where: {
-          updatedAt: { lt: cutoff },
-          chatTheme: { startsWith: '/uploads/chat-themes/' },
-        },
-        orderBy: { updatedAt: 'asc' },
-        take: CLEANUP_BATCH_SIZE,
-        select: {
-          id: true,
-          nickname: true,
-          chatTheme: true,
-        },
-      });
+      const expiredThemePreferences =
+        await this.prisma.contactPreference.findMany({
+          where: {
+            updatedAt: { lt: cutoff },
+            chatTheme: { startsWith: '/uploads/chat-themes/' },
+          },
+          orderBy: { updatedAt: 'asc' },
+          take: CLEANUP_BATCH_SIZE,
+          select: {
+            id: true,
+            nickname: true,
+            chatTheme: true,
+          },
+        });
 
       if (!expiredThemePreferences.length) {
         break;
@@ -188,23 +192,25 @@ export class ChatRetentionService implements OnModuleInit, OnModuleDestroy {
       }
 
       if (deletePreferenceIds.length) {
-        const deletedPreferences = await this.prisma.contactPreference.deleteMany({
-          where: {
-            id: { in: deletePreferenceIds },
-          },
-        });
+        const deletedPreferences =
+          await this.prisma.contactPreference.deleteMany({
+            where: {
+              id: { in: deletePreferenceIds },
+            },
+          });
         clearedThemePreferenceCount += deletedPreferences.count;
       }
 
       if (clearPreferenceIds.length) {
-        const updatedPreferences = await this.prisma.contactPreference.updateMany({
-          where: {
-            id: { in: clearPreferenceIds },
-          },
-          data: {
-            chatTheme: null,
-          },
-        });
+        const updatedPreferences =
+          await this.prisma.contactPreference.updateMany({
+            where: {
+              id: { in: clearPreferenceIds },
+            },
+            data: {
+              chatTheme: null,
+            },
+          });
         clearedThemePreferenceCount += updatedPreferences.count;
       }
 
@@ -237,9 +243,7 @@ export class ChatRetentionService implements OnModuleInit, OnModuleDestroy {
   }
 
   private getRetentionCutoff() {
-    return new Date(
-      Date.now() - this.getRetentionDays() * 24 * 60 * 60 * 1000,
-    );
+    return new Date(Date.now() - this.getRetentionDays() * 24 * 60 * 60 * 1000);
   }
 
   private getCronExpression() {

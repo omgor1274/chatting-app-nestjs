@@ -31,9 +31,7 @@ function normalizeIpCandidate(value?: string | null) {
     }
   }
 
-  const ipv4WithPortMatch = candidate.match(
-    /^(\d{1,3}(?:\.\d{1,3}){3}):\d+$/,
-  );
+  const ipv4WithPortMatch = candidate.match(/^(\d{1,3}(?:\.\d{1,3}){3}):\d+$/);
   if (ipv4WithPortMatch) {
     candidate = ipv4WithPortMatch[1];
   }

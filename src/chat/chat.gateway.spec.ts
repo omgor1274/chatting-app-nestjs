@@ -166,7 +166,9 @@ describe('ChatGateway', () => {
       .mockResolvedValue({ userId: 'sender-1' });
     chatService.prepareRealtimeMessage.mockResolvedValue(preparedMessage);
     chatService.persistPreparedMessage.mockResolvedValue(savedMessage);
-    jest.spyOn(gateway, 'emitMessageToConversation').mockResolvedValue(undefined);
+    jest
+      .spyOn(gateway, 'emitMessageToConversation')
+      .mockResolvedValue(undefined);
     const commitSpy = jest.spyOn(gateway as any, 'emitRealtimeMessageCommit');
 
     const response = await gateway.handleMessage(

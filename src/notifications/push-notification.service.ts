@@ -14,13 +14,16 @@ export class PushNotificationService {
   private readonly logger = new Logger(PushNotificationService.name);
   private readonly publicKey = process.env.VAPID_PUBLIC_KEY;
   private readonly privateKey = process.env.VAPID_PRIVATE_KEY;
-  private readonly subject = process.env.VAPID_SUBJECT ?? 'mailto:admin@example.com';
+  private readonly subject =
+    process.env.VAPID_SUBJECT ?? 'mailto:admin@example.com';
 
   constructor(private prisma: PrismaService) {
     if (this.publicKey && this.privateKey) {
       webpush.setVapidDetails(this.subject, this.publicKey, this.privateKey);
     } else {
-      this.logger.warn('VAPID keys are missing. Push notifications are disabled.');
+      this.logger.warn(
+        'VAPID keys are missing. Push notifications are disabled.',
+      );
     }
   }
 
@@ -36,7 +39,11 @@ export class PushNotificationService {
       keys?: { p256dh?: string; auth?: string };
     },
   ) {
-    if (!subscription.endpoint || !subscription.keys?.p256dh || !subscription.keys?.auth) {
+    if (
+      !subscription.endpoint ||
+      !subscription.keys?.p256dh ||
+      !subscription.keys?.auth
+    ) {
       throw new Error('Invalid push subscription');
     }
 

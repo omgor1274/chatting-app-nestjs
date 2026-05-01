@@ -78,10 +78,7 @@ export class UserController {
 
   @UseGuards(JwtGuard)
   @Post('settings')
-  updateSettings(
-    @Req() req,
-    @Body() body: UpdateSettingsDto,
-  ) {
+  updateSettings(@Req() req, @Body() body: UpdateSettingsDto) {
     return this.userService.updateSettings(req.user.userId, body);
   }
 
@@ -136,7 +133,10 @@ export class UserController {
   @UseGuards(JwtGuard, AdminGuard)
   @Post('admin/users/:userId/delete')
   deleteUserPermanentlyByAdmin(@Req() req, @Param('userId') userId: string) {
-    return this.userService.deleteUserPermanentlyByAdmin(req.user.userId, userId);
+    return this.userService.deleteUserPermanentlyByAdmin(
+      req.user.userId,
+      userId,
+    );
   }
 
   @UseGuards(JwtGuard, AdminGuard)
@@ -199,7 +199,10 @@ export class UserController {
   @UseGuards(JwtGuard)
   @Post('blocks')
   async blockUser(@Req() req, @Body() body: UserIdDto) {
-    const result = await this.userService.blockUser(req.user.userId, body.userId);
+    const result = await this.userService.blockUser(
+      req.user.userId,
+      body.userId,
+    );
     this.chatGateway.emitConversationRefresh(
       [req.user.userId, body.userId].filter(Boolean),
       {
@@ -213,7 +216,10 @@ export class UserController {
   @UseGuards(JwtGuard)
   @Post('blocks/remove')
   async unblockUser(@Req() req, @Body() body: UserIdDto) {
-    const result = await this.userService.unblockUser(req.user.userId, body.userId);
+    const result = await this.userService.unblockUser(
+      req.user.userId,
+      body.userId,
+    );
     this.chatGateway.emitConversationRefresh(
       [req.user.userId, body.userId].filter(Boolean),
       {
@@ -226,10 +232,7 @@ export class UserController {
 
   @UseGuards(JwtGuard)
   @Post('contacts/nickname')
-  updateContactNickname(
-    @Req() req,
-    @Body() body: ContactNicknameDto,
-  ) {
+  updateContactNickname(@Req() req, @Body() body: ContactNicknameDto) {
     return this.userService.updateContactNickname(
       req.user.userId,
       body.contactUserId,
@@ -280,15 +283,15 @@ export class UserController {
 
     return this.userService
       .updateContactTheme(
-      req.user.userId,
-      body.contactUserId,
-      shouldClear
-        ? null
-        : presetKey
-          ? `preset:${presetKey}`
-          : file
-            ? `/uploads/chat-themes/${file.filename}`
-            : null,
+        req.user.userId,
+        body.contactUserId,
+        shouldClear
+          ? null
+          : presetKey
+            ? `preset:${presetKey}`
+            : file
+              ? `/uploads/chat-themes/${file.filename}`
+              : null,
       )
       .then((result) => {
         this.chatGateway.emitThemeUpdate({

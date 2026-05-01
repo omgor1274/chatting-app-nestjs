@@ -54,10 +54,7 @@ export function getAppRootDir() {
 export function getWritableDataDir() {
   const configuredPath = process.env.APP_DATA_DIR?.trim() || null;
 
-  if (
-    cachedWritableDataDir &&
-    cachedWritableDataDirSource === configuredPath
-  ) {
+  if (cachedWritableDataDir && cachedWritableDataDirSource === configuredPath) {
     return cachedWritableDataDir;
   }
 

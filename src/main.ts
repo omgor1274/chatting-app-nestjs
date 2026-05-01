@@ -89,9 +89,9 @@ async function bootstrap() {
   } catch (error) {
     const failedPath =
       error &&
-      typeof error === 'object' &&
-      'path' in error &&
-      typeof error.path === 'string'
+        typeof error === 'object' &&
+        'path' in error &&
+        typeof error.path === 'string'
         ? error.path
         : getWritableDataDir();
     if (!recoverWritableDataDirFromError(error, failedPath)) {
@@ -161,10 +161,7 @@ async function bootstrap() {
           scriptSrcAttr: ["'unsafe-inline'"],
           // The current frontend still depends on inline onclick handlers.
           // Keep this until those handlers are migrated to JS listeners.
-          scriptSrc: [
-            "'self'",
-            "'unsafe-inline'",
-          ],
+          scriptSrc: ["'self'", "'unsafe-inline'"],
           styleSrc: ["'self'", "'unsafe-inline'", 'https:'],
         },
       },
@@ -173,24 +170,6 @@ async function bootstrap() {
       },
       crossOriginOpenerPolicy: {
         policy: 'same-origin',
-      },
-    }),
-  );
-  app.use(
-    rateLimit({
-      windowMs: readEnvNumber('RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000),
-      limit: readEnvNumber('RATE_LIMIT_MAX', 400),
-      standardHeaders: 'draft-8',
-      legacyHeaders: false,
-      keyGenerator: resolveRateLimitClientKey,
-      skip: (req) =>
-        req.path === '/health' ||
-        req.path.startsWith('/chat/uploads/') ||
-        req.path === '/chat/attachments' ||
-        req.path.startsWith('/uploads/') ||
-        req.path === '/sw.js',
-      message: {
-        message: 'Too many requests. Please try again in a few minutes.',
       },
     }),
   );

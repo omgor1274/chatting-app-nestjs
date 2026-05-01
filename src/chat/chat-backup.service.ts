@@ -1,5 +1,16 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from 'fs';
 import { join } from 'path';
 import { MessageType } from '@prisma/client';
 import { v2 as cloudinary } from 'cloudinary';
@@ -18,14 +29,12 @@ export class ChatBackupService implements OnModuleInit, OnModuleDestroy {
   );
   private readonly backupDir = resolveWritableDataPath('backups');
 
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
   async onModuleInit() {
     mkdirSync(this.backupDir, { recursive: true });
     if (!this.isBackupEnabled()) {
-      this.logger.log(
-        'Chat backups are disabled via CHAT_BACKUPS_ENABLED.',
-      );
+      this.logger.log('Chat backups are disabled via CHAT_BACKUPS_ENABLED.');
       return;
     }
 
@@ -89,14 +98,15 @@ export class ChatBackupService implements OnModuleInit, OnModuleDestroy {
 
   private isCloudBackupEnabled() {
     return Boolean(
-      process.env.CLOUDINARY_CLOUD_NAME?.trim()
-      && process.env.CLOUDINARY_API_KEY?.trim()
-      && process.env.CLOUDINARY_API_SECRET?.trim(),
+      process.env.CLOUDINARY_CLOUD_NAME?.trim() &&
+      process.env.CLOUDINARY_API_KEY?.trim() &&
+      process.env.CLOUDINARY_API_SECRET?.trim(),
     );
   }
 
   private async uploadBackupToCloudinary(backupPath: string) {
-    const folder = process.env.CLOUDINARY_BACKUP_FOLDER?.trim() || 'chat-backups';
+    const folder =
+      process.env.CLOUDINARY_BACKUP_FOLDER?.trim() || 'chat-backups';
     const uploaded = await cloudinary.uploader.upload(backupPath, {
       resource_type: 'raw',
       folder,
@@ -147,8 +157,8 @@ export class ChatBackupService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (
-      message.messageType === MessageType.AUDIO
-      || message.messageType === MessageType.DOCUMENT
+      message.messageType === MessageType.AUDIO ||
+      message.messageType === MessageType.DOCUMENT
     ) {
       return senderSettings.backupFiles && receiverSettings.backupFiles;
     }
@@ -165,7 +175,10 @@ export class ChatBackupService implements OnModuleInit, OnModuleDestroy {
       await this.backupChats();
     }
 
-    const nextDelay = Math.max(ONE_WEEK_MS - (Date.now() - this.readLastBackupAt()), 60_000);
+    const nextDelay = Math.max(
+      ONE_WEEK_MS - (Date.now() - this.readLastBackupAt()),
+      60_000,
+    );
 
     this.backupTimeout = setTimeout(async () => {
       await this.backupChats();
@@ -252,15 +265,21 @@ export class ChatBackupService implements OnModuleInit, OnModuleDestroy {
         const uploaded = await this.uploadBackupToCloudinary(backupPath);
         cloudBackupUrl = uploaded.secureUrl;
         cloudBackupPublicId = uploaded.publicId;
-        this.logger.log(`Weekly chat backup uploaded to Cloudinary: ${cloudBackupUrl}`);
+        this.logger.log(
+          `Weekly chat backup uploaded to Cloudinary: ${cloudBackupUrl}`,
+        );
         try {
           unlinkSync(backupPath);
         } catch {
-          this.logger.warn(`Cloud backup uploaded, but local temp file could not be deleted: ${backupPath}`);
+          this.logger.warn(
+            `Cloud backup uploaded, but local temp file could not be deleted: ${backupPath}`,
+          );
         }
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : 'Unknown Cloudinary upload error';
+          error instanceof Error
+            ? error.message
+            : 'Unknown Cloudinary upload error';
         this.logger.warn(
           `Cloud backup upload failed. Kept local backup at ${backupPath}. ${message}`,
         );

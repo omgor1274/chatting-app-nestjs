@@ -1,11 +1,5 @@
 import { UserReportReason } from '@prisma/client';
-import {
-  IsIn,
-  IsOptional,
-  IsString,
-  IsUUID,
-  MaxLength,
-} from 'class-validator';
+import { IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class CreateReportDto {
   @IsOptional()

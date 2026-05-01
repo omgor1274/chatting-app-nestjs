@@ -1392,10 +1392,9 @@ body.chat-page .mobile-chat-main {
 }
 
 #composer-row {
-  display: grid !important;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: end !important;
-  gap: 0.26rem !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
   min-height: 2.7rem;
   min-width: 0;
 }
@@ -1931,6 +1930,9 @@ html.prefers-dark-mode body.chat-page #message-actions-menu {
   body.chat-page .desktop-rail-btn,
   body.chat-page .desktop-rail-profile,
   body.chat-page .desktop-rail-brand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     width: 2.9rem;
     height: 2.9rem;
   }
@@ -2084,9 +2086,20 @@ html.prefers-dark-mode body.chat-page #message-actions-menu {
   }
 
   #composer-row {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    gap: 0.2rem !important;
+    display: flex !important;
+    align-items: flex-end;
+    gap: 0.5rem !important;
     min-height: 2.4rem;
+  }
+
+  #composer-row #msg-input {
+    min-width: 0;
+    width: 100%;
+  }
+
+  #composer-actions-btn,
+  #send-message-btn {
+    flex-shrink: 0;
   }
 
   #composer-actions-btn {

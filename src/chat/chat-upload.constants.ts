@@ -58,10 +58,13 @@ export function isAllowedChatAttachmentMimeType(
   mimeType?: string | null,
   fileName?: string | null,
 ) {
-  const normalizedMimeType = normalizeChatAttachmentMimeType(mimeType, fileName);
+  const normalizedMimeType = normalizeChatAttachmentMimeType(
+    mimeType,
+    fileName,
+  );
   return Boolean(
     normalizedMimeType &&
-      CHAT_ATTACHMENT_ALLOWED_MIME_TYPES.includes(normalizedMimeType),
+    CHAT_ATTACHMENT_ALLOWED_MIME_TYPES.includes(normalizedMimeType),
   );
 }
 

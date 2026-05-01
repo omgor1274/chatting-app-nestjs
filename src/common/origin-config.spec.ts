@@ -47,9 +47,7 @@ describe('origin-config', () => {
   it('includes Render external url automatically', () => {
     process.env.RENDER_EXTERNAL_URL = 'https://o-chat.onrender.com';
 
-    expect(collectConfiguredOrigins()).toContain(
-      'https://o-chat.onrender.com',
-    );
+    expect(collectConfiguredOrigins()).toContain('https://o-chat.onrender.com');
   });
 
   it('allows normalized request origins and localhost dev origins', () => {

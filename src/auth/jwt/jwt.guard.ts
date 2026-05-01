@@ -52,9 +52,7 @@ export class JwtGuard implements CanActivate {
     }
 
     if (user.isBanned) {
-      throw new ForbiddenException(
-        'Your account has been banned from O-chat.',
-      );
+      throw new ForbiddenException('Your account has been banned from O-chat.');
     }
 
     if (!user.isApproved) {

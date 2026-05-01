@@ -47,7 +47,9 @@ export class RedisService implements OnModuleDestroy {
         await this.client.connect();
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : 'Unknown Redis connection error';
+          error instanceof Error
+            ? error.message
+            : 'Unknown Redis connection error';
         this.connectionFailed = true;
         this.logger.warn(
           `Redis connection failed. Falling back to single-instance mode. ${message}`,

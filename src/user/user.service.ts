@@ -50,7 +50,7 @@ export class UserService {
     private mailService: MailService,
     private chatAttachmentStorage: ChatAttachmentStorageService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
-  ) { }
+  ) {}
 
   private normalizeEmail(email: string) {
     return email.trim().toLowerCase();
@@ -74,7 +74,7 @@ export class UserService {
 
   async findByEmail(email: string): Promise<User | null> {
     const cacheKey = this.getUserCacheKeyByEmail(email);
-    const cachedUser = await this.cacheManager.get(cacheKey) as User | undefined;
+    const cachedUser = await this.cacheManager.get(cacheKey);
     if (cachedUser) {
       return cachedUser;
     }
@@ -92,7 +92,7 @@ export class UserService {
 
   async findById(userId: string): Promise<User | null> {
     const cacheKey = this.getUserCacheKeyById(userId);
-    const cachedUser = await this.cacheManager.get(cacheKey) as User | undefined;
+    const cachedUser = await this.cacheManager.get(cacheKey);
     if (cachedUser) {
       return cachedUser;
     }
@@ -238,14 +238,16 @@ export class UserService {
     };
   }
 
-  private previewReportMessage(message?: {
-    deletedForEveryoneAt?: Date | null;
-    messageType?: MessageType | null;
-    fileName?: string | null;
-    fileMimeType?: string | null;
-    content?: string | null;
-    ciphertext?: string | null;
-  } | null) {
+  private previewReportMessage(
+    message?: {
+      deletedForEveryoneAt?: Date | null;
+      messageType?: MessageType | null;
+      fileName?: string | null;
+      fileMimeType?: string | null;
+      content?: string | null;
+      ciphertext?: string | null;
+    } | null,
+  ) {
     if (!message) {
       return null;
     }
@@ -342,34 +344,34 @@ export class UserService {
       },
       targetUser: report.targetUser
         ? {
-          id: report.targetUser.id,
-          name: report.targetUser.name,
-          email: report.targetUser.email,
-          avatar: report.targetUser.avatar ?? null,
-          role: report.targetUser.role,
-          isBanned: report.targetUser.isBanned,
-        }
+            id: report.targetUser.id,
+            name: report.targetUser.name,
+            email: report.targetUser.email,
+            avatar: report.targetUser.avatar ?? null,
+            role: report.targetUser.role,
+            isBanned: report.targetUser.isBanned,
+          }
         : null,
       group: report.group
         ? {
-          id: report.group.id,
-          name: report.group.name,
-          avatar: report.group.avatar ?? null,
-        }
+            id: report.group.id,
+            name: report.group.name,
+            avatar: report.group.avatar ?? null,
+          }
         : null,
       message: report.message
         ? {
-          id: report.message.id,
-          preview: this.previewReportMessage(report.message),
-          createdAt: report.message.createdAt,
-        }
+            id: report.message.id,
+            preview: this.previewReportMessage(report.message),
+            createdAt: report.message.createdAt,
+          }
         : null,
       handledBy: report.handledBy
         ? {
-          id: report.handledBy.id,
-          name: report.handledBy.name,
-          email: report.handledBy.email,
-        }
+            id: report.handledBy.id,
+            name: report.handledBy.name,
+            email: report.handledBy.email,
+          }
         : null,
     };
   }
@@ -390,9 +392,7 @@ export class UserService {
   }
 
   private getRetentionCutoff() {
-    return new Date(
-      Date.now() - this.getRetentionDays() * 24 * 60 * 60 * 1000,
-    );
+    return new Date(Date.now() - this.getRetentionDays() * 24 * 60 * 60 * 1000);
   }
 
   private isProtectedBootstrapAdmin(email?: string | null) {
@@ -472,10 +472,7 @@ export class UserService {
       }),
       this.prisma.contactPreference.findMany({
         where: {
-          OR: [
-            { ownerId: targetUserId },
-            { contactUserId: targetUserId },
-          ],
+          OR: [{ ownerId: targetUserId }, { contactUserId: targetUserId }],
         },
         select: {
           chatTheme: true,
@@ -504,18 +501,12 @@ export class UserService {
     await this.prisma.$transaction([
       this.prisma.contactPreference.deleteMany({
         where: {
-          OR: [
-            { ownerId: targetUserId },
-            { contactUserId: targetUserId },
-          ],
+          OR: [{ ownerId: targetUserId }, { contactUserId: targetUserId }],
         },
       }),
       this.prisma.chatRequest.deleteMany({
         where: {
-          OR: [
-            { senderId: targetUserId },
-            { receiverId: targetUserId },
-          ],
+          OR: [{ senderId: targetUserId }, { receiverId: targetUserId }],
         },
       }),
       this.prisma.pushSubscription.deleteMany({
@@ -545,26 +536,23 @@ export class UserService {
         });
     }
 
-    await this.deleteManagedUpload(
-      user.avatar,
-      '/uploads/avatars/',
-      ['uploads', 'avatars'],
-    );
+    await this.deleteManagedUpload(user.avatar, '/uploads/avatars/', [
+      'uploads',
+      'avatars',
+    ]);
 
     for (const groupAvatarPath of groupAvatarPaths) {
-      await this.deleteManagedUpload(
-        groupAvatarPath,
-        '/uploads/groups/',
-        ['uploads', 'groups'],
-      );
+      await this.deleteManagedUpload(groupAvatarPath, '/uploads/groups/', [
+        'uploads',
+        'groups',
+      ]);
     }
 
     for (const themePath of themePaths) {
-      await this.deleteManagedUpload(
-        themePath,
-        '/uploads/chat-themes/',
-        ['uploads', 'chat-themes'],
-      );
+      await this.deleteManagedUpload(themePath, '/uploads/chat-themes/', [
+        'uploads',
+        'chat-themes',
+      ]);
     }
 
     return {
@@ -994,10 +982,12 @@ export class UserService {
     return {
       summary: {
         totalUsers: serializedUsers.length,
-        adminUsers: serializedUsers.filter((user) => user.role === AppRole.ADMIN)
-          .length,
-        pendingUsers: serializedUsers.filter((user) => user.status === 'pending')
-          .length,
+        adminUsers: serializedUsers.filter(
+          (user) => user.role === AppRole.ADMIN,
+        ).length,
+        pendingUsers: serializedUsers.filter(
+          (user) => user.status === 'pending',
+        ).length,
         activeUsers: serializedUsers.filter((user) => user.status === 'active')
           .length,
         bannedUsers: serializedUsers.filter((user) => user.status === 'banned')
@@ -1125,7 +1115,9 @@ export class UserService {
     });
 
     return {
-      message: user.isBanned ? 'User is already banned.' : 'User banned successfully.',
+      message: user.isBanned
+        ? 'User is already banned.'
+        : 'User banned successfully.',
       user: this.serializeAdminUser(updatedUser),
     };
   }
@@ -1177,7 +1169,9 @@ export class UserService {
     });
 
     return {
-      message: user.isBanned ? 'User unbanned successfully.' : 'User is not banned.',
+      message: user.isBanned
+        ? 'User unbanned successfully.'
+        : 'User is not banned.',
       user: this.serializeAdminUser(updatedUser),
     };
   }
@@ -1260,7 +1254,10 @@ export class UserService {
     };
   }
 
-  async deleteUserPermanentlyByAdmin(adminUserId: string, targetUserId: string) {
+  async deleteUserPermanentlyByAdmin(
+    adminUserId: string,
+    targetUserId: string,
+  ) {
     if (adminUserId === targetUserId) {
       throw new BadRequestException(
         'You cannot permanently delete your own admin account from this panel.',
@@ -1301,7 +1298,9 @@ export class UserService {
       });
 
       if (adminCount <= 1) {
-        throw new BadRequestException('At least one admin account must remain.');
+        throw new BadRequestException(
+          'At least one admin account must remain.',
+        );
       }
     }
 
@@ -1312,9 +1311,13 @@ export class UserService {
     adminUserId: string,
     data: { action: string; userIds: string[] },
   ) {
-    const action = String(data.action || '').trim().toLowerCase();
+    const action = String(data.action || '')
+      .trim()
+      .toLowerCase();
     const userIds = Array.from(
-      new Set((Array.isArray(data.userIds) ? data.userIds : []).filter(Boolean)),
+      new Set(
+        (Array.isArray(data.userIds) ? data.userIds : []).filter(Boolean),
+      ),
     );
 
     if (!['approve', 'ban', 'unban'].includes(action)) {
@@ -1485,7 +1488,9 @@ export class UserService {
       });
 
       if (!membership) {
-        throw new ForbiddenException('You can report only groups you belong to.');
+        throw new ForbiddenException(
+          'You can report only groups you belong to.',
+        );
       }
     }
 
@@ -1559,7 +1564,8 @@ export class UserService {
     });
 
     return {
-      message: 'Report submitted. Admins can review it from the moderation queue.',
+      message:
+        'Report submitted. Admins can review it from the moderation queue.',
       report: this.serializeAdminReport(report),
     };
   }
@@ -1676,12 +1682,16 @@ export class UserService {
 
     let banMessage: string | null = null;
     if (data.banTargetUser && report.targetUserId) {
-      const banResult = await this.banUserByAdmin(adminUserId, report.targetUserId);
+      const banResult = await this.banUserByAdmin(
+        adminUserId,
+        report.targetUserId,
+      );
       banMessage = banResult.message;
     }
 
     const nextStatus =
-      data.status ?? (data.banTargetUser ? UserReportStatus.RESOLVED : undefined);
+      data.status ??
+      (data.banTargetUser ? UserReportStatus.RESOLVED : undefined);
     const handledAt =
       nextStatus && nextStatus !== UserReportStatus.OPEN ? new Date() : null;
 
@@ -1690,7 +1700,9 @@ export class UserService {
       data: {
         ...(nextStatus ? { status: nextStatus } : {}),
         adminNote:
-          data.adminNote === undefined ? undefined : data.adminNote.trim() || null,
+          data.adminNote === undefined
+            ? undefined
+            : data.adminNote.trim() || null,
         handledById:
           nextStatus === undefined
             ? undefined
@@ -1990,20 +2002,20 @@ export class UserService {
           emailVerified: true,
           OR: normalizedQuery
             ? [
-              { id: normalizedQuery },
-              {
-                email: {
-                  contains: normalizedQuery,
-                  mode: 'insensitive',
+                { id: normalizedQuery },
+                {
+                  email: {
+                    contains: normalizedQuery,
+                    mode: 'insensitive',
+                  },
                 },
-              },
-              {
-                name: {
-                  contains: normalizedQuery,
-                  mode: 'insensitive',
+                {
+                  name: {
+                    contains: normalizedQuery,
+                    mode: 'insensitive',
+                  },
                 },
-              },
-            ]
+              ]
             : undefined,
         },
         select: {
@@ -2150,7 +2162,8 @@ export class UserService {
     return {
       success: true,
       blockedUserId,
-      message: 'User blocked. A new chat request will be needed after unblocking.',
+      message:
+        'User blocked. A new chat request will be needed after unblocking.',
     };
   }
 
@@ -2167,7 +2180,8 @@ export class UserService {
     return {
       success: true,
       blockedUserId,
-      message: 'User unblocked. Chat stays locked until a new request is sent and accepted.',
+      message:
+        'User unblocked. Chat stays locked until a new request is sent and accepted.',
     };
   }
 
@@ -2211,11 +2225,10 @@ export class UserService {
     });
 
     if (existingUser?.avatar && existingUser.avatar !== avatarPath) {
-      await this.deleteManagedUpload(
-        existingUser.avatar,
-        '/uploads/avatars/',
-        ['uploads', 'avatars'],
-      );
+      await this.deleteManagedUpload(existingUser.avatar, '/uploads/avatars/', [
+        'uploads',
+        'avatars',
+      ]);
     }
 
     return this.serializeProfile(user);
@@ -2257,11 +2270,10 @@ export class UserService {
     });
 
     if (existingUser?.avatar) {
-      await this.deleteManagedUpload(
-        existingUser.avatar,
-        '/uploads/avatars/',
-        ['uploads', 'avatars'],
-      );
+      await this.deleteManagedUpload(existingUser.avatar, '/uploads/avatars/', [
+        'uploads',
+        'avatars',
+      ]);
     }
 
     return this.serializeProfile(user);

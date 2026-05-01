@@ -501,16 +501,17 @@ describe('UserService', () => {
       { fileUrl: '/uploads/chat/file-1.png' },
       { fileUrl: '/uploads/chat/file-2.pdf' },
     ]);
-    prisma.contactPreference.findMany.mockResolvedValue([
-      { chatTheme: null },
-    ]);
+    prisma.contactPreference.findMany.mockResolvedValue([{ chatTheme: null }]);
     prisma.contactPreference.deleteMany.mockResolvedValue({ count: 1 });
     prisma.chatRequest.deleteMany.mockResolvedValue({ count: 0 });
     prisma.pushSubscription.deleteMany.mockResolvedValue({ count: 0 });
     prisma.message.deleteMany.mockResolvedValue({ count: 2 });
     prisma.user.delete.mockResolvedValue({ id: 'user-2' });
 
-    const result = await service.deleteUserPermanentlyByAdmin('admin-1', 'user-2');
+    const result = await service.deleteUserPermanentlyByAdmin(
+      'admin-1',
+      'user-2',
+    );
 
     expect(prisma.$transaction).toHaveBeenCalled();
     expect(prisma.user.delete).toHaveBeenCalledWith({
