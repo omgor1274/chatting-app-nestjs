@@ -129,25 +129,19 @@ body {
   font-family: var(--font-body);
   color: var(--text-1);
   background:
-    linear-gradient(
-      90deg,
+    linear-gradient(90deg,
       rgba(255, 255, 255, 0.16) 0,
       rgba(255, 255, 255, 0.16) 15%,
       transparent 15%,
       transparent 85%,
       rgba(255, 255, 255, 0.12) 85%,
-      rgba(255, 255, 255, 0.12) 100%
-    ),
-    radial-gradient(
-      circle at top left,
+      rgba(255, 255, 255, 0.12) 100%),
+    radial-gradient(circle at top left,
       rgba(255, 209, 191, 0.65),
-      transparent 35%
-    ),
-    radial-gradient(
-      circle at top right,
+      transparent 35%),
+    radial-gradient(circle at top right,
       rgba(234, 205, 190, 0.45),
-      transparent 28%
-    ),
+      transparent 28%),
     linear-gradient(180deg, var(--bg) 0%, var(--bg-alt) 100%);
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
@@ -233,11 +227,9 @@ a.bg-blue-600,
 button.bg-slate-900,
 a.bg-slate-900 {
   border: 1px solid transparent;
-  background: linear-gradient(
-    135deg,
-    var(--primary) 0%,
-    var(--primary-strong) 100%
-  ) !important;
+  background: linear-gradient(135deg,
+      var(--primary) 0%,
+      var(--primary-strong) 100%) !important;
   color: var(--primary-ink) !important;
   box-shadow: 0 16px 30px color-mix(in srgb, var(--primary) 18%, transparent);
 }
@@ -273,11 +265,9 @@ a.bg-slate-900:hover {
 .contact-panel-action,
 .message-attachment-action {
   border: 1px solid var(--line) !important;
-  background: color-mix(
-    in srgb,
-    var(--surface-strong) 90%,
-    transparent
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-strong) 90%,
+      transparent) !important;
   color: var(--text-2) !important;
 }
 
@@ -292,11 +282,9 @@ a.bg-slate-900:hover {
 
 .ui-danger-btn {
   border: 1px solid color-mix(in srgb, var(--error) 22%, transparent) !important;
-  background: color-mix(
-    in srgb,
-    var(--error-soft) 70%,
-    var(--surface-strong) 30%
-  ) !important;
+  background: color-mix(in srgb,
+      var(--error-soft) 70%,
+      var(--surface-strong) 30%) !important;
   color: var(--error) !important;
 }
 
@@ -315,11 +303,9 @@ select {
   width: 100%;
   border: 1px solid var(--line) !important;
   border-radius: 20px !important;
-  background: color-mix(
-    in srgb,
-    var(--surface-strong) 86%,
-    transparent
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-strong) 86%,
+      transparent) !important;
   color: var(--text-1) !important;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
@@ -343,7 +329,7 @@ input[type='checkbox'] {
 .landing-shell,
 #auth-shell,
 .settings-page main,
-.admin-page > div {
+.admin-page>div {
   position: relative;
   z-index: 1;
 }
@@ -395,16 +381,12 @@ input[type='checkbox'] {
   padding: clamp(1.8rem, 3vw, 2.8rem);
   border-radius: 0;
   background:
-    linear-gradient(
-      180deg,
+    linear-gradient(180deg,
       color-mix(in srgb, var(--primary-soft) 58%, white 42%) 0%,
-      color-mix(in srgb, var(--primary-soft) 18%, transparent) 100%
-    ),
-    radial-gradient(
-      circle at top right,
+      color-mix(in srgb, var(--primary-soft) 18%, transparent) 100%),
+    radial-gradient(circle at top right,
       rgba(255, 255, 255, 0.42),
-      transparent 30%
-    );
+      transparent 30%);
 }
 
 .landing-visual {
@@ -462,31 +444,29 @@ input[type='checkbox'] {
   justify-content: center;
 }
 
-.settings-page .space-y-6 > *,
-.admin-page .space-y-6 > * {
+.settings-page .space-y-6>*,
+.admin-page .space-y-6>* {
   min-width: 0;
 }
 
 #admin-analytics-grid article,
 #admin-user-list article,
 #admin-report-list article,
-#settings-blocked-users > *,
-#attachment-queue-list > *,
-#group-invites > *,
-#manage-group-members > div,
-#manage-group-candidates > div,
-#chat-contact-panel-media-groups > div,
-#chat-contact-panel-starred-list > button,
-#chat-contact-panel-calls-list > div,
-#chat-contact-panel-search-results > button,
-#shared-media-browser-grid > * {
+#settings-blocked-users>*,
+#attachment-queue-list>*,
+#group-invites>*,
+#manage-group-members>div,
+#manage-group-candidates>div,
+#chat-contact-panel-media-groups>div,
+#chat-contact-panel-starred-list>button,
+#chat-contact-panel-calls-list>div,
+#chat-contact-panel-search-results>button,
+#shared-media-browser-grid>* {
   border-radius: 22px !important;
   border: 1px solid var(--line) !important;
-  background: color-mix(
-    in srgb,
-    var(--surface-strong) 92%,
-    transparent
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-strong) 92%,
+      transparent) !important;
   box-shadow: none !important;
 }
 
@@ -500,11 +480,9 @@ input[type='checkbox'] {
   width: 22rem;
   height: 22rem;
   border-radius: 999px;
-  background: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--primary-soft) 70%, transparent) 0%,
-    transparent 70%
-  );
+  background: radial-gradient(circle,
+      color-mix(in srgb, var(--primary-soft) 70%, transparent) 0%,
+      transparent 70%);
   filter: blur(18px);
   pointer-events: none;
 }
@@ -563,11 +541,9 @@ input[type='checkbox'] {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(
-    135deg,
-    var(--primary-soft) 0%,
-    var(--primary-soft-strong) 100%
-  );
+  background: linear-gradient(135deg,
+      var(--primary-soft) 0%,
+      var(--primary-soft-strong) 100%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
@@ -602,11 +578,9 @@ input[type='checkbox'] {
   inset: 0 auto 0 0;
   width: 38%;
   border-radius: inherit;
-  background: linear-gradient(
-    90deg,
-    var(--primary) 0%,
-    var(--primary-strong) 100%
-  );
+  background: linear-gradient(90deg,
+      var(--primary) 0%,
+      var(--primary-strong) 100%);
   animation: loader-slide 1.9s ease-in-out infinite;
 }
 
@@ -631,16 +605,12 @@ input[type='checkbox'] {
 
 .chat-bg {
   background:
-    linear-gradient(
-      180deg,
+    linear-gradient(180deg,
       color-mix(in srgb, var(--surface-strong) 75%, transparent) 0%,
-      color-mix(in srgb, var(--surface-soft) 78%, transparent) 100%
-    ),
-    radial-gradient(
-      circle at top left,
+      color-mix(in srgb, var(--surface-soft) 78%, transparent) 100%),
+    radial-gradient(circle at top left,
       color-mix(in srgb, var(--primary-soft) 55%, transparent) 0%,
-      transparent 28%
-    );
+      transparent 28%);
 }
 
 .mobile-page {
@@ -665,13 +635,11 @@ body.chat-page #app-shell {
   margin: 0 auto !important;
   border: 0 !important;
   background:
-    linear-gradient(
-      90deg,
+    linear-gradient(90deg,
       color-mix(in srgb, var(--surface-soft) 92%, transparent) 0%,
       color-mix(in srgb, var(--surface-soft) 92%, transparent) 24%,
       transparent 24%,
-      transparent 100%
-    ),
+      transparent 100%),
     color-mix(in srgb, var(--surface) 90%, transparent) !important;
   box-shadow: none !important;
   backdrop-filter: blur(20px);
@@ -680,15 +648,13 @@ body.chat-page #app-shell {
 
 #auth-screen {
   background:
-    radial-gradient(
-      circle at top left,
+    radial-gradient(circle at top left,
       color-mix(in srgb, var(--primary-soft) 72%, transparent) 0%,
-      transparent 34%
-    ),
+      transparent 34%),
     linear-gradient(180deg, var(--bg) 0%, var(--bg-alt) 100%) !important;
 }
 
-#auth-screen > div {
+#auth-screen>div {
   border-radius: var(--radius-xl) !important;
   border: 1px solid var(--line) !important;
   background: var(--surface) !important;
@@ -753,11 +719,9 @@ body.chat-page #app-shell {
   min-height: 2rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--primary) 14%, transparent);
-  background: color-mix(
-    in srgb,
-    var(--primary-soft) 74%,
-    var(--surface-strong) 26%
-  );
+  background: color-mix(in srgb,
+      var(--primary-soft) 74%,
+      var(--surface-strong) 26%);
   padding: 0.45rem 0.8rem;
   color: var(--primary-strong);
   font-size: 0.78rem;
@@ -769,11 +733,9 @@ body.chat-page #app-shell {
 }
 
 .startup-loader-progress-bar {
-  background: linear-gradient(
-    90deg,
-    var(--primary) 0%,
-    var(--primary-strong) 100%
-  ) !important;
+  background: linear-gradient(90deg,
+      var(--primary) 0%,
+      var(--primary-strong) 100%) !important;
 }
 
 #mobile-sidebar-overlay,
@@ -806,11 +768,9 @@ body.chat-page #sidebar {
   width: clamp(24rem, 25vw, 29rem);
   max-width: 29rem !important;
   border-right: 1px solid var(--line) !important;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--surface-strong) 94%, transparent) 0%,
-    color-mix(in srgb, var(--surface-soft) 82%, transparent) 100%
-  ) !important;
+  background: linear-gradient(180deg,
+      color-mix(in srgb, var(--surface-strong) 94%, transparent) 0%,
+      color-mix(in srgb, var(--surface-soft) 82%, transparent) 100%) !important;
   box-shadow: 24px 0 40px rgba(82, 59, 50, 0.06);
 }
 
@@ -832,11 +792,9 @@ body.chat-page #sidebar {
 #sidebar-pinned-section,
 #sidebar-starred-section {
   border: 1px solid var(--line) !important;
-  background: color-mix(
-    in srgb,
-    var(--surface-strong) 88%,
-    transparent
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-strong) 88%,
+      transparent) !important;
   box-shadow: none !important;
 }
 
@@ -861,11 +819,9 @@ body.chat-page #sidebar {
   height: 2.65rem;
   border-radius: 16px !important;
   border: 1px solid var(--line) !important;
-  background: color-mix(
-    in srgb,
-    var(--surface-strong) 92%,
-    transparent
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-strong) 92%,
+      transparent) !important;
   color: var(--text-2) !important;
   box-shadow: none !important;
 }
@@ -911,59 +867,46 @@ body.chat-page #sidebar {
   padding-inline: 1rem !important;
   border: 1px solid var(--line) !important;
   border-radius: 999px !important;
-  background: color-mix(
-    in srgb,
-    var(--surface-strong) 48%,
-    transparent
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-strong) 48%,
+      transparent) !important;
   color: var(--text-3) !important;
   font-size: 0.8rem;
   font-weight: 600;
 }
 
 .chat-filter-chip:hover {
-  background: color-mix(
-    in srgb,
-    var(--surface-strong) 76%,
-    transparent
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-strong) 76%,
+      transparent) !important;
   color: var(--text-2) !important;
 }
 
 .chat-filter-chip.is-active {
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--primary-soft) 76%, white 24%) 0%,
-    color-mix(in srgb, var(--primary-soft-strong) 52%, white 48%) 100%
-  ) !important;
+  background: linear-gradient(135deg,
+      color-mix(in srgb, var(--primary-soft) 76%, white 24%) 0%,
+      color-mix(in srgb, var(--primary-soft-strong) 52%, white 48%) 100%) !important;
   color: var(--primary-strong) !important;
-  box-shadow: inset 0 0 0 1px
-    color-mix(in srgb, var(--primary) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 14%, transparent);
 }
 
 body.chat-page .mobile-chat-main {
   min-width: 0;
   background:
-    linear-gradient(
-      180deg,
+    linear-gradient(180deg,
       color-mix(in srgb, var(--surface-strong) 32%, transparent) 0%,
-      transparent 18%
-    ),
-    linear-gradient(
-      180deg,
+      transparent 18%),
+    linear-gradient(180deg,
       color-mix(in srgb, var(--surface-strong) 70%, transparent) 0%,
-      color-mix(in srgb, var(--surface-soft) 48%, transparent) 100%
-    ) !important;
+      color-mix(in srgb, var(--surface-soft) 48%, transparent) 100%) !important;
 }
 
 .mobile-chat-topbar,
 #chat-header {
   border-color: var(--line) !important;
-  background: color-mix(
-    in srgb,
-    var(--surface-strong) 88%,
-    transparent
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-strong) 88%,
+      transparent) !important;
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
 }
@@ -1013,7 +956,7 @@ body.chat-page .mobile-chat-main {
   padding: 0.55rem 0.5rem 0.85rem !important;
 }
 
-#users-list > li {
+#users-list>li {
   list-style: none;
   border-radius: 26px !important;
   border: 1px solid transparent !important;
@@ -1022,12 +965,10 @@ body.chat-page .mobile-chat-main {
   box-shadow: none !important;
 }
 
-#users-list > li:hover {
-  background: color-mix(
-    in srgb,
-    var(--surface-strong) 38%,
-    transparent
-  ) !important;
+#users-list>li:hover {
+  background: color-mix(in srgb,
+      var(--surface-strong) 38%,
+      transparent) !important;
 }
 
 .chat-list-card-body {
@@ -1039,17 +980,17 @@ body.chat-page .mobile-chat-main {
   box-shadow: none;
 }
 
-#users-list > li img {
+#users-list>li img {
   width: 3.05rem !important;
   height: 3.05rem !important;
   border-radius: 50% !important;
 }
 
-#users-list > li .text-\[0\.82rem\] {
+#users-list>li .text-\[0\.82rem\] {
   font-size: 0.94rem !important;
 }
 
-#users-list > li .user-list-preview {
+#users-list>li .user-list-preview {
   font-size: 0.8rem !important;
   line-height: 1.32 !important;
 }
@@ -1059,17 +1000,15 @@ body.chat-page .mobile-chat-main {
   font-weight: 600 !important;
 }
 
-#users-list > li:hover .chat-list-card-body {
+#users-list>li:hover .chat-list-card-body {
   transform: translateY(-1px);
 }
 
-#users-list > li.border-blue-200 .chat-list-card-body {
+#users-list>li.border-blue-200 .chat-list-card-body {
   border-color: color-mix(in srgb, var(--primary) 18%, transparent) !important;
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--primary-soft) 64%, white 36%) 0%,
-    color-mix(in srgb, var(--surface-strong) 88%, transparent) 100%
-  ) !important;
+  background: linear-gradient(135deg,
+      color-mix(in srgb, var(--primary-soft) 64%, white 36%) 0%,
+      color-mix(in srgb, var(--surface-strong) 88%, transparent) 100%) !important;
 }
 
 .chat-list-card-time,
@@ -1087,11 +1026,9 @@ body.chat-page .mobile-chat-main {
 .chat-list-empty {
   border-radius: 24px !important;
   border: 1px dashed var(--line) !important;
-  background: color-mix(
-    in srgb,
-    var(--surface-strong) 60%,
-    transparent
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-strong) 60%,
+      transparent) !important;
   color: var(--text-3) !important;
 }
 
@@ -1103,11 +1040,9 @@ body.chat-page .mobile-chat-main {
   width: min(100%, 46rem);
   border-radius: 36px;
   border: 1px solid var(--line);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--surface-strong) 94%, transparent) 0%,
-    color-mix(in srgb, var(--surface-soft) 72%, transparent) 100%
-  );
+  background: linear-gradient(180deg,
+      color-mix(in srgb, var(--surface-strong) 94%, transparent) 0%,
+      color-mix(in srgb, var(--surface-soft) 72%, transparent) 100%);
   padding: clamp(1.8rem, 4vw, 3rem);
   box-shadow: var(--shadow-soft);
 }
@@ -1145,20 +1080,16 @@ body.chat-page .mobile-chat-main {
   z-index: 1;
   padding: 0.95rem 1rem 0.72rem !important;
   background:
-    linear-gradient(
-      180deg,
+    linear-gradient(180deg,
       rgba(255, 248, 244, 0.42) 0%,
-      rgba(246, 232, 223, 0.24) 100%
-    ),
-    linear-gradient(
-      90deg,
+      rgba(246, 232, 223, 0.24) 100%),
+    linear-gradient(90deg,
       rgba(255, 255, 255, 0.12) 0,
       rgba(255, 255, 255, 0.12) 12%,
       transparent 12%,
       transparent 88%,
       rgba(255, 255, 255, 0.08) 88%,
-      rgba(255, 255, 255, 0.08) 100%
-    ) !important;
+      rgba(255, 255, 255, 0.08) 100%) !important;
 }
 
 #message-container::before {
@@ -1167,11 +1098,9 @@ body.chat-page .mobile-chat-main {
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(
-      circle at top left,
+    radial-gradient(circle at top left,
       color-mix(in srgb, var(--primary-soft) 38%, transparent) 0%,
-      transparent 24%
-    ),
+      transparent 24%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, transparent 26%);
 }
 
@@ -1204,11 +1133,9 @@ body.chat-page .mobile-chat-main {
   max-width: min(54%, 30rem) !important;
   border: 1px solid var(--line) !important;
   border-radius: 26px 26px 26px 10px !important;
-  background: color-mix(
-    in srgb,
-    var(--surface-strong) 94%,
-    transparent
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-strong) 94%,
+      transparent) !important;
   color: var(--text-1) !important;
   box-shadow: 0 14px 28px rgba(92, 60, 47, 0.06) !important;
   backdrop-filter: blur(10px);
@@ -1227,20 +1154,16 @@ body.chat-page .mobile-chat-main {
 .message-row-outgoing .message-bubble-shell {
   border-color: color-mix(in srgb, var(--primary) 18%, transparent) !important;
   border-radius: 26px 26px 10px 26px !important;
-  background: linear-gradient(
-    135deg,
-    var(--primary) 0%,
-    var(--primary-strong) 100%
-  ) !important;
+  background: linear-gradient(135deg,
+      var(--primary) 0%,
+      var(--primary-strong) 100%) !important;
   color: var(--primary-ink) !important;
 }
 
 .message-row-incoming .message-bubble-shell {
-  background: color-mix(
-    in srgb,
-    var(--surface-strong) 96%,
-    transparent
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-strong) 96%,
+      transparent) !important;
 }
 
 .message-bubble-text,
@@ -1316,11 +1239,9 @@ body.chat-page .mobile-chat-main {
   margin-bottom: 0.28rem !important;
   border-left: 3px solid color-mix(in srgb, var(--primary) 50%, transparent) !important;
   border-radius: 16px !important;
-  background: color-mix(
-    in srgb,
-    var(--surface-soft) 76%,
-    transparent
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-soft) 76%,
+      transparent) !important;
   padding: 0.34rem 0.46rem !important;
 }
 
@@ -1376,11 +1297,9 @@ body.chat-page .mobile-chat-main {
 .new-messages-pill {
   border-radius: 999px;
   border: 1px solid var(--line) !important;
-  background: color-mix(
-    in srgb,
-    var(--surface-strong) 92%,
-    transparent
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-strong) 92%,
+      transparent) !important;
   color: var(--text-2) !important;
   box-shadow: var(--shadow-soft);
 }
@@ -1392,11 +1311,9 @@ body.chat-page .mobile-chat-main {
 .message-loading-waves span {
   width: 0.18rem;
   border-radius: 999px;
-  background: linear-gradient(
-    180deg,
-    var(--primary) 0%,
-    var(--primary-strong) 100%
-  );
+  background: linear-gradient(180deg,
+      var(--primary) 0%,
+      var(--primary-strong) 100%);
   animation: wave 0.88s ease-in-out infinite;
 }
 
@@ -1412,17 +1329,15 @@ body.chat-page .mobile-chat-main {
   position: relative;
   z-index: 25;
   border-top: 1px solid var(--line) !important;
-  background: color-mix(
-    in srgb,
-    var(--surface-strong) 88%,
-    transparent
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-strong) 88%,
+      transparent) !important;
   padding: 0.5rem 0.9rem calc(0.58rem + env(safe-area-inset-bottom)) !important;
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
 }
 
-#input-area > div:first-child {
+#input-area>div:first-child {
   width: min(100%, 71rem);
   margin: 0 auto;
 }
@@ -1441,28 +1356,22 @@ body.chat-page .mobile-chat-main {
 #reply-preview,
 #attachment-preview,
 #voice-preview {
-  background: color-mix(
-    in srgb,
-    var(--surface-strong) 92%,
-    transparent
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-strong) 92%,
+      transparent) !important;
 }
 
 #special-message-preview {
-  background: color-mix(
-    in srgb,
-    var(--tertiary-soft) 42%,
-    var(--surface-strong) 58%
-  ) !important;
+  background: color-mix(in srgb,
+      var(--tertiary-soft) 42%,
+      var(--surface-strong) 58%) !important;
 }
 
 #chat-dropzone-hint {
   border-style: dashed !important;
-  background: color-mix(
-    in srgb,
-    var(--primary-soft) 48%,
-    var(--surface-strong) 52%
-  ) !important;
+  background: color-mix(in srgb,
+      var(--primary-soft) 48%,
+      var(--surface-strong) 52%) !important;
   color: var(--primary-strong) !important;
 }
 
@@ -1476,11 +1385,9 @@ body.chat-page .mobile-chat-main {
   overflow: visible !important;
   border-radius: 12px !important;
   border: 1px solid var(--line) !important;
-  background: color-mix(
-    in srgb,
-    var(--surface-strong) 94%,
-    transparent
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-strong) 94%,
+      transparent) !important;
   box-shadow: var(--shadow-soft) !important;
 }
 
@@ -1512,11 +1419,9 @@ body.chat-page .mobile-chat-main {
   height: 2rem !important;
   border-radius: 999px !important;
   border: 1px solid var(--line) !important;
-  background: color-mix(
-    in srgb,
-    var(--surface-soft) 72%,
-    transparent
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-soft) 72%,
+      transparent) !important;
   color: var(--primary) !important;
 }
 
@@ -1526,11 +1431,9 @@ body.chat-page .mobile-chat-main {
 }
 
 #composer-actions-btn:hover {
-  background: color-mix(
-    in srgb,
-    var(--primary-soft) 52%,
-    var(--surface-strong) 48%
-  ) !important;
+  background: color-mix(in srgb,
+      var(--primary-soft) 52%,
+      var(--surface-strong) 48%) !important;
 }
 
 .composer-action-icon,
@@ -1549,16 +1452,14 @@ body.chat-page .mobile-chat-main {
   z-index: 90 !important;
   border-radius: 24px !important;
   border: 1px solid var(--line) !important;
-  background: color-mix(
-    in srgb,
-    var(--surface-strong) 96%,
-    transparent
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-strong) 96%,
+      transparent) !important;
   box-shadow: var(--shadow-float) !important;
 }
 
-#composer-actions-menu > label,
-#composer-actions-menu > button,
+#composer-actions-menu>label,
+#composer-actions-menu>button,
 .message-action-row {
   border-radius: 18px !important;
   color: var(--text-2) !important;
@@ -1584,7 +1485,7 @@ body.chat-page .mobile-chat-main {
   line-height: 1.2;
 }
 
-.message-action-row > span:first-child {
+.message-action-row>span:first-child {
   color: var(--text-1) !important;
 }
 
@@ -1597,7 +1498,7 @@ body.chat-page .mobile-chat-main {
   white-space: normal;
 }
 
-.message-action-row-danger > span:first-child,
+.message-action-row-danger>span:first-child,
 .message-action-row-danger .message-action-row-copy {
   color: var(--error) !important;
 }
@@ -1625,23 +1526,19 @@ body.chat-page .mobile-chat-main {
   place-items: center;
   border-radius: 16px !important;
   border-color: var(--line) !important;
-  background: color-mix(
-    in srgb,
-    var(--surface-soft) 72%,
-    var(--surface-strong) 28%
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-soft) 72%,
+      var(--surface-strong) 28%) !important;
   font-size: 1.05rem !important;
   line-height: 1 !important;
 }
 
-#composer-actions-menu > label:hover,
-#composer-actions-menu > button:hover,
+#composer-actions-menu>label:hover,
+#composer-actions-menu>button:hover,
 .message-action-row:hover {
-  background: color-mix(
-    in srgb,
-    var(--surface-soft) 68%,
-    transparent
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-soft) 68%,
+      transparent) !important;
 }
 
 #msg-input {
@@ -1674,22 +1571,20 @@ body.chat-page .mobile-chat-main {
   color: var(--text-3) !important;
 }
 
-#chat-contact-panel > div,
-#profile-modal > div,
-#rename-modal > div,
-#report-modal > div,
-#create-group-modal > div,
-#manage-group-modal > div,
-#reset-password-modal > div,
-#incoming-call-modal > div,
-#shared-media-browser-modal > div {
+#chat-contact-panel>div,
+#profile-modal>div,
+#rename-modal>div,
+#report-modal>div,
+#create-group-modal>div,
+#manage-group-modal>div,
+#reset-password-modal>div,
+#incoming-call-modal>div,
+#shared-media-browser-modal>div {
   border-radius: 30px !important;
   border: 1px solid var(--line) !important;
-  background: color-mix(
-    in srgb,
-    var(--surface-strong) 96%,
-    transparent
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-strong) 96%,
+      transparent) !important;
   box-shadow: var(--shadow-strong) !important;
 }
 
@@ -1701,11 +1596,9 @@ body.chat-page .mobile-chat-main {
 #settings-pending-email-otp-wrap {
   border-radius: 24px !important;
   border: 1px solid var(--line) !important;
-  background: color-mix(
-    in srgb,
-    var(--surface-soft) 54%,
-    var(--surface-strong) 46%
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-soft) 54%,
+      var(--surface-strong) 46%) !important;
 }
 
 #profile-modal .rounded-2xl,
@@ -1720,21 +1613,17 @@ body.chat-page .mobile-chat-main {
 #settings-blocked-users .rounded-2xl,
 #admin-user-bulk-bar {
   border-color: var(--line) !important;
-  background: color-mix(
-    in srgb,
-    var(--surface-strong) 90%,
-    transparent
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-strong) 90%,
+      transparent) !important;
 }
 
 #active-call-panel {
   border-radius: 28px !important;
   border: 1px solid var(--line) !important;
-  background: color-mix(
-    in srgb,
-    var(--surface-strong) 18%,
-    black 82%
-  ) !important;
+  background: color-mix(in srgb,
+      var(--surface-strong) 18%,
+      black 82%) !important;
   box-shadow: var(--shadow-strong) !important;
 }
 
@@ -1787,11 +1676,9 @@ html.prefers-dark-mode body .border-slate-300 {
 
 body.dark-mode .bg-blue-50,
 html.prefers-dark-mode body .bg-blue-50 {
-  background: color-mix(
-    in srgb,
-    var(--primary-soft) 56%,
-    var(--surface-strong) 44%
-  ) !important;
+  background: color-mix(in srgb,
+      var(--primary-soft) 56%,
+      var(--surface-strong) 44%) !important;
 }
 
 body.dark-mode .text-blue-600,
@@ -1824,20 +1711,16 @@ html.prefers-dark-mode body .shadow-2xl {
 body.chat-page.dark-mode #message-container,
 html.prefers-dark-mode body.chat-page #message-container {
   background:
-    linear-gradient(
-      180deg,
+    linear-gradient(180deg,
       rgba(53, 39, 36, 0.68) 0%,
-      rgba(32, 24, 22, 0.72) 100%
-    ),
-    linear-gradient(
-      90deg,
+      rgba(32, 24, 22, 0.72) 100%),
+    linear-gradient(90deg,
       rgba(255, 255, 255, 0.02) 0,
       rgba(255, 255, 255, 0.02) 12%,
       transparent 12%,
       transparent 88%,
       rgba(255, 255, 255, 0.02) 88%,
-      rgba(255, 255, 255, 0.02) 100%
-    ) !important;
+      rgba(255, 255, 255, 0.02) 100%) !important;
 }
 
 body.chat-page.dark-mode #sidebar,
@@ -1846,22 +1729,14 @@ html.prefers-dark-mode body.chat-page #sidebar {
 }
 
 body.chat-page.dark-mode .message-row-incoming .message-bubble-shell,
-html.prefers-dark-mode
-  body.chat-page
-  .message-row-incoming
-  .message-bubble-shell {
-  background: color-mix(
-    in srgb,
-    var(--surface-strong) 94%,
-    transparent
-  ) !important;
+html.prefers-dark-mode body.chat-page .message-row-incoming .message-bubble-shell {
+  background: color-mix(in srgb,
+      var(--surface-strong) 94%,
+      transparent) !important;
 }
 
 body.chat-page.dark-mode .message-row-outgoing .message-bubble-shell,
-html.prefers-dark-mode
-  body.chat-page
-  .message-row-outgoing
-  .message-bubble-shell {
+html.prefers-dark-mode body.chat-page .message-row-outgoing .message-bubble-shell {
   background: linear-gradient(135deg, #a84d17 0%, #7a2d00 100%) !important;
   color: #ffe8dc !important;
 }
@@ -1878,7 +1753,7 @@ html.prefers-dark-mode body.chat-page #message-actions-menu {
 }
 
 .floating-menu:not(.hidden),
-.modal-backdrop:not(.hidden) > div,
+.modal-backdrop:not(.hidden)>div,
 .message-row.chat-message-enter,
 .mobile-chat-shell,
 .desktop-empty-state-shell {
@@ -1891,7 +1766,7 @@ html.prefers-dark-mode body.chat-page #message-actions-menu {
 }
 
 .floating-menu:not(.hidden),
-.modal-backdrop:not(.hidden) > div {
+.modal-backdrop:not(.hidden)>div {
   animation-name: menu-pop;
 }
 
@@ -1947,6 +1822,7 @@ html.prefers-dark-mode body.chat-page #message-actions-menu {
 }
 
 @keyframes wave {
+
   0%,
   100% {
     transform: scaleY(0.85);
@@ -2069,6 +1945,7 @@ html.prefers-dark-mode body.chat-page #message-actions-menu {
 }
 
 @media (max-width: 1023px) {
+
   .landing-grid,
   .auth-layout {
     grid-template-columns: 1fr;
@@ -2099,7 +1976,7 @@ html.prefers-dark-mode body.chat-page #message-actions-menu {
   }
 
   #messages-list,
-  #input-area > div:first-child {
+  #input-area>div:first-child {
     width: 100%;
   }
 
@@ -2113,10 +1990,11 @@ html.prefers-dark-mode body.chat-page #message-actions-menu {
 }
 
 @media (max-width: 767px) {
+
   .landing-shell,
   #auth-shell,
   .settings-page main,
-  .admin-page > div {
+  .admin-page>div {
     padding-inline: 1rem !important;
   }
 
@@ -2173,16 +2051,16 @@ html.prefers-dark-mode body.chat-page #message-actions-menu {
     padding: 0.56rem 0.62rem !important;
   }
 
-  #users-list > li img {
+  #users-list>li img {
     width: 2.35rem !important;
     height: 2.35rem !important;
   }
 
-  #users-list > li .text-\[0\.82rem\] {
+  #users-list>li .text-\[0\.82rem\] {
     font-size: 0.86rem !important;
   }
 
-  #users-list > li .user-list-preview,
+  #users-list>li .user-list-preview,
   .chat-list-card-time {
     font-size: 0.72rem !important;
   }
@@ -2289,6 +2167,7 @@ html.prefers-dark-mode body.chat-page #message-actions-menu {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {

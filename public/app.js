@@ -1076,22 +1076,24 @@ async function ensureEncryptionKeys(forceSync = false) {
           currentUser.publicKey,
         );
         if (!restoredKeyMatches) {
-          throw new Error(
-            'Please log in again on this device so O-chat can unlock your encrypted messages.',
+          console.warn(
+            'Restored key backup does not match the current account public key. Clearing stale unlock material and falling back to a fresh key pair.',
+            { userId: currentUser.id },
+          );
+          clearKeyBackupUnlockMaterial(currentUser.id);
+        } else {
+          savedPrivateKey = restoredPrivateKey;
+          savedPublicKey = currentUser.publicKey;
+          restoredFromServerKeyBackup = true;
+          writeStoredValue(
+            privateKeyStorageKey(currentUser.id),
+            restoredPrivateKey,
+          );
+          writeStoredValue(
+            publicKeyStorageKey(currentUser.id),
+            currentUser.publicKey,
           );
         }
-
-        savedPrivateKey = restoredPrivateKey;
-        savedPublicKey = currentUser.publicKey;
-        restoredFromServerKeyBackup = true;
-        writeStoredValue(
-          privateKeyStorageKey(currentUser.id),
-          restoredPrivateKey,
-        );
-        writeStoredValue(
-          publicKeyStorageKey(currentUser.id),
-          currentUser.publicKey,
-        );
       }
     } catch (error) {
       console.error('Failed to restore your message decryption key', error);
@@ -7300,12 +7302,12 @@ function renderSharedMediaBrowser() {
   }
 
   photosTab.className = `${tabBaseClass} ${isPhotoView
-      ? 'border-blue-200 bg-blue-50 text-blue-700'
-      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+    ? 'border-blue-200 bg-blue-50 text-blue-700'
+    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
     }`;
   videosTab.className = `${tabBaseClass} ${!isPhotoView
-      ? 'border-blue-200 bg-blue-50 text-blue-700'
-      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+    ? 'border-blue-200 bg-blue-50 text-blue-700'
+    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
     }`;
 
   if (sharedMediaLoading) {
@@ -7657,10 +7659,10 @@ function getSelectedUserStatusMeta(user = selectedUser) {
           ? 'Online now'
           : lastActivityText,
     className: `text-sm font-medium ${activeTypingUsers.length
-        ? 'text-blue-500'
-        : isOnline
-          ? 'text-emerald-500'
-          : 'text-slate-500'
+      ? 'text-blue-500'
+      : isOnline
+        ? 'text-emerald-500'
+        : 'text-slate-500'
       }`,
   };
 }
@@ -9485,8 +9487,8 @@ function createUserListElement(user, index = 0) {
   item.dataset.userKey = userListKey(user);
   item.style.setProperty('--motion-index', String(index % 10));
   item.className = `cursor-pointer rounded-[20px] border px-1.5 py-1 transition-all ${isSelected
-      ? 'border-blue-200 bg-blue-50 shadow-sm'
-      : 'border-transparent bg-white/70 hover:border-slate-200 hover:bg-white'
+    ? 'border-blue-200 bg-blue-50 shadow-sm'
+    : 'border-transparent bg-white/70 hover:border-slate-200 hover:bg-white'
     }`;
   item.classList.add('chat-list-card');
   item.onclick = () => selectUser(user.id);
