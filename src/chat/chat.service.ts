@@ -93,7 +93,7 @@ export class ChatService {
 
   private async getCachedMessage(messageId: string): Promise<Message | null> {
     const cacheKey = this.getMessageCacheKey(messageId);
-    const cached = await this.cacheManager.get(cacheKey);
+    const cached = await this.cacheManager.get<Message>(cacheKey);
     return cached ?? null;
   }
 

@@ -74,7 +74,7 @@ export class UserService {
 
   async findByEmail(email: string): Promise<User | null> {
     const cacheKey = this.getUserCacheKeyByEmail(email);
-    const cachedUser = await this.cacheManager.get(cacheKey);
+    const cachedUser = await this.cacheManager.get<User>(cacheKey);
     if (cachedUser) {
       return cachedUser;
     }
@@ -92,7 +92,7 @@ export class UserService {
 
   async findById(userId: string): Promise<User | null> {
     const cacheKey = this.getUserCacheKeyById(userId);
-    const cachedUser = await this.cacheManager.get(cacheKey);
+    const cachedUser = await this.cacheManager.get<User>(cacheKey);
     if (cachedUser) {
       return cachedUser;
     }
