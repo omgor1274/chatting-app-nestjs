@@ -8,7 +8,7 @@ const isHostedOrigin =
   !/^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
 const PUBLIC_CONFIG_FETCH_TIMEOUT_MS = 5000;
 const LOCKED_MOBILE_VIEWPORT_CONTENT =
-  'width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content';
+  'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content';
 let appConfig = {
   apiUrl: localBackendOrigin,
   avatarBaseUrl: '/icons/default-avatar.svg',
@@ -870,6 +870,30 @@ function publicKeyStorageKey(userId) {
   return `chat_public_key_${userId}`;
 }
 
+function normalizeEncryptionKeyValue(value) {
+  return String(value || '').trim();
+}
+
+function parseEncryptedKeyMap(value) {
+  if (!value) {
+    return {};
+  }
+
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return {};
+    }
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    return value;
+  }
+
+  return {};
+}
+
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
   let binary = '';
@@ -891,7 +915,7 @@ function base64ToUint8Array(base64) {
 async function importPublicEncryptionKey(publicKey) {
   return window.crypto.subtle.importKey(
     'spki',
-    base64ToUint8Array(publicKey),
+    base64ToUint8Array(normalizeEncryptionKeyValue(publicKey)),
     {
       name: 'RSA-OAEP',
       hash: 'SHA-256',
@@ -904,7 +928,7 @@ async function importPublicEncryptionKey(publicKey) {
 async function importPrivateEncryptionKey(privateKey) {
   return window.crypto.subtle.importKey(
     'pkcs8',
-    base64ToUint8Array(privateKey),
+    base64ToUint8Array(normalizeEncryptionKeyValue(privateKey)),
     {
       name: 'RSA-OAEP',
       hash: 'SHA-256',
@@ -989,11 +1013,12 @@ async function ensureEncryptionKeys(forceSync = false) {
 
   currentPrivateKey = null;
 
-  let savedPrivateKey = readStoredValue(
-    privateKeyStorageKey(currentUser.id),
-    '',
+  let savedPrivateKey = normalizeEncryptionKeyValue(
+    readStoredValue(privateKeyStorageKey(currentUser.id), ''),
   );
-  let savedPublicKey = readStoredValue(publicKeyStorageKey(currentUser.id), '');
+  let savedPublicKey = normalizeEncryptionKeyValue(
+    readStoredValue(publicKeyStorageKey(currentUser.id), ''),
+  );
   let generatedNewKeyPair = false;
   const serverPublicKey = String(currentUser.publicKey || '').trim();
   const hasServerKeyBackup = Boolean(
@@ -1090,6 +1115,7 @@ async function ensureEncryptionKeys(forceSync = false) {
   }
 
   currentPrivateKey = await importPrivateEncryptionKey(savedPrivateKey);
+  retryConversationDecryption();
 
   const keyBackupPayload = await encryptPrivateKeyBackupForUser(
     savedPrivateKey,
@@ -1283,8 +1309,8 @@ async function decryptTextMessage(message) {
 
   try {
     await ensureEncryptionKeys();
-    const encryptedKeyMap = JSON.parse(message.encryptedKey || '{}');
-    const wrappedKey = encryptedKeyMap[currentUser?.id];
+    const encryptedKeyMap = parseEncryptedKeyMap(message.encryptedKey);
+    const wrappedKey = encryptedKeyMap[String(currentUser?.id)];
     if (!wrappedKey || !message.iv || !currentPrivateKey) {
       message.displayText = 'Decrypting message...';
       return message.displayText;
